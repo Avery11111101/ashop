@@ -22,7 +22,7 @@ ashop 不是固定標價的傳統商店。每一筆交易都會影響市場：
 | **賣給系統** | 該物品跌價 ↓ |
 | **庫存稀少** | 額外漲價 ↑（物以稀為貴） |
 
-價格依 `market-data.yml` 累積的買賣數據與即時庫存計算，GUI 即時顯示趨勢（`↑+25%`）。  
+價格依 `market-data.yml` 累積的有效買賣次數與即時庫存計算，GUI 即時顯示趨勢（`↑+25%`）；觸及上下限時顯示「已達上限／下限」。  
 所有浮動幅度皆可在 `config.yml` 以**百分比**自由調整。
 
 ```yaml
@@ -30,14 +30,16 @@ dynamic-pricing:
   enabled: true
   base-price: 10.0
   per-buy-increase: 2.0              # 每買一次 +2%
-  per-sell-decrease: 1.5             # 每賣給系統一次 -1.5%
+  per-sell-decrease: 2.0             # 每賣給系統一次 -2%（預設 1:1 恢復）
   per-stock-shortage-increase: 3.0   # 庫存每少 1 件 +3%
   reference-stock: 5                 # 稀缺基準
   min-multiplier: 0.2                # 最低 20%
   max-multiplier: 5.0                # 最高 500%
 ```
 
-用 `/shop price` 可隨時查詢手持物品的**系統售價與收購價**。
+漲停後的購買仍記錄於 `total-buys`，但不計入有效 `buys`；恢復原價只需賣出造成漲停的有效數量。
+
+用 `/shop price` 可隨時查詢手持物品的**系統售價與收購價**（含趨勢）。
 
 ---
 

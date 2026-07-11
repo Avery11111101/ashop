@@ -22,22 +22,25 @@ ashop is not a fixed-price shop. Every transaction moves the market:
 | **List/Sell** | Price falls ↓ |
 | **Low stock** | Extra premium ↑ (scarcity) |
 
-Prices are calculated from buy/sell history (`market-data.yml`) and live stock.  
-The GUI shows trends in real time (`↑+25%`). All rates are configurable in **percentages**.
+Prices use **effective** buy/sell counts in `market-data.yml` (plus live stock).  
+The GUI shows trends in real time (`↑+25%`); at min/max multiplier you see **At max cap** / **At min cap**.  
+All rates are configurable in **percentages**.
 
 ```yaml
 dynamic-pricing:
   enabled: true
   base-price: 10.0
   per-buy-increase: 2.0              # +2% per buy
-  per-sell-decrease: 1.5             # -1.5% per list
+  per-sell-decrease: 2.0             # -2% per sell to system (1:1 recovery by default)
   per-stock-shortage-increase: 3.0   # +3% per missing stock unit
   reference-stock: 5
   min-multiplier: 0.2
   max-multiplier: 5.0
 ```
 
-Use `/shop price` to check the **live market price** of the item in your hand.
+Buys while already at max cap still increment `total-buys` but not effective `buys`; sell the effective amount that caused the cap to restore base price.
+
+Use `/shop price` to check **system sell and buyback prices** (with trends).
 
 ---
 

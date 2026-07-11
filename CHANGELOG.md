@@ -5,6 +5,24 @@ ashop 的所有重要變更皆記錄於此。
 
 ---
 
+## [1.6.6] - 2026-07-11
+
+### Added / 新增
+- **Price cap indicators** — GUI and `/shop price` show `已達上限` / `已達下限` when min/max multiplier is hit  
+  **漲跌停提示** — 觸及價格上下限時，GUI 與 `/shop price` 顯示「已達上限／下限」
+- **Sell price trend** — sell panel and `/shop price` show buyback trend (e.g. `↓-12%`)  
+  **收購價趨勢** — 收購面板與查價指令顯示收購價漲跌幅
+- **Dual market counters** in `market-data.yml`: `buys`/`sells` (effective) and `total-buys`/`total-sells` (all trades)  
+  **雙軌市場統計** — 有效計價次數與全部交易次數分開記錄
+
+### Changed / 變更
+- **Effective buy/sell at cap** — purchases while at max cap (or sales at min cap) no longer inflate effective counters; restoring base price only requires selling the effective amount that caused the cap (1:1 by default)  
+  **漲停有效計次** — 漲停後多買、跌停後多賣不計入有效次數；賣出漲停前的有效數量即可恢復原價
+- Default `per-sell-decrease` changed to `2.0` (matches `per-buy-increase` for 1:1 recovery)  
+  預設 `per-sell-decrease` 改為 `2.0`，與 `per-buy-increase` 對齊（1:1 恢復）
+
+---
+
 ## [1.6.5] - 2026-07-11
 
 ### Changed / 變更
