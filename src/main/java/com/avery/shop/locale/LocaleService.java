@@ -256,7 +256,7 @@ public final class LocaleService {
     }
 
     public String getCategoryName(Player player, String categoryId) {
-        var key = "category." + categoryId;
+        var key = "category." + categoryId.replace('/', '.');
         var translated = msg(player, key);
         if (translated.equals(key)) {
             return categoryId;

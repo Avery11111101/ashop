@@ -65,6 +65,11 @@ public final class EconomyService {
         return economy.depositPlayer(player, amount).transactionSuccess();
     }
 
+    public boolean deposit(java.util.UUID playerId, double amount) {
+        if (!isEnabled()) return false;
+        return economy.depositPlayer(Bukkit.getOfflinePlayer(playerId), amount).transactionSuccess();
+    }
+
     public boolean has(Player player, double amount) {
         if (!isEnabled()) return false;
         return economy.has(player, amount);

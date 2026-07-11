@@ -30,15 +30,27 @@ public final class ShopConfigService {
 
     private final ShopPlugin plugin;
     private final Map<String, ShopCategoryData> categories = new LinkedHashMap<>();
+    private final Map<String, List<String>> childrenByParent = new LinkedHashMap<>();
     private final ItemPriceCalculator priceCalculator;
+    private final ServerPriceExchange priceExchange;
 
     public ShopConfigService(ShopPlugin plugin) {
         this.plugin = plugin;
         this.priceCalculator = new ItemPriceCalculator(plugin);
+        this.priceExchange = new ServerPriceExchange(plugin);
+    }
+
+    public ServerPriceExchange getPriceExchange() {
+        return priceExchange;
     }
 
     public ItemPriceCalculator getPriceCalculator() {
         return priceCalculator;
+    }
+
+    /** 將 shop 基準價換算為伺服器實際金額（× multiply + add） */
+    public double applyServerPrice(double basePrice) {
+        return priceExchange.apply(basePrice);
     }
 
     public File getShopFolder() {
@@ -51,7 +63,8 @@ public final class ShopConfigService {
     }
 
     public File getCategoryFile(String categoryId) {
-        return new File(new File(getShopFolder(), categoryId), "items.yml");
+        var dir = new File(getShopFolder(), categoryId.replace('/', File.separatorChar));
+        return new File(dir, "items.yml");
     }
 
     public void extractTemplateIfAbsent() {
@@ -78,32 +91,15 @@ public final class ShopConfigService {
 
     public void load(ItemCatalog catalog) {
         categories.clear();
+        childrenByParent.clear();
         extractTemplateIfAbsent();
 
         var shopFolder = getShopFolder();
-        var dirs = shopFolder.listFiles(File::isDirectory);
-        if (dirs == null) {
-            plugin.getLogger().warning("shop 資料夾為空，請建立 shop/<分類>/items.yml");
-            return;
-        }
-
         var loaded = new ArrayList<ShopCategoryData>();
-        for (var dir : dirs) {
-            var categoryId = dir.getName();
-            if (categoryId.startsWith(".") || categoryId.equalsIgnoreCase(TEMPLATE_FOLDER)) {
-                continue;
-            }
-
-            var file = new File(dir, "items.yml");
-            if (!file.exists()) {
-                plugin.getLogger().warning("略過分類 " + categoryId + "：缺少 items.yml");
-                continue;
-            }
-
-            try {
-                loaded.add(parseCategoryFile(categoryId, file, catalog));
-            } catch (Exception e) {
-                plugin.getLogger().warning("載入分類 " + categoryId + " 失敗：" + e.getMessage());
+        var topDirs = shopFolder.listFiles(File::isDirectory);
+        if (topDirs != null) {
+            for (var dir : topDirs) {
+                loadCategoryFilesRecursively(shopFolder, dir, catalog, loaded);
             }
         }
 
@@ -114,19 +110,99 @@ public final class ShopConfigService {
         for (var data : loaded) {
             categories.put(data.getCategoryId(), data);
         }
+        buildChildrenIndex();
 
         if (plugin.getConfig().getBoolean("shop.pricing.backfill-missing-prices", true)) {
             backfillMissingPrices(catalog);
         }
 
         int total = categories.values().stream().mapToInt(d -> d.getEnabledEntries().size()).sum();
-        plugin.getLogger().info("商店載入完成：" + categories.size() + " 個分類、" + total + " 項商品（來自 shop/ 資料夾）");
+        int roots = getRootCategories().size();
+        plugin.getLogger().info("商店載入完成：" + roots + " 個頂層分類、"
+                + categories.size() + " 個節點、" + total + " 項商品");
+    }
+
+    private void loadCategoryFilesRecursively(File shopRoot, File dir, ItemCatalog catalog,
+                                              List<ShopCategoryData> loaded) {
+        if (dir.getName().startsWith(".") || dir.getName().equalsIgnoreCase(TEMPLATE_FOLDER)) {
+            return;
+        }
+
+        var itemsFile = new File(dir, "items.yml");
+        String categoryId = shopRoot.toPath().relativize(dir.toPath())
+                .toString().replace('\\', '/');
+        if (categoryId.isEmpty()) {
+            categoryId = dir.getName();
+        }
+
+        if (itemsFile.exists() && !categoryId.equals(TEMPLATE_FOLDER)) {
+            try {
+                loaded.add(parseCategoryFile(categoryId, parentCategoryId(categoryId), itemsFile, catalog));
+            } catch (Exception e) {
+                plugin.getLogger().warning("載入分類 " + categoryId + " 失敗：" + e.getMessage());
+            }
+        }
+
+        var children = dir.listFiles(File::isDirectory);
+        if (children == null) return;
+        for (var child : children) {
+            if (child.getName().startsWith(".") || child.getName().equalsIgnoreCase(TEMPLATE_FOLDER)) {
+                continue;
+            }
+            loadCategoryFilesRecursively(shopRoot, child, catalog, loaded);
+        }
+    }
+
+    private static String parentCategoryId(String categoryId) {
+        var idx = categoryId.lastIndexOf('/');
+        return idx < 0 ? null : categoryId.substring(0, idx);
+    }
+
+    private void buildChildrenIndex() {
+        childrenByParent.clear();
+        for (var data : categories.values()) {
+            var parent = data.getDefinition().getParentId();
+            if (parent != null) {
+                childrenByParent.computeIfAbsent(parent, k -> new ArrayList<>())
+                        .add(data.getCategoryId());
+            }
+        }
+        for (var entry : childrenByParent.entrySet()) {
+            entry.getValue().sort(Comparator
+                    .<String>comparingInt(id -> categories.get(id).getDefinition().getSlot())
+                    .thenComparing(id -> id));
+        }
     }
 
     public List<ShopCategoryDefinition> getCategories() {
+        return getRootCategories();
+    }
+
+    public List<ShopCategoryDefinition> getRootCategories() {
         return categories.values().stream()
                 .map(ShopCategoryData::getDefinition)
+                .filter(ShopCategoryDefinition::isRoot)
+                .sorted(Comparator.comparingInt(ShopCategoryDefinition::getSlot)
+                        .thenComparing(ShopCategoryDefinition::getId))
                 .toList();
+    }
+
+    public List<ShopCategoryDefinition> getChildCategories(String parentId) {
+        var childIds = childrenByParent.getOrDefault(parentId, List.of());
+        return childIds.stream()
+                .map(categories::get)
+                .filter(data -> data != null && data.getDefinition().isEnabled())
+                .map(ShopCategoryData::getDefinition)
+                .toList();
+    }
+
+    public boolean hasChildCategories(String categoryId) {
+        return !getChildCategories(categoryId).isEmpty();
+    }
+
+    public String getParentCategoryId(String categoryId) {
+        var data = categories.get(categoryId);
+        return data != null ? data.getDefinition().getParentId() : null;
     }
 
     public Optional<ShopCategoryData> getCategory(String categoryId) {
@@ -136,6 +212,44 @@ public final class ShopConfigService {
     public boolean isCategoryVisible(String categoryId) {
         var data = categories.get(categoryId);
         return data != null && data.getDefinition().isEnabled();
+    }
+
+    /** 此分類自身 allow-buy 設定（不含父分類） */
+    public boolean isCategoryAllowBuyLocal(String categoryId) {
+        var data = categories.get(categoryId);
+        return data != null && data.getDefinition().isAllowBuy();
+    }
+
+    /**
+     * 分類是否允許玩家購買（含父分類繼承：任一上層關閉則整棵子樹不可購買）
+     */
+    public boolean isCategoryAllowBuy(String categoryId) {
+        var data = categories.get(categoryId);
+        if (data == null || !data.getDefinition().isEnabled()) {
+            return false;
+        }
+        if (!data.getDefinition().isAllowBuy()) {
+            return false;
+        }
+        var parent = data.getDefinition().getParentId();
+        if (parent != null) {
+            return isCategoryAllowBuy(parent);
+        }
+        return true;
+    }
+
+    /** 父分類關閉購買時，回傳阻擋繼承的最近上層分類 id */
+    public Optional<String> findBuyBlockedByAncestor(String categoryId) {
+        var data = categories.get(categoryId);
+        if (data == null) return Optional.empty();
+        if (!data.getDefinition().isAllowBuy()) {
+            return Optional.of(categoryId);
+        }
+        var parent = data.getDefinition().getParentId();
+        if (parent != null) {
+            return findBuyBlockedByAncestor(parent);
+        }
+        return Optional.empty();
     }
 
     public String getCategoryDisplayName(Player player, String categoryId) {
@@ -158,7 +272,19 @@ public final class ShopConfigService {
     }
 
     public int getEnabledCount(String categoryId) {
-        return getEnabledEntries(categoryId).size();
+        return countEnabledRecursive(categoryId);
+    }
+
+    private int countEnabledRecursive(String categoryId) {
+        var data = categories.get(categoryId);
+        if (data == null || !isCategoryVisible(categoryId)) {
+            return 0;
+        }
+        int count = data.getEnabledEntries().size();
+        for (var childId : childrenByParent.getOrDefault(categoryId, List.of())) {
+            count += countEnabledRecursive(childId);
+        }
+        return count;
     }
 
     public Optional<ShopItemSetting> findItemSetting(String catalogKey) {
@@ -233,16 +359,20 @@ public final class ShopConfigService {
         return false;
     }
 
-    private ShopCategoryData parseCategoryFile(String folderId, File file, ItemCatalog catalog) {
+    private ShopCategoryData parseCategoryFile(String categoryId, String parentId, File file,
+                                             ItemCatalog catalog) {
         var yaml = YamlConfiguration.loadConfiguration(file);
-        var categoryId = yaml.getString("category", folderId);
+        var yamlCategoryId = yaml.getString("category", categoryId);
         var displayName = yaml.getString("display-name", "");
-        var icon = parseIcon(yaml.getString("icon", "CHEST"));
+        var icon = parseIcon(yaml.getString("icon",
+                ShopSubcategoryResolver.iconFor(relativePath(categoryId)).name()));
         var enabled = yaml.getBoolean("enabled", true);
-        var slot = yaml.getInt("slot", 100);
+        var allowBuy = yaml.getBoolean("allow-buy", true);
+        var defaultSlot = defaultSlotFor(categoryId);
+        var slot = yaml.getInt("slot", defaultSlot);
         var defaultPrice = yaml.getDouble("default-price", globalDefaultPrice());
 
-        var definition = new ShopCategoryDefinition(categoryId, displayName, icon, enabled, slot);
+        var definition = new ShopCategoryDefinition(yamlCategoryId, parentId, displayName, icon, enabled, allowBuy, slot);
         var data = new ShopCategoryData(definition, defaultPrice);
 
         var section = yaml.getConfigurationSection("items");
@@ -279,6 +409,15 @@ public final class ShopConfigService {
             return priceCalculator.calculate(entry);
         }
         return fallback;
+    }
+
+    private static String relativePath(String categoryId) {
+        var idx = categoryId.indexOf('/');
+        return idx < 0 ? categoryId : categoryId.substring(idx + 1);
+    }
+
+    private static int defaultSlotFor(String categoryId) {
+        return ShopSubcategoryResolver.slotOrder(relativePath(categoryId));
     }
 
     private void backfillMissingPrices(ItemCatalog catalog) {
@@ -346,7 +485,13 @@ public final class ShopConfigService {
                     結構：
                       shop/
                         <分類名稱>/items.yml
+                        <分類名稱>/<子分類>/items.yml   （支援多層子分類）
                         _template/items.yml   （範例，不會顯示在 GUI）
+
+                    巢狀子分類：
+                      有子資料夾時，父分類 items.yml 可只設定 display-name / icon，
+                      實際商品放在子資料夾的 items.yml。
+                      例：shop/blocks/building/wood/items.yml
 
                     新增分類：
                       1. 建立 shop/我的分類/items.yml
@@ -358,6 +503,7 @@ public final class ShopConfigService {
                       display-name: 我的分類     # GUI 顯示名稱
                       icon: DIAMOND              # GUI 圖示（Material 名稱）
                       enabled: true              # 是否顯示此分類
+                      allow-buy: true            # 是否允許玩家購買（false 時子分類一併禁止）
                       slot: 0                    # 排序（數字越小越前面）
                       default-price: 10.0        # 未指定 price 時的預設值
 
@@ -383,7 +529,9 @@ public final class ShopConfigService {
     }
 
     public boolean isItemPurchasable(CatalogEntry entry) {
-        return isItemSellable(entry);
+        if (!isItemInShop(entry)) return false;
+        var categoryId = findCategoryIdForKey(entry.getKey());
+        return categoryId != null && isCategoryAllowBuy(categoryId);
     }
 
     /**
@@ -439,6 +587,10 @@ public final class ShopConfigService {
         return null;
     }
 
+    public String findCategoryIdForCatalogKey(String catalogKey) {
+        return findCategoryIdForKey(catalogKey);
+    }
+
     private static org.bukkit.inventory.ItemStack normalizeForLookup(org.bukkit.inventory.ItemStack stack) {
         var copy = stack.clone();
         copy.setAmount(1);
@@ -452,15 +604,12 @@ public final class ShopConfigService {
 
     public boolean canPlayerSell(org.bukkit.inventory.ItemStack stack, ItemCatalog catalog) {
         if (!plugin.getConfig().getBoolean("system-shop.sell-to-system", true)) return false;
-        if (!plugin.getConfig().getBoolean("system-shop.require-listed-item", true)) {
-            return catalog.findMatching(stack) != null
-                    || resolvePlayerItem(stack, catalog).isPresent();
-        }
         return resolvePlayerItem(stack, catalog).isPresent();
     }
 
     public boolean canPlayerBuy(org.bukkit.inventory.ItemStack stack, ItemCatalog catalog) {
-        return resolvePlayerItem(stack, catalog).isPresent();
+        var entry = catalog.findMatching(stack);
+        return entry != null && isItemPurchasable(entry);
     }
 
     /**
@@ -491,35 +640,119 @@ public final class ShopConfigService {
             var entries = catalog.getByCategory(category);
             if (entries.isEmpty()) continue;
 
-            var file = getCategoryFile(category.getId());
-            file.getParentFile().mkdirs();
-            writeDefaultCategoryFile(category, entries, file, locale);
-            categoryCount++;
+            var bySubPath = new LinkedHashMap<String, List<CatalogEntry>>();
+            for (var entry : entries) {
+                var subPath = ShopSubcategoryResolver.resolve(category, entry);
+                bySubPath.computeIfAbsent(subPath, k -> new ArrayList<>()).add(entry);
+            }
+
+            categoryCount += writeDefaultCategoryTree(category, bySubPath, locale);
             itemCount += entries.size();
         }
 
         extractTemplateIfAbsent();
         load(catalog);
 
-        plugin.getLogger().info("shop 已還原預設：" + categoryCount + " 分類、" + itemCount + " 項物品");
+        plugin.getLogger().info("shop 已還原預設：" + categoryCount + " 個分類節點、" + itemCount + " 項物品");
         return new ShopRestoreResult(categoryCount, itemCount, removed);
     }
 
-    private void writeDefaultCategoryFile(ItemCategory category, List<CatalogEntry> entries,
-                                          File file, String localeCode) {
-        var yaml = new YamlConfiguration();
-        var displayName = plugin.getLocaleService().msg(localeCode, "category." + category.getId());
+    private int writeDefaultCategoryTree(ItemCategory topCategory,
+                                         Map<String, List<CatalogEntry>> bySubPath,
+                                         String localeCode) {
+        var topId = topCategory.getId();
+        boolean needsNesting = bySubPath.size() > 1
+                || bySubPath.keySet().stream().anyMatch(path -> path.contains("/"));
 
-        yaml.set("category", category.getId());
-        yaml.set("display-name", displayName);
-        yaml.set("icon", category.getIcon().name());
+        int nodes = 0;
+        if (!needsNesting && bySubPath.containsKey("all")) {
+            var file = getCategoryFile(topId);
+            file.getParentFile().mkdirs();
+            writeLeafCategoryFile(topId, null, topCategory.getIcon(), topCategory.ordinal(),
+                    bySubPath.get("all"), file, localeCode, topId);
+            return 1;
+        }
+
+        var rootFile = getCategoryFile(topId);
+        rootFile.getParentFile().mkdirs();
+        writeContainerCategoryFile(topId, null, topCategory.getIcon(), topCategory.ordinal(),
+                rootFile, localeCode, topId);
+        nodes++;
+
+        var containerPaths = new java.util.TreeSet<String>();
+        for (var path : bySubPath.keySet()) {
+            var parts = path.split("/");
+            for (int i = 1; i < parts.length; i++) {
+                containerPaths.add(String.join("/", java.util.Arrays.copyOfRange(parts, 0, i)));
+            }
+        }
+
+        for (var containerPath : containerPaths) {
+            var fullId = topId + "/" + containerPath;
+            var file = getCategoryFile(fullId);
+            file.getParentFile().mkdirs();
+            writeContainerCategoryFile(fullId, parentCategoryId(fullId),
+                    ShopSubcategoryResolver.iconFor(containerPath),
+                    ShopSubcategoryResolver.slotOrder(containerPath),
+                    file, localeCode, fullId);
+            nodes++;
+        }
+
+        for (var entry : bySubPath.entrySet()) {
+            var fullId = topId + "/" + entry.getKey();
+            var file = getCategoryFile(fullId);
+            file.getParentFile().mkdirs();
+            writeLeafCategoryFile(fullId, parentCategoryId(fullId),
+                    ShopSubcategoryResolver.iconFor(entry.getKey()),
+                    ShopSubcategoryResolver.slotOrder(entry.getKey()),
+                    entry.getValue(), file, localeCode, fullId);
+            nodes++;
+        }
+
+        return nodes;
+    }
+
+    private void writeContainerCategoryFile(String categoryId, String parentId, Material icon,
+                                            int slot, File file, String localeCode,
+                                            String localeKey) {
+        var yaml = new YamlConfiguration();
+        var displayName = plugin.getLocaleService().msg(localeCode, "category."
+                + ShopSubcategoryResolver.toLocaleSuffix(localeKey));
+
+        yaml.set("category", categoryId);
+        yaml.set("display-name", displayName.equals("category." + ShopSubcategoryResolver.toLocaleSuffix(localeKey))
+                ? categoryId : displayName);
+        yaml.set("icon", icon.name());
         yaml.set("enabled", true);
-        yaml.set("slot", category.ordinal());
+        yaml.set("allow-buy", true);
+        yaml.set("slot", slot);
         yaml.set("default-price", globalDefaultPrice());
         yaml.options().header("""
-                ashop 預設分類 — %s
+                ashop 分類容器 — %s
+                可在此資料夾下建立子資料夾作為子分類，或直接在此 items 區塊加入商品
+                """.formatted(categoryId));
+        saveYaml(file, yaml);
+    }
+
+    private void writeLeafCategoryFile(String categoryId, String parentId, Material icon,
+                                       int slot, List<CatalogEntry> entries, File file,
+                                       String localeCode, String localeKey) {
+        var yaml = new YamlConfiguration();
+        var displayName = plugin.getLocaleService().msg(localeCode, "category."
+                + ShopSubcategoryResolver.toLocaleSuffix(localeKey));
+
+        yaml.set("category", categoryId);
+        yaml.set("display-name", displayName.equals("category." + ShopSubcategoryResolver.toLocaleSuffix(localeKey))
+                ? categoryId : displayName);
+        yaml.set("icon", icon.name());
+        yaml.set("enabled", true);
+        yaml.set("allow-buy", true);
+        yaml.set("slot", slot);
+        yaml.set("default-price", globalDefaultPrice());
+        yaml.options().header("""
+                ashop 商品分類 — %s
                 由 /shop reset 產生，可自由編輯後 /shop reload
-                """.formatted(category.getId()));
+                """.formatted(categoryId));
 
         var usedKeys = new java.util.HashSet<String>();
         for (var entry : entries) {
@@ -532,6 +765,12 @@ public final class ShopConfigService {
         }
 
         saveYaml(file, yaml);
+    }
+
+    private void writeDefaultCategoryFile(ItemCategory category, List<CatalogEntry> entries,
+                                          File file, String localeCode) {
+        writeLeafCategoryFile(category.getId(), null, category.getIcon(), category.ordinal(),
+                entries, file, localeCode, category.getId());
     }
 
     private static String sanitizeYamlKey(CatalogEntry entry) {

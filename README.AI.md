@@ -163,6 +163,91 @@ ShopPlugin
 
 **驗證**：第三、四輪獨立子代理連續 PASS（查價/收購一致、lore 修復、經濟回滾）
 
+### 2026-07-11 收購箱即時報價與伺服器匯率（v1.3.3）
+
+**使用者需求**：
+1. 收購箱放入方塊後單價應立即顯示，不要等很久
+2. 預設系統價格可依伺服器經濟匯率調整（×倍率 + 固定加值）
+
+**修復/新增**：
+1. `GuiListener` 新增 MONITOR 優先級監聽，任何放入/拖曳/Shift 點擊後 1 tick 刷新
+2. `ShopGui.refreshSellPanel` 改用 clone 顯示、`inv.setItem` + `player.updateInventory()` 強制同步
+3. 新增 `ServerPriceExchange`：`實際價 = 基準價 × multiply + add`
+4. `config.yml` → `shop.pricing.exchange.multiply` / `add`，`/shop reload` 即生效（不需重設 shop）
+
+### 2026-07-11 出售完成後主頁無法點擊
+
+**根因**：`confirmSell` / 取消收購時 `closeInventory()` 觸發 `onClose`，session 被從 map 移除，但 `openMain` 仍用同一 session 物件，導致 `getActiveSession` 回傳 null、主頁按鈕無效。
+
+**修復**：`GuiSession.pendingShopNavigation` 標記「即將返回主頁」，`onClose` 在此狀態下保留 session 不清除。
+
+### 2026-07-11 購買數量選擇 GUI（v1.4.0）
+
+**需求**：點商品後可選購買 1 個、一組（max stack）、或聊天輸入自訂數量。
+
+**實作**：
+1. 新增 `BUY_QUANTITY` 介面與 `ShopGui.openBuyQuantity`
+2. `ShopManager.buyCatalogEntry(player, key, amount)` 批量購買 + 背包空間預檢
+3. 自訂數量：關閉 GUI → 聊天輸入（可輸入 cancel/取消 返回）
+4. `config.yml` → `gui.max-buy-amount` 單次上限（預設 2304）
+
+### 2026-07-11 管理員 GUI 編輯（v1.5.0）
+
+**需求**：Shift+右鍵快速編輯商品單價/移除；config 設定 UI 化。
+
+**實作**：
+1. `ShopAdminService` — 寫入 items.yml 價格/啟用/移除；config 欄位讀寫
+2. Shift+右鍵商品 → `ShopAdminGui.openAdminItemEdit`（設單價、啟停、移除）
+3. 主選單 slot 52 地獄星 → 全域商店設定 GUI（收購比例、匯率、動態定價等）
+4. 數值：左鍵 +step、右鍵 -step、Shift+左鍵聊天自訂；布林：左鍵切換
+
+### 2026-07-11 邏輯審查全面修復（v1.5.1）
+
+**背景**：子代理審查發現查價/收購/GUI 流程存在多處邏輯不一致與競態風險，使用者要求一次修完。
+
+**修復清單**：
+
+| 編號 | 問題 | 修復 |
+|------|------|------|
+| H1 | `buyListing` 競態導致重複購買 | 整段交易包在 `synchronized (listingLock)` |
+| H2 | 收購判定與報價路徑不一致 | `canPlayerSell` / `getSellToSystemQuote` 一律走 `resolvePlayerItem` |
+| H2/M6 | 無有效 quote 仍吃掉物品 | `sellDepositToSystem` 檢查 `sellQuote.available()` |
+| H3 | 聊天 await 殘留導致誤觸發 | `resetFlowState()` + `openMain` 時清除 awaiting 旗標 |
+| M1 | catalog 模式庫存虛高 | `quoteStock()` 目錄模式用 `reference-stock` |
+| M3 | 管理員 GUI 只顯示基準價 | 新增「實際單價」顯示 `applyServerPrice` |
+| M4 | 搜尋驗證失敗仍清除 await | 驗證通過後才 `awaitingSearch.remove` |
+| M5 | ESC 關子 GUI 又被拉回 | 移除 `onClose` 延遲 `returnFromBuyQuantity/Admin` |
+| M7 | 賣家離線款項消失 | `EconomyService.deposit(UUID, amount)` |
+| M12 | SELL onClose 漏檢 admin chat | onClose 加入 `awaitingAdminChat` 判斷 |
+| L2 | 分類頁動態價格 lore 硬編碼 | 改為 `pricing.isEnabled()` |
+| — | 確認收購連點 | `sellConfirming` 防護 + try/finally |
+| — | 收購面板顯示與實際不符 | `refreshSellPanel` 檢查 `sellQuote.available()` |
+
+**涉及檔案**：`ShopManager`、`GuiListener`、`ShopGui`、`ShopAdminGui`、`EconomyService`、`ShopPlugin`、語系檔
+
+### 2026-07-11 巢狀子分類（v1.6.0）
+
+**需求**：方塊分類點擊無反應（600+ 項卡頓）；希望像創造模式一樣多層子分類（建築→木材/石頭/銅、染色→羊毛/地毯/混凝土/玻璃…、自然→原礦/樹葉/挖礦體…）；其他分類也要細分；預設值與使用者自訂編輯皆支援。
+
+**根因**：舊版 `blocks/items.yml` 單檔含 600+ 商品，主執行緒同步建 GUI 造成明顯卡頓；扁平結構無子分類。
+
+**實作**：
+1. `ShopSubcategoryResolver` — 物品→子分類路徑規則（方塊/工具/武器等）
+2. `shop/<path>/items.yml` 遞迴載入，category id 為路徑（如 `blocks/building/wood`）
+3. `ShopGui.openSubcategoryPage` — 有子節點時顯示子分類；葉節點才顯示商品
+4. 返回鍵沿 parent 回上一層；`openCategory` 改下一 tick 非同步開啟 + 載入提示
+5. `/shop reset` 產生完整巢狀預設樹；README 更新巢狀資料夾說明
+
+### 2026-07-11 分類購買開關（v1.6.1）
+
+**需求**：整個分類可設定禁止玩家購買，並繼承到所有子分類。
+
+**實作**：
+1. `items.yml` 新增 `allow-buy: true/false`（預設 true）
+2. `isCategoryAllowBuy()` 沿 parent 鏈檢查；上層關閉則整棵子樹不可買
+3. 收購不受影響（仍可賣給系統）
+4. 管理員：分類頁 slot 48 或 Shift+右鍵子分類 → 分類設定 GUI
+
 ## 待擴充
 
 - 可匯入完整 Minecraft zh_tw.json 擴充翻譯覆蓋率

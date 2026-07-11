@@ -34,6 +34,10 @@ shop:
   extract-template: true   # 首次釋出 shop/_template/items.yml 範例
   pricing:
     reference-price: 10.0
+    # 伺服器匯率：實際價格 = 基準價 × multiply + add（改 config 後 /shop reload 即生效）
+    exchange:
+      multiply: 1.0    # 倍率，例如 2.0 = 全部基準價 ×2
+      add: 0.0         # 固定加值，例如 30 = 每項再加 30
     backfill-missing-prices: true
     min-price: 0.5
     max-price: 100000.0
@@ -73,6 +77,7 @@ dynamic-pricing:
 gui:
   rows: 6
   items-per-page: 45
+  max-buy-amount: 2304   # 單次購買上限（自訂數量）
 
 search:
   min-length: 1

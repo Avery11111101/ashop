@@ -8,6 +8,7 @@ import com.avery.shop.gui.GuiListener;
 import com.avery.shop.locale.LocaleService;
 import com.avery.shop.pricing.DynamicPricingService;
 import com.avery.shop.shop.AsyncSaveService;
+import com.avery.shop.shop.ShopAdminService;
 import com.avery.shop.shop.ShopConfigService;
 import com.avery.shop.shop.ShopManager;
 import org.bukkit.plugin.java.JavaPlugin;
@@ -18,6 +19,7 @@ public final class ShopPlugin extends JavaPlugin {
     private ItemCatalog itemCatalog;
     private ShopManager shopManager;
     private ShopConfigService shopConfigService;
+    private ShopAdminService shopAdminService;
     private EconomyService economyService;
     private DynamicPricingService pricingService;
 
@@ -38,6 +40,7 @@ public final class ShopPlugin extends JavaPlugin {
 
         shopConfigService = new ShopConfigService(this);
         shopConfigService.load(itemCatalog);
+        shopAdminService = new ShopAdminService(this, shopConfigService);
 
         shopManager = new ShopManager(this, itemCatalog, economyService, pricingService, shopConfigService);
         var asyncSave = new AsyncSaveService(this, shopManager);
@@ -45,6 +48,7 @@ public final class ShopPlugin extends JavaPlugin {
         shopManager.load();
 
         var guiListener = new GuiListener(shopManager);
+        shopManager.bindGuiListener(guiListener);
         getServer().getPluginManager().registerEvents(guiListener, this);
 
         var command = new ShopCommand(this, shopManager, itemCatalog);
@@ -91,5 +95,9 @@ public final class ShopPlugin extends JavaPlugin {
 
     public ShopConfigService getShopConfigService() {
         return shopConfigService;
+    }
+
+    public ShopAdminService getShopAdminService() {
+        return shopAdminService;
     }
 }

@@ -5,6 +5,46 @@ ashop 的所有重要變更皆記錄於此。
 
 ---
 
+## [1.6.0] - 2026-07-11
+
+### Added / 新增
+- **Nested shop categories** — folders like `shop/blocks/building/wood/items.yml`; GUI browses subcategories like Creative mode  
+  **巢狀子分類** — 支援 `shop/方塊/建築/木材/items.yml` 多層結構，GUI 像創造模式一樣逐層瀏覽
+- Blocks split into building (wood/stone/copper), dyed (wool/carpet/concrete/glass…), natural (ores/leaves/terrain…), etc.  
+  方塊細分為建築、染色、自然、功能性等子分類
+- `/shop reset` generates full nested default tree for all 12 top categories  
+  `/shop reset` 會產生完整巢狀預設分類樹
+
+### Fixed / 修復
+- Large categories (e.g. blocks) no longer freeze GUI on click — async open with loading hint  
+  大型分類（如方塊）點擊不再卡住 — 非同步開啟並顯示載入提示
+
+---
+
+## [1.6.1] - 2026-07-11
+
+### Added / 新增
+- **Category purchase toggle** — `allow-buy: false` on any category blocks player purchases for that branch (inherited by subcategories)  
+  **分類購買開關** — 在 `items.yml` 設 `allow-buy: false` 可禁止該分類（含所有子分類）的購買
+- Admin category settings GUI (slot 48 or Shift+Right-click subcategory)  
+  管理員分類設定 GUI（slot 48 或 Shift+右鍵子分類）
+
+---
+
+## [1.5.1] - 2026-07-11
+
+### Fixed / 修復
+- Unified price lookup and sell acceptance logic (no more “price shows OK but sell rejected”)  
+  統一查價與收購判定，避免查價可收購但實際被拒
+- GUI flow fixes: chat await cleanup, ESC no longer reopens sub-menus, sell confirm anti double-click  
+  GUI 流程修復：清除聊天等待狀態、ESC 不再拉回子介面、收購確認防連點
+- Admin item editor shows effective price after server exchange rate  
+  管理員商品編輯顯示匯率換算後的實際單價
+- Offline seller payments via Vault offline deposit  
+  賣家離線時款項仍會入帳
+
+---
+
 ## [1.2.6] - 2026-07-11
 
 ### Changed / 變更

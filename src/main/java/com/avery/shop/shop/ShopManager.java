@@ -5,6 +5,7 @@ import com.avery.shop.catalog.CatalogEntry;
 import com.avery.shop.catalog.ItemCatalog;
 import com.avery.shop.catalog.ItemCategory;
 import com.avery.shop.economy.EconomyService;
+import com.avery.shop.gui.GuiListener;
 import com.avery.shop.pricing.DynamicPricingService;
 import com.avery.shop.pricing.PriceQuote;
 import org.bukkit.entity.Player;
@@ -26,6 +27,7 @@ public final class ShopManager {
     private final EconomyService economy;
     private final DynamicPricingService pricing;
     private final ShopConfigService shopConfig;
+    private GuiListener guiListener;
     private final ListingIndex index = new ListingIndex();
     private AsyncSaveService asyncSave;
     private final List<ShopListing> listings = new ArrayList<>();
@@ -38,6 +40,16 @@ public final class ShopManager {
         this.economy = economy;
         this.pricing = pricing;
         this.shopConfig = shopConfig;
+    }
+
+    public void bindGuiListener(GuiListener guiListener) {
+        this.guiListener = guiListener;
+    }
+
+    public void resetPlayerGuiFlow(Player player) {
+        if (guiListener != null) {
+            guiListener.resetFlowState(player);
+        }
     }
 
     public void bindAsyncSave(AsyncSaveService asyncSave) {
@@ -178,11 +190,18 @@ public final class ShopManager {
     public PriceQuote getCatalogPriceQuote(String catalogKey) {
         var entry = catalog.getByKey(catalogKey);
         var base = entry != null
-                ? shopConfig.getBasePriceForEntry(entry)
-                : plugin.getConfig().getDouble("dynamic-pricing.base-price",
-                        plugin.getConfig().getDouble("default-prices.base-price", 10.0));
-        var stock = index.getStock(catalogKey);
-        return pricing.quote(catalogKey, base, stock);
+                ? shopConfig.applyServerPrice(shopConfig.getBasePriceForEntry(entry))
+                : shopConfig.applyServerPrice(plugin.getConfig().getDouble("dynamic-pricing.base-price",
+                        plugin.getConfig().getDouble("default-prices.base-price", 10.0)));
+        return pricing.quote(catalogKey, base, quoteStock(catalogKey));
+    }
+
+    /** catalog 模式視為系統無限供應，避免 scarcity 虛高 */
+    private int quoteStock(String catalogKey) {
+        if (isCatalogMode()) {
+            return plugin.getConfig().getInt("dynamic-pricing.reference-stock", 5);
+        }
+        return index.getStock(catalogKey);
     }
 
     public double getEffectivePrice(ShopListing listing) {
@@ -208,8 +227,8 @@ public final class ShopManager {
             return PriceQuote.unavailable();
         }
         var key = resolved.get().entry().getKey();
-        var base = resolved.get().setting().getPrice();
-        return pricing.quote(key, base, index.getStock(key));
+        var base = shopConfig.applyServerPrice(resolved.get().setting().getPrice());
+        return pricing.quote(key, base, quoteStock(key));
     }
 
     public Optional<ResolvedShopItem> resolvePlayerItem(ItemStack item) {
@@ -307,7 +326,9 @@ public final class ShopManager {
 
     public double calculateStackSellTotal(ItemStack stack) {
         if (!canSellToSystem(stack)) return 0;
-        return getSellToSystemQuote(stack).price() * stack.getAmount();
+        var quote = getSellToSystemQuote(stack);
+        if (!quote.available()) return 0;
+        return quote.price() * stack.getAmount();
     }
 
     public SellBatchResult sellDepositToSystem(Player player, org.bukkit.inventory.Inventory depositInv,
@@ -333,13 +354,20 @@ public final class ShopManager {
             if (stack == null || stack.getType().isAir()) continue;
 
             var tradeStack = tradeItem(stack);
-            if (!shopConfig.canPlayerSell(tradeStack, catalog)) {
+            if (!canSellToSystem(tradeStack)) {
                 rejected.add(tradeStack);
                 depositInv.setItem(slot, null);
                 continue;
             }
 
-            var unitPrice = getSellToSystemQuote(stack).price();
+            var sellQuote = getSellToSystemQuote(stack);
+            if (!sellQuote.available()) {
+                rejected.add(tradeStack);
+                depositInv.setItem(slot, null);
+                continue;
+            }
+
+            var unitPrice = sellQuote.price();
             total += unitPrice * stack.getAmount();
             soldCount += stack.getAmount();
             var key = shopConfig.resolvePlayerItem(tradeStack, catalog)
@@ -451,70 +479,105 @@ public final class ShopManager {
     }
 
     public BuyResult buyCatalogEntry(Player buyer, String catalogKey) {
+        return buyCatalogEntry(buyer, catalogKey, 1);
+    }
+
+    public BuyResult buyCatalogEntry(Player buyer, String catalogKey, int amount) {
+        if (amount < 1) return BuyResult.NOT_FOUND;
+
         var entry = catalog.getByKey(catalogKey);
         if (entry == null) return BuyResult.NOT_FOUND;
         if (!shopConfig.isItemPurchasable(entry)) return BuyResult.NOT_FOUND;
         if (!economy.isEnabled()) return BuyResult.ECONOMY_DISABLED;
 
-        var quote = getCatalogPriceQuote(catalogKey);
-        double price = quote.price();
-        if (!economy.has(buyer, price)) return BuyResult.NO_MONEY;
-        if (!economy.withdraw(buyer, price)) return BuyResult.NO_MONEY;
+        int maxBuy = plugin.getConfig().getInt("gui.max-buy-amount", 2304);
+        amount = Math.min(amount, maxBuy);
 
-        var item = entry.getTemplate().clone();
-        var leftover = buyer.getInventory().addItem(item);
-        if (!leftover.isEmpty()) {
-            economy.deposit(buyer, price);
+        var quote = getCatalogPriceQuote(catalogKey);
+        double unitPrice = quote.price();
+        double totalPrice = unitPrice * amount;
+
+        var deliveries = buildDeliveryStacks(entry.getTemplate(), amount);
+        if (deliveries.isEmpty()) return BuyResult.NOT_FOUND;
+
+        if (!economy.has(buyer, totalPrice)) return BuyResult.NO_MONEY;
+        if (!com.avery.shop.util.InventorySpaceUtil.canFitStorage(buyer, deliveries)) {
             return BuyResult.NO_SPACE;
         }
+        if (!economy.withdraw(buyer, totalPrice)) return BuyResult.NO_MONEY;
 
-        pricing.recordBuy(catalogKey);
+        for (var stack : deliveries) {
+            buyer.getInventory().addItem(stack);
+        }
+
+        for (int i = 0; i < amount; i++) {
+            pricing.recordBuy(catalogKey);
+        }
         markDirty();
         return BuyResult.SUCCESS;
     }
 
+    private static List<ItemStack> buildDeliveryStacks(ItemStack template, int amount) {
+        var stacks = new ArrayList<ItemStack>();
+        if (template == null || template.getType().isAir() || amount < 1) {
+            return stacks;
+        }
+
+        int maxStack = template.getMaxStackSize();
+        int remaining = amount;
+        while (remaining > 0) {
+            int size = Math.min(maxStack, remaining);
+            var stack = template.clone();
+            stack.setAmount(size);
+            stacks.add(stack);
+            remaining -= size;
+        }
+        return stacks;
+    }
+
+    public int getMaxBuyAmount() {
+        return plugin.getConfig().getInt("gui.max-buy-amount", 2304);
+    }
+
     public BuyResult buyListing(Player buyer, UUID listingId) {
-        ShopListing listing;
         synchronized (listingLock) {
             var opt = getListing(listingId);
             if (opt.isEmpty()) return BuyResult.NOT_FOUND;
-            listing = opt.get();
-        }
+            var listing = opt.get();
 
-        if (listing.getSellerId().equals(buyer.getUniqueId())) return BuyResult.OWN_ITEM;
-        if (!economy.isEnabled()) return BuyResult.ECONOMY_DISABLED;
+            if (listing.getSellerId().equals(buyer.getUniqueId())) return BuyResult.OWN_ITEM;
+            if (!economy.isEnabled()) return BuyResult.ECONOMY_DISABLED;
 
-        double price = getEffectivePrice(listing);
-        if (!economy.has(buyer, price)) return BuyResult.NO_MONEY;
-        if (!economy.withdraw(buyer, price)) return BuyResult.NO_MONEY;
+            double price = getEffectivePrice(listing);
+            if (!economy.has(buyer, price)) return BuyResult.NO_MONEY;
+            if (!economy.withdraw(buyer, price)) return BuyResult.NO_MONEY;
 
-        var item = listing.getItem();
-        var leftover = buyer.getInventory().addItem(item.clone());
-        if (!leftover.isEmpty()) {
-            economy.deposit(buyer, price);
-            return BuyResult.NO_SPACE;
-        }
+            var item = listing.getItem();
+            var leftover = buyer.getInventory().addItem(item.clone());
+            if (!leftover.isEmpty()) {
+                economy.deposit(buyer, price);
+                return BuyResult.NO_SPACE;
+            }
 
-        var catalogKey = index.getKey(listing.getId());
-        if (catalogKey == null) catalogKey = pricing.resolveKey(listing.getItem());
-        pricing.recordBuy(catalogKey);
+            var catalogKey = index.getKey(listing.getId());
+            if (catalogKey == null) catalogKey = pricing.resolveKey(listing.getItem());
 
-        synchronized (listingLock) {
             listings.remove(listing);
             index.unregister(listing, catalog);
-        }
-        markDirty();
+            markDirty();
+            pricing.recordBuy(catalogKey);
 
-        if (!listing.getSellerId().equals(SYSTEM_SELLER_ID)) {
-            var seller = plugin.getServer().getPlayer(listing.getSellerId());
-            if (seller != null && seller.isOnline()) {
-                economy.deposit(seller, price);
-                var loc = plugin.getLocaleService();
-                seller.sendMessage("§a" + loc.msg(seller, "msg.buy.seller-notify",
-                        buyer.getName(), economy.format(price)));
+            if (!listing.getSellerId().equals(SYSTEM_SELLER_ID)) {
+                economy.deposit(listing.getSellerId(), price);
+                var seller = plugin.getServer().getPlayer(listing.getSellerId());
+                if (seller != null && seller.isOnline()) {
+                    var loc = plugin.getLocaleService();
+                    seller.sendMessage("§a" + loc.msg(seller, "msg.buy.seller-notify",
+                            buyer.getName(), economy.format(price)));
+                }
             }
+            return BuyResult.SUCCESS;
         }
-        return BuyResult.SUCCESS;
     }
 
     public boolean removeListing(Player player, UUID listingId) {
@@ -556,6 +619,10 @@ public final class ShopManager {
 
     public ShopConfigService getShopConfig() {
         return shopConfig;
+    }
+
+    public ShopAdminService getAdminService() {
+        return plugin.getShopAdminService();
     }
 
     public boolean isCategoryVisible(String categoryId) {

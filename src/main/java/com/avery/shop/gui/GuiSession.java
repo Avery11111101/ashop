@@ -22,13 +22,17 @@ import java.util.UUID;
 public final class GuiSession {
 
     public enum ViewType {
-        MAIN, CATEGORY, SEARCH, LISTINGS, SELL_TO_SYSTEM
+        MAIN, CATEGORY, SEARCH, LISTINGS, SELL_TO_SYSTEM, BUY_QUANTITY,
+        ADMIN_ITEM_EDIT, ADMIN_CATEGORY_EDIT, ADMIN_SETTINGS
     }
 
     private final Player player;
     private ViewType viewType = ViewType.MAIN;
     private ShopInventoryHolder shopHolder;
     private boolean sellConfirming;
+    private boolean pendingShopNavigation;
+    private String pendingCatalogKey;
+    private ViewType returnViewType;
     private String categoryId;
     private String searchQuery;
     private int page;
@@ -36,6 +40,8 @@ public final class GuiSession {
     private boolean catalogBrowse;
     private final Map<Integer, UUID> slotListingMap = new HashMap<>();
     private final Map<Integer, String> slotCatalogMap = new HashMap<>();
+    private final Map<Integer, String> slotSubcategoryMap = new HashMap<>();
+    private final Map<Integer, String> slotAdminConfigMap = new HashMap<>();
 
     public GuiSession(Player player) {
         this.player = player;
@@ -92,6 +98,8 @@ public final class GuiSession {
     public void clearSlotMap() {
         slotListingMap.clear();
         slotCatalogMap.clear();
+        slotSubcategoryMap.clear();
+        slotAdminConfigMap.clear();
     }
 
     public boolean isCatalogBrowse() {
@@ -104,6 +112,14 @@ public final class GuiSession {
 
     public Map<Integer, String> getSlotCatalogMap() {
         return slotCatalogMap;
+    }
+
+    public Map<Integer, String> getSlotSubcategoryMap() {
+        return slotSubcategoryMap;
+    }
+
+    public Map<Integer, String> getSlotAdminConfigMap() {
+        return slotAdminConfigMap;
     }
 
     public ShopInventoryHolder getShopHolder() {
@@ -120,6 +136,30 @@ public final class GuiSession {
 
     public void setSellConfirming(boolean sellConfirming) {
         this.sellConfirming = sellConfirming;
+    }
+
+    public boolean isPendingShopNavigation() {
+        return pendingShopNavigation;
+    }
+
+    public void setPendingShopNavigation(boolean pendingShopNavigation) {
+        this.pendingShopNavigation = pendingShopNavigation;
+    }
+
+    public String getPendingCatalogKey() {
+        return pendingCatalogKey;
+    }
+
+    public void setPendingCatalogKey(String pendingCatalogKey) {
+        this.pendingCatalogKey = pendingCatalogKey;
+    }
+
+    public ViewType getReturnViewType() {
+        return returnViewType;
+    }
+
+    public void setReturnViewType(ViewType returnViewType) {
+        this.returnViewType = returnViewType;
     }
 
     public boolean isInShopGui() {

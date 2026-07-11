@@ -86,6 +86,12 @@ system-shop:
   sell-ratio: 0.5          # 收購價 = 購買價 × 50%
   require-listed-item: true
 
+shop:
+  pricing:
+    exchange:
+      multiply: 2.0   # 基準價 ×2
+      add: 30.0       # 再加 30（例：基準 10 → 實際 50）
+
 languages:
   default: zh_tw
   fallback: en_us

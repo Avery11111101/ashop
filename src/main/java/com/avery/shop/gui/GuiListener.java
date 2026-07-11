@@ -26,6 +26,13 @@ public final class GuiListener implements Listener {
     private final ShopManager shopManager;
     private final Map<UUID, GuiSession> sessions = new HashMap<>();
     private final Map<UUID, Boolean> awaitingSearch = new HashMap<>();
+    private final Map<UUID, Boolean> awaitingBuyQuantity = new HashMap<>();
+
+    private enum AdminPromptType { ITEM_PRICE, CONFIG_VALUE }
+
+    private record AdminChatPrompt(AdminPromptType type, String catalogKey, String configFieldId) {}
+
+    private final Map<UUID, AdminChatPrompt> awaitingAdminChat = new HashMap<>();
 
     public GuiListener(ShopManager shopManager) {
         this.shopManager = shopManager;
@@ -35,11 +42,26 @@ public final class GuiListener implements Listener {
         return sessions.computeIfAbsent(player.getUniqueId(), id -> new GuiSession(player));
     }
 
+    /** 清除聊天輸入與子流程殘留狀態 */
+    public void resetFlowState(Player player) {
+        var id = player.getUniqueId();
+        awaitingSearch.remove(id);
+        awaitingBuyQuantity.remove(id);
+        awaitingAdminChat.remove(id);
+        var session = sessions.get(id);
+        if (session != null) {
+            session.setPendingCatalogKey(null);
+            session.setReturnViewType(null);
+        }
+    }
+
     private GuiSession getActiveSession(Player player) {
         var session = sessions.get(player.getUniqueId());
         if (session == null) return null;
         if (!session.isInShopGui()) {
-            if (!awaitingSearch.containsKey(player.getUniqueId())) {
+            if (!awaitingSearch.containsKey(player.getUniqueId())
+                    && !awaitingBuyQuantity.containsKey(player.getUniqueId())
+                    && !awaitingAdminChat.containsKey(player.getUniqueId())) {
                 sessions.remove(player.getUniqueId());
             }
             return null;
@@ -56,6 +78,26 @@ public final class GuiListener implements Listener {
 
         if (session.getViewType() == GuiSession.ViewType.SELL_TO_SYSTEM) {
             handleSellPanelClick(event, player, session);
+            return;
+        }
+
+        if (session.getViewType() == GuiSession.ViewType.BUY_QUANTITY) {
+            handleBuyQuantityClick(event, player, session);
+            return;
+        }
+
+        if (session.getViewType() == GuiSession.ViewType.ADMIN_ITEM_EDIT) {
+            handleAdminItemEditClick(event, player, session);
+            return;
+        }
+
+        if (session.getViewType() == GuiSession.ViewType.ADMIN_CATEGORY_EDIT) {
+            handleAdminCategoryEditClick(event, player, session);
+            return;
+        }
+
+        if (session.getViewType() == GuiSession.ViewType.ADMIN_SETTINGS) {
+            handleAdminSettingsClick(event, player, session, event.getClick());
             return;
         }
 
@@ -86,12 +128,58 @@ public final class GuiListener implements Listener {
             }
         }
 
-        shopManager.getPlugin().getServer().getScheduler().runTask(shopManager.getPlugin(), () -> {
-            var active = getActiveSession(player);
-            if (active != null && active.getViewType() == GuiSession.ViewType.SELL_TO_SYSTEM) {
-                ShopGui.refreshSellPanel(shopManager, player, player.getOpenInventory().getTopInventory());
+        scheduleSellPanelRefresh(player);
+    }
+
+    private void scheduleSellPanelRefresh(Player player) {
+        shopManager.getPlugin().getServer().getScheduler().runTaskLater(shopManager.getPlugin(), () -> {
+            if (!player.isOnline()) return;
+            var view = player.getOpenInventory();
+            if (!(view.getTopInventory().getHolder() instanceof ShopInventoryHolder holder)) return;
+            if (holder.getKind() != ShopInventoryHolder.Kind.SELL) return;
+
+            var session = sessions.get(player.getUniqueId());
+            if (session == null || session.getViewType() != GuiSession.ViewType.SELL_TO_SYSTEM) return;
+
+            ShopGui.refreshSellPanel(shopManager, player, view.getTopInventory());
+        }, 1L);
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    public void onSellPanelClickMonitor(InventoryClickEvent event) {
+        if (!(event.getWhoClicked() instanceof Player player)) return;
+        var session = sessions.get(player.getUniqueId());
+        if (session == null || session.getViewType() != GuiSession.ViewType.SELL_TO_SYSTEM) return;
+        if (!(event.getView().getTopInventory().getHolder() instanceof ShopInventoryHolder holder)
+                || holder.getKind() != ShopInventoryHolder.Kind.SELL) {
+            return;
+        }
+
+        int rawSlot = event.getRawSlot();
+        int topSize = event.getView().getTopInventory().getSize();
+        if (rawSlot == ShopGui.SELL_CANCEL_SLOT || rawSlot == ShopGui.SELL_CONFIRM_SLOT) return;
+        if (rawSlot >= 0 && rawSlot < topSize && rawSlot >= ShopGui.SELL_DEPOSIT_SIZE) return;
+
+        scheduleSellPanelRefresh(player);
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    public void onSellPanelDragMonitor(InventoryDragEvent event) {
+        if (!(event.getWhoClicked() instanceof Player player)) return;
+        var session = sessions.get(player.getUniqueId());
+        if (session == null || session.getViewType() != GuiSession.ViewType.SELL_TO_SYSTEM) return;
+        if (!(event.getView().getTopInventory().getHolder() instanceof ShopInventoryHolder holder)
+                || holder.getKind() != ShopInventoryHolder.Kind.SELL) {
+            return;
+        }
+
+        int topSize = event.getView().getTopInventory().getSize();
+        for (int rawSlot : event.getRawSlots()) {
+            if (rawSlot < topSize && rawSlot < ShopGui.SELL_DEPOSIT_SIZE) {
+                scheduleSellPanelRefresh(player);
+                return;
             }
-        });
+        }
     }
 
     private void handleSellPanelClick(InventoryClickEvent event, Player player, GuiSession session) {
@@ -101,6 +189,7 @@ public final class GuiListener implements Listener {
         if (rawSlot >= 0 && rawSlot < topSize) {
             if (rawSlot == ShopGui.SELL_CANCEL_SLOT) {
                 event.setCancelled(true);
+                session.setPendingShopNavigation(true);
                 returnDepositItems(player, event.getView().getTopInventory());
                 player.closeInventory();
                 ShopGui.openMain(shopManager, player, session);
@@ -108,6 +197,7 @@ public final class GuiListener implements Listener {
             }
             if (rawSlot == ShopGui.SELL_CONFIRM_SLOT) {
                 event.setCancelled(true);
+                if (session.isSellConfirming()) return;
                 confirmSell(player, session, event.getView().getTopInventory());
                 return;
             }
@@ -115,59 +205,51 @@ public final class GuiListener implements Listener {
                 event.setCancelled(true);
                 return;
             }
-            // 投放區 0-44：允許放入/取出
-            shopManager.getPlugin().getServer().getScheduler().runTask(shopManager.getPlugin(), () -> {
-                var active = getActiveSession(player);
-                if (active != null && active.getViewType() == GuiSession.ViewType.SELL_TO_SYSTEM) {
-                    ShopGui.refreshSellPanel(shopManager, player, player.getOpenInventory().getTopInventory());
-                }
-            });
+            // 投放區 0-44：允許放入/取出（價格由 MONITOR 事件刷新）
             return;
         }
 
         // 從玩家背包 shift+點擊放入
         if (event.getClick() == ClickType.SHIFT_LEFT || event.getClick() == ClickType.SHIFT_RIGHT) {
-            shopManager.getPlugin().getServer().getScheduler().runTask(shopManager.getPlugin(), () -> {
-                var active = getActiveSession(player);
-                if (active != null && active.getViewType() == GuiSession.ViewType.SELL_TO_SYSTEM) {
-                    ShopGui.refreshSellPanel(shopManager, player, player.getOpenInventory().getTopInventory());
-                }
-            });
+            scheduleSellPanelRefresh(player);
         }
     }
 
     private void confirmSell(Player player, GuiSession session, org.bukkit.inventory.Inventory inv) {
         var locale = shopManager.getPlugin().getLocaleService();
         session.setSellConfirming(true);
+        try {
+            var result = shopManager.sellDepositToSystem(
+                    player, inv, 0, ShopGui.SELL_DEPOSIT_SIZE - 1);
 
-        var result = shopManager.sellDepositToSystem(
-                player, inv, 0, ShopGui.SELL_DEPOSIT_SIZE - 1);
-
-        if (result.rejected() != null) {
-            for (var rejected : result.rejected()) {
-                giveItemBack(player, rejected);
+            if (result.rejected() != null) {
+                for (var rejected : result.rejected()) {
+                    giveItemBack(player, rejected);
+                }
             }
+
+            if (result.soldCount() > 0) {
+                player.sendMessage("§a" + locale.msg(player, "msg.gui.sell.confirm-success",
+                        shopManager.getEconomy().format(result.totalPaid()),
+                        result.soldCount()));
+                if (result.hasRejected()) {
+                    player.sendMessage("§c" + locale.msg(player, "msg.gui.sell.rejected-return"));
+                }
+                if (shopManager.getPricing().isEnabled()) {
+                    player.sendMessage("§7" + locale.msg(player, "msg.sell.price-hint"));
+                }
+            } else if (result.hasRejected()) {
+                player.sendMessage("§c" + locale.msg(player, "msg.gui.sell.all-rejected"));
+            } else {
+                player.sendMessage("§c" + locale.msg(player, "msg.gui.sell.empty"));
+            }
+
+            session.setPendingShopNavigation(true);
+            player.closeInventory();
+            ShopGui.openMain(shopManager, player, session);
+        } finally {
+            session.setSellConfirming(false);
         }
-
-        if (result.soldCount() > 0) {
-            player.sendMessage("§a" + locale.msg(player, "msg.gui.sell.confirm-success",
-                    shopManager.getEconomy().format(result.totalPaid()),
-                    result.soldCount()));
-            if (result.hasRejected()) {
-                player.sendMessage("§c" + locale.msg(player, "msg.gui.sell.rejected-return"));
-            }
-            if (shopManager.getPricing().isEnabled()) {
-                player.sendMessage("§7" + locale.msg(player, "msg.sell.price-hint"));
-            }
-        } else if (result.hasRejected()) {
-            player.sendMessage("§c" + locale.msg(player, "msg.gui.sell.all-rejected"));
-        } else {
-            player.sendMessage("§c" + locale.msg(player, "msg.gui.sell.empty"));
-        }
-
-        player.closeInventory();
-        session.setSellConfirming(false);
-        ShopGui.openMain(shopManager, player, session);
     }
 
     private void returnDepositItems(Player player, org.bukkit.inventory.Inventory inv) {
@@ -210,6 +292,12 @@ public final class GuiListener implements Listener {
             return;
         }
 
+        if (slot == ShopAdminGui.ADMIN_SETTINGS_SLOT && player.hasPermission("shop.admin")) {
+            session.setReturnViewType(GuiSession.ViewType.MAIN);
+            ShopAdminGui.openAdminSettings(shopManager, player, session);
+            return;
+        }
+
         int catIndex = 0;
         for (var category : shopManager.getShopConfig().getCategories()) {
             if (!category.isEnabled()) continue;
@@ -224,11 +312,30 @@ public final class GuiListener implements Listener {
         }
     }
 
+    private void navigateCategoryBack(Player player, GuiSession session) {
+        if (session.getViewType() == GuiSession.ViewType.CATEGORY && session.getCategoryId() != null) {
+            var parent = shopManager.getShopConfig().getParentCategoryId(session.getCategoryId());
+            if (parent != null) {
+                session.setCategoryId(parent);
+                session.setPage(0);
+                ShopGui.openCategory(shopManager, player, session);
+                return;
+            }
+        }
+        ShopGui.openMain(shopManager, player, session);
+    }
+
     private void handleListingClick(Player player, GuiSession session, int slot, ClickType click) {
         var locale = shopManager.getPlugin().getLocaleService();
 
         if (slot == ShopGui.getBackSlot()) {
-            ShopGui.openMain(shopManager, player, session);
+            navigateCategoryBack(player, session);
+            return;
+        }
+        if (slot == ShopAdminGui.ADMIN_CATEGORY_SLOT && player.hasPermission("shop.admin")
+                && session.getCategoryId() != null) {
+            session.setReturnViewType(session.getViewType());
+            ShopAdminGui.openAdminCategoryEdit(shopManager, player, session, session.getCategoryId());
             return;
         }
         if (slot == ShopGui.getPrevSlot()) {
@@ -244,21 +351,34 @@ public final class GuiListener implements Listener {
 
         var listingId = session.getSlotListingMap().get(slot);
         var catalogKey = session.getSlotCatalogMap().get(slot);
+        var subcategoryId = session.getSlotSubcategoryMap().get(slot);
+
+        if (subcategoryId != null) {
+            if (player.hasPermission("shop.admin") && click == ClickType.SHIFT_RIGHT) {
+                session.setReturnViewType(session.getViewType());
+                ShopAdminGui.openAdminCategoryEdit(shopManager, player, session, subcategoryId);
+                return;
+            }
+            session.setCategoryId(subcategoryId);
+            session.setPage(0);
+            ShopGui.openCategory(shopManager, player, session);
+            return;
+        }
 
         if (session.isCatalogBrowse() && catalogKey != null) {
-            if (click != ClickType.LEFT) return;
-            var result = shopManager.buyCatalogEntry(player, catalogKey);
-            switch (result) {
-                case SUCCESS -> {
-                    player.sendMessage("§a" + locale.msg(player, "msg.buy.success"));
-                    refreshListingView(player, session);
-                }
-                case NO_MONEY -> player.sendMessage("§c" + locale.msg(player, "msg.buy.no-money"));
-                case NO_SPACE -> player.sendMessage("§c" + locale.msg(player, "msg.buy.no-space"));
-                case ECONOMY_DISABLED -> player.sendMessage("§c" + locale.msg(player, "msg.buy.economy-disabled"));
-                case NOT_FOUND -> player.sendMessage("§c" + locale.msg(player, "msg.buy.not-found"));
-                default -> player.sendMessage("§c" + locale.msg(player, "msg.buy.failed"));
+            if (player.hasPermission("shop.admin") && click == ClickType.SHIFT_RIGHT) {
+                session.setReturnViewType(session.getViewType());
+                ShopAdminGui.openAdminItemEdit(shopManager, player, session, catalogKey);
+                return;
             }
+            if (click != ClickType.LEFT) return;
+            var entry = shopManager.getCatalog().getByKey(catalogKey);
+            if (entry != null && !shopManager.getShopConfig().isItemPurchasable(entry)) {
+                player.sendMessage("§c" + locale.msg(player, "msg.buy.category-disabled"));
+                return;
+            }
+            session.setReturnViewType(session.getViewType());
+            ShopGui.openBuyQuantity(shopManager, player, session, catalogKey);
             return;
         }
 
@@ -290,6 +410,259 @@ public final class GuiListener implements Listener {
         }
     }
 
+    private void handleAdminCategoryEditClick(InventoryClickEvent event, Player player, GuiSession session) {
+        event.setCancelled(true);
+        if (!player.hasPermission("shop.admin")) return;
+
+        int slot = event.getRawSlot();
+        if (slot < 0 || slot >= event.getView().getTopInventory().getSize()) return;
+
+        var categoryId = session.getCategoryId();
+        if (categoryId == null) {
+            returnFromAdminCategory(player, session);
+            return;
+        }
+
+        var locale = shopManager.getPlugin().getLocaleService();
+        var admin = shopManager.getAdminService();
+
+        if (slot == ShopAdminGui.CATEGORY_BACK_SLOT) {
+            returnFromAdminCategory(player, session);
+            return;
+        }
+        if (slot == ShopAdminGui.CATEGORY_TOGGLE_BUY_SLOT) {
+            boolean local = shopManager.getShopConfig().isCategoryAllowBuyLocal(categoryId);
+            if (admin.setCategoryAllowBuy(shopManager.getCatalog(), categoryId, !local)) {
+                player.sendMessage("§a" + locale.msg(player, "msg.gui.admin.category.toggle-success"));
+                ShopAdminGui.openAdminCategoryEdit(shopManager, player, session, categoryId);
+            } else {
+                player.sendMessage("§c" + locale.msg(player, "msg.gui.admin.failed"));
+            }
+        }
+    }
+
+    private void returnFromAdminCategory(Player player, GuiSession session) {
+        var returnTo = session.getReturnViewType();
+        session.setReturnViewType(null);
+        if (returnTo == GuiSession.ViewType.CATEGORY && session.getCategoryId() != null) {
+            session.setViewType(GuiSession.ViewType.CATEGORY);
+            ShopGui.openCategory(shopManager, player, session);
+        } else {
+            ShopGui.openMain(shopManager, player, session);
+        }
+    }
+
+    private void handleAdminItemEditClick(InventoryClickEvent event, Player player, GuiSession session) {
+        event.setCancelled(true);
+        if (!player.hasPermission("shop.admin")) return;
+
+        int slot = event.getRawSlot();
+        if (slot < 0 || slot >= event.getView().getTopInventory().getSize()) return;
+
+        var catalogKey = session.getPendingCatalogKey();
+        if (catalogKey == null) {
+            returnFromAdmin(player, session);
+            return;
+        }
+
+        var locale = shopManager.getPlugin().getLocaleService();
+        var admin = shopManager.getAdminService();
+
+        if (slot == ShopAdminGui.ITEM_BACK_SLOT) {
+            returnFromAdmin(player, session);
+            return;
+        }
+        if (slot == ShopAdminGui.ITEM_SHOP_SETTINGS_SLOT) {
+            session.setReturnViewType(GuiSession.ViewType.ADMIN_ITEM_EDIT);
+            ShopAdminGui.openAdminSettings(shopManager, player, session);
+            return;
+        }
+        if (slot == ShopAdminGui.ITEM_SET_PRICE_SLOT) {
+            awaitingAdminChat.put(player.getUniqueId(),
+                    new AdminChatPrompt(AdminPromptType.ITEM_PRICE, catalogKey, null));
+            session.setShopHolder(null);
+            player.closeInventory();
+            player.sendMessage("§e" + locale.msg(player, "msg.gui.admin.item.price-prompt"));
+            return;
+        }
+        if (slot == ShopAdminGui.ITEM_TOGGLE_SLOT) {
+            var setting = shopManager.getShopConfig().findItemSetting(catalogKey).orElse(null);
+            if (setting == null) return;
+            if (admin.setItemEnabled(shopManager.getCatalog(), catalogKey, !setting.isEnabled())) {
+                player.sendMessage("§a" + locale.msg(player, "msg.gui.admin.item.toggle-success"));
+                ShopAdminGui.openAdminItemEdit(shopManager, player, session, catalogKey);
+            } else {
+                player.sendMessage("§c" + locale.msg(player, "msg.gui.admin.failed"));
+            }
+            return;
+        }
+        if (slot == ShopAdminGui.ITEM_REMOVE_SLOT) {
+            if (admin.removeItem(shopManager.getCatalog(), catalogKey)) {
+                player.sendMessage("§a" + locale.msg(player, "msg.gui.admin.item.remove-success"));
+                session.setPendingCatalogKey(null);
+                returnFromAdmin(player, session);
+            } else {
+                player.sendMessage("§c" + locale.msg(player, "msg.gui.admin.failed"));
+            }
+        }
+    }
+
+    private void handleAdminSettingsClick(InventoryClickEvent event, Player player, GuiSession session,
+                                          ClickType click) {
+        event.setCancelled(true);
+        if (!player.hasPermission("shop.admin")) return;
+
+        int slot = event.getRawSlot();
+        if (slot < 0 || slot >= event.getView().getTopInventory().getSize()) return;
+
+        if (slot == ShopGui.getBackSlot()) {
+            returnFromAdminSettings(player, session);
+            return;
+        }
+
+        var fieldId = session.getSlotAdminConfigMap().get(slot);
+        if (fieldId == null) return;
+
+        var admin = shopManager.getAdminService();
+        var field = admin.getConfigField(fieldId).orElse(null);
+        if (field == null) return;
+
+        var locale = shopManager.getPlugin().getLocaleService();
+
+        if (field.type() == com.avery.shop.shop.ShopAdminService.ConfigValueType.BOOLEAN) {
+            if (admin.toggleConfigBoolean(fieldId)) {
+                player.sendMessage("§a" + locale.msg(player, "msg.gui.admin.config.updated"));
+                ShopAdminGui.openAdminSettings(shopManager, player, session);
+            }
+            return;
+        }
+
+        if (click == ClickType.SHIFT_LEFT) {
+            awaitingAdminChat.put(player.getUniqueId(),
+                    new AdminChatPrompt(AdminPromptType.CONFIG_VALUE, null, fieldId));
+            session.setShopHolder(null);
+            player.closeInventory();
+            player.sendMessage("§e" + locale.msg(player, "msg.gui.admin.config.prompt",
+                    locale.msg(player, "msg.gui.admin.config." + fieldId)));
+            return;
+        }
+
+        boolean increase = click != ClickType.RIGHT;
+        if (admin.adjustConfigNumber(fieldId, increase)) {
+            player.sendMessage("§a" + locale.msg(player, "msg.gui.admin.config.updated"));
+            ShopAdminGui.openAdminSettings(shopManager, player, session);
+        }
+    }
+
+    private void returnFromAdmin(Player player, GuiSession session) {
+        session.setPendingCatalogKey(null);
+        var returnTo = session.getReturnViewType();
+        session.setReturnViewType(null);
+        if (returnTo == GuiSession.ViewType.SEARCH) {
+            session.setViewType(GuiSession.ViewType.SEARCH);
+            ShopGui.openSearch(shopManager, player, session);
+        } else if (returnTo == GuiSession.ViewType.CATEGORY) {
+            session.setViewType(GuiSession.ViewType.CATEGORY);
+            ShopGui.openCategory(shopManager, player, session);
+        } else {
+            ShopGui.openMain(shopManager, player, session);
+        }
+    }
+
+    private void returnFromAdminSettings(Player player, GuiSession session) {
+        var returnTo = session.getReturnViewType();
+        session.setReturnViewType(null);
+        if (returnTo == GuiSession.ViewType.ADMIN_ITEM_EDIT && session.getPendingCatalogKey() != null) {
+            ShopAdminGui.openAdminItemEdit(shopManager, player, session, session.getPendingCatalogKey());
+        } else if (returnTo == GuiSession.ViewType.MAIN) {
+            ShopGui.openMain(shopManager, player, session);
+        } else {
+            ShopGui.openMain(shopManager, player, session);
+        }
+    }
+
+    private void handleBuyQuantityClick(InventoryClickEvent event, Player player, GuiSession session) {
+        event.setCancelled(true);
+
+        int slot = event.getRawSlot();
+        if (slot < 0 || slot >= event.getView().getTopInventory().getSize()) return;
+
+        var catalogKey = session.getPendingCatalogKey();
+        if (catalogKey == null) {
+            returnFromBuyQuantity(player, session);
+            return;
+        }
+
+        var entry = shopManager.getCatalog().getByKey(catalogKey);
+        if (entry == null) {
+            player.sendMessage("§c" + shopManager.getPlugin().getLocaleService()
+                    .msg(player, "msg.buy.not-found"));
+            returnFromBuyQuantity(player, session);
+            return;
+        }
+
+        if (slot == ShopGui.BUY_QTY_BACK_SLOT) {
+            returnFromBuyQuantity(player, session);
+            return;
+        }
+        if (slot == ShopGui.BUY_QTY_ONE_SLOT) {
+            executeCatalogBuy(player, session, catalogKey, 1);
+            return;
+        }
+        if (slot == ShopGui.BUY_QTY_STACK_SLOT) {
+            executeCatalogBuy(player, session, catalogKey, entry.getTemplate().getMaxStackSize());
+            return;
+        }
+        if (slot == ShopGui.BUY_QTY_CUSTOM_SLOT) {
+            var locale = shopManager.getPlugin().getLocaleService();
+            awaitingBuyQuantity.put(player.getUniqueId(), true);
+            session.setShopHolder(null);
+            player.closeInventory();
+            player.sendMessage("§e" + locale.msg(player, "msg.buy-qty.prompt"));
+            player.sendMessage("§7" + locale.msg(player, "msg.buy-qty.prompt.hint",
+                    shopManager.getMaxBuyAmount()));
+        }
+    }
+
+    private void executeCatalogBuy(Player player, GuiSession session, String catalogKey, int amount) {
+        var locale = shopManager.getPlugin().getLocaleService();
+        var result = shopManager.buyCatalogEntry(player, catalogKey, amount);
+        switch (result) {
+            case SUCCESS -> {
+                if (amount > 1) {
+                    player.sendMessage("§a" + locale.msg(player, "msg.buy.success-qty", amount));
+                } else {
+                    player.sendMessage("§a" + locale.msg(player, "msg.buy.success"));
+                }
+                returnFromBuyQuantity(player, session);
+            }
+            case NO_MONEY -> player.sendMessage("§c" + locale.msg(player, "msg.buy.no-money"));
+            case NO_SPACE -> player.sendMessage("§c" + locale.msg(player, "msg.buy.no-space"));
+            case ECONOMY_DISABLED -> player.sendMessage("§c" + locale.msg(player, "msg.buy.economy-disabled"));
+            case NOT_FOUND -> {
+                player.sendMessage("§c" + locale.msg(player, "msg.buy.not-found"));
+                returnFromBuyQuantity(player, session);
+            }
+            default -> player.sendMessage("§c" + locale.msg(player, "msg.buy.failed"));
+        }
+    }
+
+    private void returnFromBuyQuantity(Player player, GuiSession session) {
+        session.setPendingCatalogKey(null);
+        var returnTo = session.getReturnViewType();
+        session.setReturnViewType(null);
+
+        if (returnTo == GuiSession.ViewType.SEARCH) {
+            session.setViewType(GuiSession.ViewType.SEARCH);
+            ShopGui.openSearch(shopManager, player, session);
+        } else if (returnTo == GuiSession.ViewType.CATEGORY) {
+            session.setViewType(GuiSession.ViewType.CATEGORY);
+            ShopGui.openCategory(shopManager, player, session);
+        } else {
+            ShopGui.openMain(shopManager, player, session);
+        }
+    }
+
     private void refreshListingView(Player player, GuiSession session) {
         switch (session.getViewType()) {
             case CATEGORY -> ShopGui.openCategory(shopManager, player, session);
@@ -302,10 +675,49 @@ public final class GuiListener implements Listener {
     @EventHandler(priority = EventPriority.LOWEST)
     public void onChat(AsyncChatEvent event) {
         var player = event.getPlayer();
-        if (!awaitingSearch.remove(player.getUniqueId())) return;
+        var locale = shopManager.getPlugin().getLocaleService();
+
+        var adminPrompt = awaitingAdminChat.remove(player.getUniqueId());
+        if (adminPrompt != null) {
+            event.setCancelled(true);
+            var input = PlainTextComponentSerializer.plainText().serialize(event.message()).trim();
+            if (input.equalsIgnoreCase("cancel") || input.equalsIgnoreCase("取消")) {
+                shopManager.getPlugin().getServer().getScheduler().runTask(shopManager.getPlugin(), () -> {
+                    var session = sessions.get(player.getUniqueId());
+                    if (session != null) {
+                        if (session.getPendingCatalogKey() != null) {
+                            ShopAdminGui.openAdminItemEdit(shopManager, player, session,
+                                    session.getPendingCatalogKey());
+                        } else {
+                            ShopAdminGui.openAdminSettings(shopManager, player, session);
+                        }
+                    }
+                });
+                return;
+            }
+            handleAdminChat(player, locale, input, adminPrompt);
+            return;
+        }
+
+        if (awaitingBuyQuantity.remove(player.getUniqueId()) != null) {
+            event.setCancelled(true);
+            var input = PlainTextComponentSerializer.plainText().serialize(event.message()).trim();
+            if (input.equalsIgnoreCase("cancel") || input.equalsIgnoreCase("取消")) {
+                shopManager.getPlugin().getServer().getScheduler().runTask(shopManager.getPlugin(), () -> {
+                    var session = sessions.get(player.getUniqueId());
+                    if (session != null) {
+                        returnFromBuyQuantity(player, session);
+                    }
+                });
+                return;
+            }
+            handleBuyQuantityChat(player, locale, input);
+            return;
+        }
+
+        if (!awaitingSearch.containsKey(player.getUniqueId())) return;
 
         event.setCancelled(true);
-        var locale = shopManager.getPlugin().getLocaleService();
         var query = PlainTextComponentSerializer.plainText().serialize(event.message()).trim();
 
         if (query.isEmpty()) {
@@ -319,12 +731,111 @@ public final class GuiListener implements Listener {
             return;
         }
 
+        awaitingSearch.remove(player.getUniqueId());
+
         shopManager.getPlugin().getServer().getScheduler().runTask(shopManager.getPlugin(), () -> {
             var session = getOrCreateSession(player);
             session.setSearchQuery(query);
             session.setPage(0);
             ShopGui.openSearch(shopManager, player, session);
             player.sendMessage("§a" + locale.msg(player, "msg.search.result", query));
+        });
+    }
+
+    private void handleBuyQuantityChat(Player player,
+                                       com.avery.shop.locale.LocaleService locale,
+                                       String input) {
+        int amount;
+        try {
+            amount = Integer.parseInt(input);
+        } catch (NumberFormatException e) {
+            player.sendMessage("§c" + locale.msg(player, "msg.buy-qty.invalid"));
+            reopenBuyQuantityOrReturn(player);
+            return;
+        }
+
+        if (amount < 1) {
+            player.sendMessage("§c" + locale.msg(player, "msg.buy-qty.too-small"));
+            reopenBuyQuantityOrReturn(player);
+            return;
+        }
+
+        int maxBuy = shopManager.getMaxBuyAmount();
+        if (amount > maxBuy) {
+            player.sendMessage("§c" + locale.msg(player, "msg.buy-qty.too-large", maxBuy));
+            reopenBuyQuantityOrReturn(player);
+            return;
+        }
+
+        shopManager.getPlugin().getServer().getScheduler().runTask(shopManager.getPlugin(), () -> {
+            var session = sessions.get(player.getUniqueId());
+            if (session == null) {
+                session = getOrCreateSession(player);
+            }
+            var catalogKey = session.getPendingCatalogKey();
+            if (catalogKey == null) {
+                player.sendMessage("§c" + locale.msg(player, "msg.buy.not-found"));
+                return;
+            }
+            executeCatalogBuy(player, session, catalogKey, amount);
+        });
+    }
+
+    private void reopenBuyQuantityOrReturn(Player player) {
+        shopManager.getPlugin().getServer().getScheduler().runTask(shopManager.getPlugin(), () -> {
+            var session = sessions.get(player.getUniqueId());
+            if (session == null || session.getPendingCatalogKey() == null) {
+                if (session != null) {
+                    returnFromBuyQuantity(player, session);
+                }
+                return;
+            }
+            ShopGui.openBuyQuantity(shopManager, player, session, session.getPendingCatalogKey());
+        });
+    }
+
+    private void handleAdminChat(Player player,
+                                 com.avery.shop.locale.LocaleService locale,
+                                 String input,
+                                 AdminChatPrompt prompt) {
+        shopManager.getPlugin().getServer().getScheduler().runTask(shopManager.getPlugin(), () -> {
+            var session = sessions.computeIfAbsent(player.getUniqueId(), id -> new GuiSession(player));
+            var admin = shopManager.getAdminService();
+
+            if (prompt.type() == AdminPromptType.ITEM_PRICE) {
+                double price;
+                try {
+                    price = Double.parseDouble(input.trim());
+                } catch (NumberFormatException e) {
+                    player.sendMessage("§c" + locale.msg(player, "msg.gui.admin.item.price-invalid"));
+                    ShopAdminGui.openAdminItemEdit(shopManager, player, session, prompt.catalogKey());
+                    return;
+                }
+                if (price < 0) {
+                    player.sendMessage("§c" + locale.msg(player, "msg.gui.admin.item.price-invalid"));
+                    ShopAdminGui.openAdminItemEdit(shopManager, player, session, prompt.catalogKey());
+                    return;
+                }
+                if (admin.updateItemPrice(shopManager.getCatalog(), prompt.catalogKey(), price)) {
+                    player.sendMessage("§a" + locale.msg(player, "msg.gui.admin.item.price-success",
+                            shopManager.getEconomy().format(price)));
+                    ShopAdminGui.openAdminItemEdit(shopManager, player, session, prompt.catalogKey());
+                } else {
+                    player.sendMessage("§c" + locale.msg(player, "msg.gui.admin.failed"));
+                    returnFromAdmin(player, session);
+                }
+                return;
+            }
+
+            if (prompt.type() == AdminPromptType.CONFIG_VALUE) {
+                if (admin.setConfigValue(prompt.configFieldId(), input)) {
+                    player.sendMessage("§a" + locale.msg(player, "msg.gui.admin.config.updated"));
+                    ShopAdminGui.openAdminSettings(shopManager, player, session);
+                } else {
+                    player.sendMessage("§c" + locale.msg(player, "msg.gui.admin.config.invalid"));
+                    ShopAdminGui.openAdminSettings(shopManager, player, session);
+                }
+            }
         });
     }
 
@@ -340,6 +851,8 @@ public final class GuiListener implements Listener {
             }
         }
         awaitingSearch.remove(player.getUniqueId());
+        awaitingBuyQuantity.remove(player.getUniqueId());
+        awaitingAdminChat.remove(player.getUniqueId());
     }
 
     @EventHandler
@@ -352,18 +865,44 @@ public final class GuiListener implements Listener {
         if (event.getInventory().getHolder() != session.getShopHolder()) return;
 
         if (session.getViewType() == GuiSession.ViewType.SELL_TO_SYSTEM) {
+            if (session.isPendingShopNavigation()) {
+                session.setPendingShopNavigation(false);
+                session.setSellConfirming(false);
+                session.setShopHolder(null);
+                return;
+            }
             if (!session.isSellConfirming()) {
                 returnDepositItems(player, event.getInventory());
             }
             session.setShopHolder(null);
-            if (!awaitingSearch.containsKey(player.getUniqueId())) {
+            if (!awaitingSearch.containsKey(player.getUniqueId())
+                    && !awaitingBuyQuantity.containsKey(player.getUniqueId())
+                    && !awaitingAdminChat.containsKey(player.getUniqueId())) {
                 sessions.remove(player.getUniqueId());
             }
             return;
         }
 
+        if (session.getViewType() == GuiSession.ViewType.BUY_QUANTITY
+                || session.getViewType() == GuiSession.ViewType.ADMIN_ITEM_EDIT
+                || session.getViewType() == GuiSession.ViewType.ADMIN_CATEGORY_EDIT
+                || session.getViewType() == GuiSession.ViewType.ADMIN_SETTINGS) {
+            session.setShopHolder(null);
+            if (!awaitingBuyQuantity.containsKey(player.getUniqueId())
+                    && !awaitingAdminChat.containsKey(player.getUniqueId())) {
+                session.setPendingCatalogKey(null);
+                session.setReturnViewType(null);
+                if (!awaitingSearch.containsKey(player.getUniqueId())) {
+                    sessions.remove(player.getUniqueId());
+                }
+            }
+            return;
+        }
+
         session.setShopHolder(null);
-        if (!awaitingSearch.containsKey(player.getUniqueId())) {
+        if (!awaitingSearch.containsKey(player.getUniqueId())
+                && !awaitingBuyQuantity.containsKey(player.getUniqueId())
+                && !awaitingAdminChat.containsKey(player.getUniqueId())) {
             sessions.remove(player.getUniqueId());
         }
     }
