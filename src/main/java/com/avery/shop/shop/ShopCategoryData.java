@@ -1,37 +1,36 @@
 package com.avery.shop.shop;
 
 import com.avery.shop.catalog.CatalogEntry;
-import com.avery.shop.catalog.ItemCategory;
+import com.avery.shop.catalog.ItemCatalog;
 
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 /**
  * 單一分類的商店設定與已啟用商品快取
  */
 public final class ShopCategoryData {
 
-    private final ItemCategory category;
-    private final boolean enabled;
+    private final ShopCategoryDefinition definition;
     private final double defaultPrice;
     private final Map<String, ShopItemSetting> items = new LinkedHashMap<>();
     private List<CatalogEntry> enabledEntries = List.of();
 
-    public ShopCategoryData(ItemCategory category, boolean enabled, double defaultPrice) {
-        this.category = category;
-        this.enabled = enabled;
+    public ShopCategoryData(ShopCategoryDefinition definition, double defaultPrice) {
+        this.definition = definition;
         this.defaultPrice = defaultPrice;
     }
 
-    public ItemCategory getCategory() {
-        return category;
+    public ShopCategoryDefinition getDefinition() {
+        return definition;
     }
 
-    public boolean isEnabled() {
-        return enabled;
+    public String getCategoryId() {
+        return definition.getId();
     }
 
     public double getDefaultPrice() {
@@ -54,26 +53,20 @@ public final class ShopCategoryData {
         return enabledEntries;
     }
 
-    public ShopItemSetting getItemSetting(String catalogKey) {
-        return items.get(catalogKey);
+    public Optional<ShopItemSetting> getItemSetting(String catalogKey) {
+        return Optional.ofNullable(items.get(catalogKey));
     }
 
-    public double resolveBasePrice(String catalogKey, double globalDefault) {
-        var setting = items.get(catalogKey);
-        if (setting != null && setting.getPrice() != null) {
-            return setting.getPrice();
-        }
-        return defaultPrice > 0 ? defaultPrice : globalDefault;
+    public double resolveBasePrice(String catalogKey) {
+        return getItemSetting(catalogKey).map(ShopItemSetting::getPrice).orElse(defaultPrice);
     }
 
-    public void rebuildEnabledEntries(com.avery.shop.catalog.ItemCatalog catalog) {
+    public void rebuildEnabledEntries(ItemCatalog catalog) {
         var list = new ArrayList<CatalogEntry>();
         for (var setting : items.values()) {
             if (!setting.isEnabled()) continue;
-            var entry = catalog.getByKey(setting.getCatalogKey());
-            if (entry != null) {
-                list.add(entry);
-            }
+            ShopItemResolver.resolve(setting.getCatalogKey(), setting.getMaterialId(), catalog)
+                    .ifPresent(list::add);
         }
         enabledEntries = List.copyOf(list);
     }

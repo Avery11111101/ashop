@@ -95,6 +95,32 @@ ShopPlugin
 3. 首次啟動釋出 zh_tw、en_us、_template、README.txt
 4. 自訂語言缺少檔案時自動從 template + fallback 產生
 
+### 2026-07-11 /shop reset 還原預設全物品
+
+1. 管理員 `/shop reset`（別名：還原、restore）
+2. 刪除 shop/ 內自訂分類（保留 _template）
+3. 重建 12 分類 + 全原版物品 + 獨立 price
+
+### 2026-07-11 商店改為 shop 資料夾驅動
+
+1. 移除寫死的 12 分類 enum 與自動灌入全物品
+2. 掃描 `shop/*/items.yml` 動態載入分類與商品
+3. 僅釋出 `shop/_template/items.yml` 範例，管理員自行建立分類
+4. 移除 config.yml `categories.*` 開關，改由 items.yml 的 enabled 控制
+
+### 2026-07-11 每物品獨立定價
+
+1. 新增 `ItemPriceCalculator`：依分類、材質、藥水/附魔書變體自動計算基準價
+2. seed/sync/backfill 皆寫入每項 `price` 至 items.yml
+3. 動態定價以各物品獨立 price 為基準浮動，不再共用單一 base-price
+
+### 2026-07-11 賣給系統收購箱 GUI
+
+1. 主選單「賣給系統」開啟 5 行投放區 + 取消/總計/確認列
+2. 每項顯示單價與小計，底部金錠顯示本批總計
+3. 確認後批次結算並提示「共獲得 $X（N 個物品）」
+4. 修復關閉 /shop 後 session 仍攔截背包點擊（ShopInventoryHolder + 關閉清 session）
+
 ### 2026-07-11 純系統商店模式
 
 1. 新增 `system-shop.*` 設定，預設 `player-listings: false`
@@ -111,6 +137,10 @@ ShopPlugin
 4. `sync-new-items`：reload 時自動補上原版目錄新增物品
 5. catalog 模式改讀 shop 設定，不再直接暴露完整目錄
 6. `/shop reload` 重新載入 shop 分類設定
+
+### 2026-07-11 移除本地共同編輯者
+
+1. 使用 `git filter-branch` 移除了最近 Git 提交歷史中的 `Co-authored-by: Cursor` 標籤，保留使用者自身為唯一作者。
 
 ## 待擴充
 

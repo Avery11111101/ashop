@@ -10,7 +10,7 @@ softdepend:
 commands:
   shop:
     description: 開啟商店介面
-    usage: /shop [search <keyword>|sell|price|reload]
+    usage: /shop [search <keyword>|sell|price|reload|reset]
     aliases: [商店, vs]
   lang:
     description: 切換語言

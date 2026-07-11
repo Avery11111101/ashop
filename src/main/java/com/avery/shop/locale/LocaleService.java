@@ -256,7 +256,12 @@ public final class LocaleService {
     }
 
     public String getCategoryName(Player player, String categoryId) {
-        return msg(player, "category." + categoryId);
+        var key = "category." + categoryId;
+        var translated = msg(player, key);
+        if (translated.equals(key)) {
+            return categoryId;
+        }
+        return translated;
     }
 
     public String getMaterialId(Material material) {

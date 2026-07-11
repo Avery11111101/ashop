@@ -8,9 +8,9 @@ public final class ShopItemSetting {
     private final String catalogKey;
     private final String materialId;
     private final boolean enabled;
-    private final Double price;
+    private final double price;
 
-    public ShopItemSetting(String catalogKey, String materialId, boolean enabled, Double price) {
+    public ShopItemSetting(String catalogKey, String materialId, boolean enabled, double price) {
         this.catalogKey = catalogKey;
         this.materialId = materialId;
         this.enabled = enabled;
@@ -29,7 +29,7 @@ public final class ShopItemSetting {
         return enabled;
     }
 
-    public Double getPrice() {
+    public double getPrice() {
         return price;
     }
 }

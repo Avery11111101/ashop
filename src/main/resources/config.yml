@@ -28,11 +28,16 @@ default-prices:
   mode: catalog          # catalog=讀 shop/ 分類設定（高效能）| listings=逐項上架（舊模式）
   base-price: 10.0
 
-# 系統商店分類設定（首次啟動自動建立）
+# 商店完全由 shop/ 資料夾定義（不再寫死分類）
 shop:
-  folder: shop           # plugins/ashop/shop/<分類>/items.yml
-  auto-seed: true        # 自動建立各分類預設商品
-  sync-new-items: true   # reload 時同步原版目錄新增物品
+  folder: shop
+  extract-template: true   # 首次釋出 shop/_template/items.yml 範例
+  pricing:
+    reference-price: 10.0
+    backfill-missing-prices: true
+    min-price: 0.5
+    max-price: 100000.0
+    round-to: 0.5
 
 performance:
   save-delay-ticks: 40   # 存檔延遲（40 tick = 2 秒），避免每次交易卡頓
@@ -68,20 +73,6 @@ dynamic-pricing:
 gui:
   rows: 6
   items-per-page: 45
-
-categories:
-  blocks: true
-  tools: true
-  weapons: true
-  armor: true
-  food: true
-  potions: true
-  enchanted_books: true
-  redstone: true
-  transport: true
-  decorations: true
-  spawn_eggs: true
-  misc: true
 
 search:
   min-length: 1

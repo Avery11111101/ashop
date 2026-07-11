@@ -1,0 +1,21 @@
+# 範例分類（enabled: false 不會出現在 GUI，僅供複製參考）
+category: example
+display-name: 範例分類
+icon: CHEST
+enabled: false
+slot: 999
+default-price: 10.0
+
+items:
+  stone:
+    material: STONE
+    price: 2.5
+    enabled: true
+  diamond:
+    material: DIAMOND
+    price: 55.0
+    enabled: true
+  iron_sword:
+    material: IRON_SWORD
+    price: 25.0
+    enabled: true

@@ -54,8 +54,8 @@ public final class ItemCatalog {
     }
 
     private boolean isCategoryEnabled(Material material) {
-        var cat = categorize(material);
-        return plugin.getConfig().getBoolean("categories." + cat.getId(), true);
+        // 目錄僅供物品比對與搜尋，商店內容完全由 shop/ 資料夾決定
+        return true;
     }
 
     private void addEntry(Material material, ItemCategory category, ItemStack customStack, String displayTag) {

@@ -159,15 +159,16 @@ public final class ShopManager {
         markDirty();
     }
 
-    public int getCategoryDisplayCount(ItemCategory category) {
+    public int getCategoryDisplayCount(String categoryId) {
         if (usesCatalogBrowse()) {
-            return shopConfig.getEnabledCount(category);
+            return shopConfig.getEnabledCount(categoryId);
         }
-        return index.getCategoryCount(category);
+        var legacy = com.avery.shop.catalog.ItemCategory.fromId(categoryId);
+        return legacy != null ? index.getCategoryCount(legacy) : 0;
     }
 
-    public List<CatalogEntry> getCatalogByCategory(ItemCategory category) {
-        return shopConfig.getEnabledEntries(category);
+    public List<CatalogEntry> getCatalogByCategory(String categoryId) {
+        return shopConfig.getEnabledEntries(categoryId);
     }
 
     public List<CatalogEntry> searchCatalog(org.bukkit.entity.Player player, String query) {
@@ -223,12 +224,16 @@ public final class ShopManager {
         return listingLock;
     }
 
-    public List<ShopListing> getListingsByCategory(ItemCategory category) {
+    public List<ShopListing> getListingsByCategory(String categoryId) {
+        var enabledKeys = shopConfig.getEnabledEntries(categoryId).stream()
+                .map(CatalogEntry::getKey)
+                .collect(Collectors.toSet());
+
         synchronized (listingLock) {
             return listings.stream()
                     .filter(l -> {
                         var match = catalog.findMatching(l.getItem());
-                        return match != null && match.getCategory() == category;
+                        return match != null && enabledKeys.contains(match.getKey());
                     })
                     .collect(Collectors.toList());
         }
@@ -271,6 +276,112 @@ public final class ShopManager {
         var sellPrice = Math.max(0.01, buyQuote.price() * getSellRatio());
         var sellChange = buyQuote.changePercent() * getSellRatio();
         return new PriceQuote(sellPrice, buyQuote.multiplier() * getSellRatio(), sellChange);
+    }
+
+    public boolean canSellToSystem(ItemStack item) {
+        if (item == null || item.getType().isAir()) return false;
+        var entry = catalog.findMatching(item);
+        var requireListed = plugin.getConfig().getBoolean("system-shop.require-listed-item", true);
+        if (requireListed) {
+            return shopConfig.isItemSellable(entry);
+        }
+        return entry != null;
+    }
+
+    public double calculateStackSellTotal(ItemStack stack) {
+        if (!canSellToSystem(stack)) return 0;
+        return getSellToSystemQuote(stack).price() * stack.getAmount();
+    }
+
+    public SellBatchResult sellDepositToSystem(Player player, org.bukkit.inventory.Inventory depositInv,
+                                               int startSlot, int endSlot) {
+        if (!isSellToSystemEnabled()) {
+            return new SellBatchResult(0, 0, collectDepositItems(depositInv, startSlot, endSlot));
+        }
+        if (!player.hasPermission("shop.sell")) {
+            return new SellBatchResult(0, 0, collectDepositItems(depositInv, startSlot, endSlot));
+        }
+        if (!economy.isEnabled()) {
+            return new SellBatchResult(0, 0, collectDepositItems(depositInv, startSlot, endSlot));
+        }
+
+        double total = 0;
+        int soldCount = 0;
+        var rejected = new ArrayList<ItemStack>();
+        var sellCounts = new HashMap<String, Integer>();
+
+        for (int slot = startSlot; slot <= endSlot; slot++) {
+            var stack = depositInv.getItem(slot);
+            if (stack == null || stack.getType().isAir()) continue;
+
+            if (!canSellToSystem(stack)) {
+                rejected.add(stripSellGuiLore(stack.clone()));
+                depositInv.setItem(slot, null);
+                continue;
+            }
+
+            var unitPrice = getSellToSystemQuote(stack).price();
+            total += unitPrice * stack.getAmount();
+            soldCount += stack.getAmount();
+            var key = pricing.resolveKey(stack);
+            sellCounts.merge(key, stack.getAmount(), Integer::sum);
+            depositInv.setItem(slot, null);
+        }
+
+        if (total > 0 && !economy.deposit(player, total)) {
+            // 存款失敗時不應發生；保守起見只清空已扣物品（此處物品已從 deposit 移除）
+            return new SellBatchResult(0, 0, rejected);
+        }
+
+        for (var entry : sellCounts.entrySet()) {
+            for (int i = 0; i < entry.getValue(); i++) {
+                pricing.recordSell(entry.getKey());
+            }
+        }
+        if (soldCount > 0) {
+            markDirty();
+        }
+
+        return new SellBatchResult(total, soldCount, rejected);
+    }
+
+    public static ItemStack stripSellGuiLore(ItemStack item) {
+        if (item == null || !item.hasItemMeta()) return item;
+        var meta = item.getItemMeta();
+        var lore = meta.lore();
+        if (lore == null || lore.isEmpty()) return item;
+
+        var cleaned = new ArrayList<net.kyori.adventure.text.Component>();
+        boolean skipping = false;
+        for (var line : lore) {
+            var plain = net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer
+                    .plainText().serialize(line);
+            if (plain.contains("───")) {
+                skipping = true;
+                continue;
+            }
+            if (skipping) continue;
+            cleaned.add(line);
+        }
+        if (cleaned.isEmpty()) {
+            meta.lore(null);
+        } else {
+            meta.lore(cleaned);
+        }
+        item.setItemMeta(meta);
+        return item;
+    }
+
+    private static List<ItemStack> collectDepositItems(org.bukkit.inventory.Inventory inv,
+                                                       int startSlot, int endSlot) {
+        var items = new ArrayList<ItemStack>();
+        for (int slot = startSlot; slot <= endSlot; slot++) {
+            var stack = inv.getItem(slot);
+            if (stack == null || stack.getType().isAir()) continue;
+            items.add(stripSellGuiLore(stack.clone()));
+            inv.setItem(slot, null);
+        }
+        return items;
     }
 
     public enum SellToSystemResult {
@@ -421,7 +532,7 @@ public final class ShopManager {
         return shopConfig;
     }
 
-    public boolean isCategoryVisible(ItemCategory category) {
-        return shopConfig.isCategoryEnabled(category);
+    public boolean isCategoryVisible(String categoryId) {
+        return shopConfig.isCategoryVisible(categoryId);
     }
 }

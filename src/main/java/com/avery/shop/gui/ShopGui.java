@@ -1,7 +1,6 @@
 package com.avery.shop.gui;
 
 import com.avery.shop.catalog.CatalogEntry;
-import com.avery.shop.catalog.ItemCategory;
 import com.avery.shop.shop.ShopListing;
 import com.avery.shop.shop.ShopManager;
 import net.kyori.adventure.text.Component;
@@ -28,7 +27,20 @@ public final class ShopGui {
     private static final int SEARCH_SLOT = 48;
     private static final int SELL_SLOT = 50;
 
+    public static final int SELL_DEPOSIT_SIZE = 45;
+    public static final int SELL_CANCEL_SLOT = 45;
+    public static final int SELL_TOTAL_SLOT = 49;
+    public static final int SELL_CONFIRM_SLOT = 53;
+
     private ShopGui() {}
+
+    private static org.bukkit.inventory.Inventory createShopInventory(
+            ShopInventoryHolder holder, int size, Component title, GuiSession session) {
+        var inv = Bukkit.createInventory(holder, size, title);
+        holder.bind(inv);
+        session.setShopHolder(holder);
+        return inv;
+    }
 
     public static void openMain(ShopManager manager, Player player, GuiSession session) {
         var locale = manager.getPlugin().getLocaleService();
@@ -37,20 +49,23 @@ public final class ShopGui {
         session.setPage(0);
         session.clearSlotMap();
 
-        var inv = Bukkit.createInventory(null, ROWS * 9,
+        var holder = new ShopInventoryHolder(ShopInventoryHolder.Kind.MAIN);
+        var inv = createShopInventory(holder, ROWS * 9,
                 Component.text(locale.msg(player, "msg.shop.title"))
-                        .color(NamedTextColor.GOLD).decorate(TextDecoration.BOLD));
+                        .color(NamedTextColor.GOLD).decorate(TextDecoration.BOLD),
+                session);
 
         int slot = 0;
-        for (var category : ItemCategory.values()) {
-            if (!manager.isCategoryVisible(category)) continue;
+        for (var category : manager.getShopConfig().getCategories()) {
+            if (!category.isEnabled()) continue;
+            if (!manager.isCategoryVisible(category.getId())) continue;
 
             var icon = new ItemStack(category.getIcon());
             var meta = icon.getItemMeta();
-            meta.displayName(Component.text(locale.getCategoryName(player, category.getId()))
+            meta.displayName(Component.text(manager.getShopConfig().getCategoryDisplayName(player, category.getId()))
                     .color(NamedTextColor.YELLOW).decoration(TextDecoration.ITALIC, false));
 
-            int count = manager.getCategoryDisplayCount(category);
+            int count = manager.getCategoryDisplayCount(category.getId());
             meta.lore(List.of(
                     Component.text(locale.msg(player, "msg.gui.category.count", count))
                             .color(NamedTextColor.GRAY).decoration(TextDecoration.ITALIC, false),
@@ -68,7 +83,7 @@ public final class ShopGui {
                 locale.msg(player, "msg.gui.search.lore2")));
 
         inv.setItem(SELL_SLOT, button(
-                Material.EMERALD,
+                Material.CHEST,
                 locale.msg(player, "msg.gui.sell.title"),
                 locale.msg(player, "msg.gui.sell.lore1"),
                 locale.msg(player, "msg.gui.sell.lore2")));
@@ -76,23 +91,124 @@ public final class ShopGui {
         player.openInventory(inv);
     }
 
+    public static void openSellToSystem(ShopManager manager, Player player, GuiSession session) {
+        var locale = manager.getPlugin().getLocaleService();
+        session.setViewType(GuiSession.ViewType.SELL_TO_SYSTEM);
+        session.setCatalogBrowse(false);
+        session.setSellConfirming(false);
+        session.clearSlotMap();
+
+        var holder = new ShopInventoryHolder(ShopInventoryHolder.Kind.SELL);
+        var inv = createShopInventory(holder, ROWS * 9,
+                Component.text(locale.msg(player, "msg.gui.sell-panel.title"))
+                        .color(NamedTextColor.GREEN).decorate(TextDecoration.BOLD),
+                session);
+
+        var filler = fillerPane(locale.msg(player, "msg.gui.sell.deposit-hint"));
+        for (int slot = SELL_CANCEL_SLOT; slot < ROWS * 9; slot++) {
+            if (slot == SELL_CANCEL_SLOT || slot == SELL_TOTAL_SLOT || slot == SELL_CONFIRM_SLOT) {
+                continue;
+            }
+            inv.setItem(slot, filler);
+        }
+
+        inv.setItem(SELL_CANCEL_SLOT, button(
+                Material.RED_STAINED_GLASS_PANE,
+                locale.msg(player, "msg.gui.sell.cancel"),
+                locale.msg(player, "msg.gui.sell.cancel.lore")));
+
+        inv.setItem(SELL_CONFIRM_SLOT, button(
+                Material.LIME_STAINED_GLASS_PANE,
+                locale.msg(player, "msg.gui.sell.confirm"),
+                locale.msg(player, "msg.gui.sell.confirm.lore")));
+
+        refreshSellPanel(manager, player, inv);
+        player.openInventory(inv);
+    }
+
+    public static void refreshSellPanel(ShopManager manager, Player player, org.bukkit.inventory.Inventory inv) {
+        var locale = manager.getPlugin().getLocaleService();
+        double total = 0;
+        int stackCount = 0;
+
+        for (int slot = 0; slot < SELL_DEPOSIT_SIZE; slot++) {
+            var stack = inv.getItem(slot);
+            if (stack == null || stack.getType().isAir()) continue;
+            stackCount++;
+
+            var meta = stack.getItemMeta();
+            var lore = new ArrayList<Component>();
+            lore.add(Component.text("─────────")
+                    .color(NamedTextColor.DARK_GRAY).decoration(TextDecoration.ITALIC, false));
+
+            if (manager.canSellToSystem(stack)) {
+                var unit = manager.getSellToSystemQuote(stack).price();
+                var subtotal = unit * stack.getAmount();
+                total += subtotal;
+                lore.add(Component.text(locale.msg(player, "msg.gui.sell.unit-price",
+                                manager.getEconomy().format(unit)))
+                        .color(NamedTextColor.GOLD).decoration(TextDecoration.ITALIC, false));
+                lore.add(Component.text(locale.msg(player, "msg.gui.sell.subtotal",
+                                manager.getEconomy().format(subtotal)))
+                        .color(NamedTextColor.YELLOW).decoration(TextDecoration.ITALIC, false));
+            } else {
+                lore.add(Component.text(locale.msg(player, "msg.gui.sell.rejected"))
+                        .color(NamedTextColor.RED).decoration(TextDecoration.ITALIC, false));
+            }
+
+            meta.lore(lore);
+            stack.setItemMeta(meta);
+        }
+
+        var totalItem = new ItemStack(Material.GOLD_INGOT);
+        var totalMeta = totalItem.getItemMeta();
+        totalMeta.displayName(Component.text(locale.msg(player, "msg.gui.sell.total"))
+                .color(NamedTextColor.GOLD).decoration(TextDecoration.BOLD, false));
+
+        var totalLore = new ArrayList<Component>();
+        if (stackCount == 0) {
+            totalLore.add(Component.text(locale.msg(player, "msg.gui.sell.empty"))
+                    .color(NamedTextColor.GRAY).decoration(TextDecoration.ITALIC, false));
+        } else {
+            totalLore.add(Component.text(locale.msg(player, "msg.gui.sell.total-amount",
+                            manager.getEconomy().format(total)))
+                    .color(NamedTextColor.YELLOW).decoration(TextDecoration.ITALIC, false));
+            totalLore.add(Component.text(locale.msg(player, "msg.gui.sell.stack-count", stackCount))
+                    .color(NamedTextColor.GRAY).decoration(TextDecoration.ITALIC, false));
+        }
+        totalMeta.lore(totalLore);
+        totalItem.setItemMeta(totalMeta);
+        inv.setItem(SELL_TOTAL_SLOT, totalItem);
+    }
+
+    private static ItemStack fillerPane(String label) {
+        var item = new ItemStack(Material.GRAY_STAINED_GLASS_PANE);
+        var meta = item.getItemMeta();
+        meta.displayName(Component.text(" ")
+                .decoration(TextDecoration.ITALIC, false));
+        meta.lore(List.of(Component.text(label)
+                .color(NamedTextColor.DARK_GRAY).decoration(TextDecoration.ITALIC, false)));
+        item.setItemMeta(meta);
+        return item;
+    }
+
     public static void openCategory(ShopManager manager, Player player, GuiSession session) {
         session.setViewType(GuiSession.ViewType.CATEGORY);
         session.clearSlotMap();
 
-        var category = session.getCategory();
+        var categoryId = session.getCategoryId();
         var locale = manager.getPlugin().getLocaleService();
 
         if (manager.usesCatalogBrowse()) {
             session.setCatalogBrowse(true);
-            var entries = manager.getCatalogByCategory(category);
-            var title = locale.getCategoryName(player, category.getId())
+            var entries = manager.getCatalogByCategory(categoryId);
+            var title = manager.getShopConfig().getCategoryDisplayName(player, categoryId)
                     + " " + locale.msg(player, "msg.gui.page", session.getPage() + 1);
             openCatalogPage(manager, player, session, entries, title);
         } else {
             session.setCatalogBrowse(false);
-            var listings = manager.getListingsByCategory(category);
-            var title = locale.getCategoryName(player, category.getId())
+            var listings = manager.getListingsByCategory(categoryId);
+            var title = manager.getShopConfig().getCategoryDisplayName(player, categoryId)
                     + " " + locale.msg(player, "msg.gui.page", session.getPage() + 1);
             openListingPage(manager, player, session, listings, title);
         }
@@ -140,7 +256,11 @@ public final class ShopGui {
         int start = page * PAGE_SIZE;
         int end = Math.min(start + PAGE_SIZE, allEntries.size());
 
-        var inv = Bukkit.createInventory(null, ROWS * 9, Component.text(title));
+        var holderKind = session.getViewType() == GuiSession.ViewType.SEARCH
+                ? ShopInventoryHolder.Kind.SEARCH
+                : ShopInventoryHolder.Kind.CATEGORY;
+        var holder = new ShopInventoryHolder(holderKind);
+        var inv = createShopInventory(holder, ROWS * 9, Component.text(title), session);
         var systemName = locale.msg(player, "msg.system.shop-name");
 
         for (int i = start; i < end; i++) {
@@ -181,7 +301,8 @@ public final class ShopGui {
         int start = page * PAGE_SIZE;
         int end = Math.min(start + PAGE_SIZE, allListings.size());
 
-        var inv = Bukkit.createInventory(null, ROWS * 9, Component.text(title));
+        var holder = new ShopInventoryHolder(ShopInventoryHolder.Kind.LISTINGS);
+        var inv = createShopInventory(holder, ROWS * 9, Component.text(title), session);
 
         for (int i = start; i < end; i++) {
             var listing = allListings.get(i);

@@ -69,6 +69,7 @@ dynamic-pricing:
 | `/shop search <關鍵字>` | 搜尋物品 |
 | `/shop sell` | 賣手持物品給系統 |
 | `/shop reload` | 重新載入（管理員） |
+| `/shop reset` | 還原預設全物品商店（管理員） |
 | `/lang <代碼>` | 切換語言 |
 
 **別名：** `/商店` `/vs` `/language` `/語言`
@@ -95,7 +96,7 @@ languages:
 ```
 
 - 語系檔：`plugins/ashop/locales/`（首次啟動自動釋出 `zh_tw`、`en_us`、`_template`）
-- **商店分類**：`plugins/ashop/shop/<分類>/items.yml`（首次啟動自動建立，可編輯上下架與價格）
+- **商店分類**：完全由 `plugins/ashop/shop/<分類>/items.yml` 定義（可自由新增/刪除分類）
 - 自訂語言：在 `locales` 加入代碼，複製 `_template.properties` 翻譯即可
 - 完整設定：`plugins/ashop/config.yml`
 - 市場統計：`plugins/ashop/market-data.yml`

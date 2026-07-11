@@ -4,29 +4,41 @@ import com.avery.shop.ShopPlugin;
 import com.avery.shop.catalog.CatalogEntry;
 import com.avery.shop.catalog.ItemCatalog;
 import com.avery.shop.catalog.ItemCategory;
+import org.bukkit.Material;
 import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.entity.Player;
 
 import java.io.File;
 import java.io.IOException;
+import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.util.ArrayList;
-import java.util.EnumMap;
+import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Optional;
 
 /**
- * 系統商店分類設定 — plugins/ashop/shop/&lt;分類&gt;/items.yml
+ * 系統商店 — 完全由 plugins/ashop/shop/ 資料夾驅動
  */
 public final class ShopConfigService {
 
+    private static final String TEMPLATE_FOLDER = "_template";
+
     private final ShopPlugin plugin;
-    private final Map<ItemCategory, ShopCategoryData> categories = new EnumMap<>(ItemCategory.class);
+    private final Map<String, ShopCategoryData> categories = new LinkedHashMap<>();
+    private final ItemPriceCalculator priceCalculator;
 
     public ShopConfigService(ShopPlugin plugin) {
         this.plugin = plugin;
+        this.priceCalculator = new ItemPriceCalculator(plugin);
+    }
+
+    public ItemPriceCalculator getPriceCalculator() {
+        return priceCalculator;
     }
 
     public File getShopFolder() {
@@ -38,97 +50,147 @@ public final class ShopConfigService {
         return folder;
     }
 
-    public File getCategoryFolder(ItemCategory category) {
-        var folder = new File(getShopFolder(), category.getId());
-        if (!folder.exists()) {
-            folder.mkdirs();
-        }
-        return folder;
+    public File getCategoryFile(String categoryId) {
+        return new File(new File(getShopFolder(), categoryId), "items.yml");
     }
 
-    public File getCategoryFile(ItemCategory category) {
-        return new File(getCategoryFolder(category), "items.yml");
-    }
-
-    /**
-     * 首次啟動釋出 shop 資料夾說明，並依目錄自動建立各分類設定
-     */
-    public void seedDefaults(ItemCatalog catalog) {
+    public void extractTemplateIfAbsent() {
         writeShopReadmeIfAbsent();
-
-        if (!plugin.getConfig().getBoolean("shop.auto-seed", true)) {
+        if (!plugin.getConfig().getBoolean("shop.extract-template", true)) {
             return;
         }
 
-        int created = 0;
-        for (var category : ItemCategory.values()) {
-            var file = getCategoryFile(category);
-            if (!file.exists()) {
-                writeCategoryFile(category, catalog, file, true);
-                created++;
-            } else if (plugin.getConfig().getBoolean("shop.sync-new-items", true)) {
-                syncMissingItems(category, catalog, file);
-            }
-        }
+        var templateFile = getCategoryFile(TEMPLATE_FOLDER);
+        if (templateFile.exists()) return;
 
-        if (created > 0) {
-            plugin.getLogger().info("已自動建立 " + created + " 個分類商店設定（shop/<分類>/items.yml）");
+        templateFile.getParentFile().mkdirs();
+        try (InputStream stream = plugin.getResource("shop/_template/items.yml")) {
+            if (stream == null) {
+                plugin.getLogger().warning("找不到內建 shop 範本");
+                return;
+            }
+            Files.copy(stream, templateFile.toPath());
+            plugin.getLogger().info("已釋出 shop 範本：shop/" + TEMPLATE_FOLDER + "/items.yml");
+        } catch (IOException e) {
+            plugin.getLogger().warning("釋出 shop 範本失敗：" + e.getMessage());
         }
     }
 
     public void load(ItemCatalog catalog) {
         categories.clear();
-        seedDefaults(catalog);
+        extractTemplateIfAbsent();
 
-        for (var category : ItemCategory.values()) {
-            var file = getCategoryFile(category);
-            var data = file.exists()
-                    ? parseCategoryFile(category, file)
-                    : createEmptyCategoryData(category);
-            data.rebuildEnabledEntries(catalog);
-            categories.put(category, data);
+        var shopFolder = getShopFolder();
+        var dirs = shopFolder.listFiles(File::isDirectory);
+        if (dirs == null) {
+            plugin.getLogger().warning("shop 資料夾為空，請建立 shop/<分類>/items.yml");
+            return;
+        }
+
+        var loaded = new ArrayList<ShopCategoryData>();
+        for (var dir : dirs) {
+            var categoryId = dir.getName();
+            if (categoryId.startsWith(".") || categoryId.equalsIgnoreCase(TEMPLATE_FOLDER)) {
+                continue;
+            }
+
+            var file = new File(dir, "items.yml");
+            if (!file.exists()) {
+                plugin.getLogger().warning("略過分類 " + categoryId + "：缺少 items.yml");
+                continue;
+            }
+
+            try {
+                loaded.add(parseCategoryFile(categoryId, file, catalog));
+            } catch (Exception e) {
+                plugin.getLogger().warning("載入分類 " + categoryId + " 失敗：" + e.getMessage());
+            }
+        }
+
+        loaded.sort(Comparator
+                .comparingInt((ShopCategoryData d) -> d.getDefinition().getSlot())
+                .thenComparing(d -> d.getCategoryId()));
+
+        for (var data : loaded) {
+            categories.put(data.getCategoryId(), data);
+        }
+
+        if (plugin.getConfig().getBoolean("shop.pricing.backfill-missing-prices", true)) {
+            backfillMissingPrices(catalog);
         }
 
         int total = categories.values().stream().mapToInt(d -> d.getEnabledEntries().size()).sum();
-        plugin.getLogger().info("商店分類設定載入完成：" + total + " 項可購買商品");
+        plugin.getLogger().info("商店載入完成：" + categories.size() + " 個分類、" + total + " 項商品（來自 shop/ 資料夾）");
     }
 
-    public boolean isCategoryEnabled(ItemCategory category) {
-        if (!plugin.getConfig().getBoolean("categories." + category.getId(), true)) {
-            return false;
+    public List<ShopCategoryDefinition> getCategories() {
+        return categories.values().stream()
+                .map(ShopCategoryData::getDefinition)
+                .toList();
+    }
+
+    public Optional<ShopCategoryData> getCategory(String categoryId) {
+        return Optional.ofNullable(categories.get(categoryId));
+    }
+
+    public boolean isCategoryVisible(String categoryId) {
+        var data = categories.get(categoryId);
+        return data != null && data.getDefinition().isEnabled();
+    }
+
+    public String getCategoryDisplayName(Player player, String categoryId) {
+        var data = categories.get(categoryId);
+        if (data == null) return categoryId;
+
+        var yamlName = data.getDefinition().getDisplayName();
+        if (yamlName != null && !yamlName.isBlank()) {
+            return yamlName;
         }
-        var data = categories.get(category);
-        return data == null || data.isEnabled();
+        return plugin.getLocaleService().getCategoryName(player, categoryId);
     }
 
-    public List<CatalogEntry> getEnabledEntries(ItemCategory category) {
-        var data = categories.get(category);
-        if (data == null || !isCategoryEnabled(category)) {
+    public List<CatalogEntry> getEnabledEntries(String categoryId) {
+        var data = categories.get(categoryId);
+        if (data == null || !isCategoryVisible(categoryId)) {
             return List.of();
         }
         return data.getEnabledEntries();
     }
 
-    public int getEnabledCount(ItemCategory category) {
-        return getEnabledEntries(category).size();
+    public int getEnabledCount(String categoryId) {
+        return getEnabledEntries(categoryId).size();
     }
 
-    public double getBasePrice(String catalogKey, ItemCategory category) {
-        var global = plugin.getConfig().getDouble("dynamic-pricing.base-price",
-                plugin.getConfig().getDouble("default-prices.base-price", 10.0));
-        var data = categories.get(category);
-        if (data == null) return global;
-        return data.resolveBasePrice(catalogKey, global);
+    public Optional<ShopItemSetting> findItemSetting(String catalogKey) {
+        for (var data : categories.values()) {
+            var setting = data.getItemSetting(catalogKey);
+            if (setting.isPresent()) return setting;
+        }
+        return Optional.empty();
+    }
+
+    public double getBasePrice(String catalogKey, String categoryId) {
+        var data = categories.get(categoryId);
+        if (data != null) {
+            return data.resolveBasePrice(catalogKey);
+        }
+        return findItemSetting(catalogKey).map(ShopItemSetting::getPrice).orElse(globalDefaultPrice());
     }
 
     public double getBasePriceForEntry(CatalogEntry entry) {
-        return getBasePrice(entry.getKey(), entry.getCategory());
+        return findItemSetting(entry.getKey())
+                .map(ShopItemSetting::getPrice)
+                .orElseGet(() -> priceCalculator.calculate(entry));
     }
 
     public double resolveBasePrice(ItemCatalog catalog, String catalogKey, double globalDefault) {
+        var setting = findItemSetting(catalogKey);
+        if (setting.isPresent()) {
+            return setting.get().getPrice();
+        }
         var entry = catalog.getByKey(catalogKey);
         if (entry != null) {
-            return getBasePriceForEntry(entry);
+            return priceCalculator.calculate(entry);
         }
         return globalDefault;
     }
@@ -139,6 +201,7 @@ public final class ShopConfigService {
         var catalogResults = catalog.search(player, query);
         var enabledKeys = new java.util.HashSet<String>();
         for (var data : categories.values()) {
+            if (!data.getDefinition().isEnabled()) continue;
             for (var entry : data.getEnabledEntries()) {
                 enabledKeys.add(entry.getKey());
             }
@@ -146,95 +209,249 @@ public final class ShopConfigService {
 
         var results = new ArrayList<CatalogEntry>();
         for (var entry : catalogResults) {
-            if (enabledKeys.contains(entry.getKey()) && isCategoryEnabled(entry.getCategory())) {
+            if (enabledKeys.contains(entry.getKey())) {
                 results.add(entry);
             }
         }
         return results;
     }
 
-    private ShopCategoryData parseCategoryFile(ItemCategory category, File file) {
-        var yaml = YamlConfiguration.loadConfiguration(file);
-        var global = plugin.getConfig().getDouble("dynamic-pricing.base-price",
-                plugin.getConfig().getDouble("default-prices.base-price", 10.0));
-        var defaultPrice = yaml.getDouble("default-price", global);
-        var enabled = yaml.getBoolean("enabled", true);
+    public boolean isItemInShop(CatalogEntry entry) {
+        if (entry == null) return false;
+        return findItemSetting(entry.getKey())
+                .map(s -> s.isEnabled() && isCategoryContaining(entry.getKey()))
+                .orElse(false);
+    }
 
-        var data = new ShopCategoryData(category, enabled, defaultPrice);
+    private boolean isCategoryContaining(String catalogKey) {
+        for (var data : categories.values()) {
+            if (!data.getDefinition().isEnabled()) continue;
+            if (data.getItemSetting(catalogKey).filter(ShopItemSetting::isEnabled).isPresent()) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private ShopCategoryData parseCategoryFile(String folderId, File file, ItemCatalog catalog) {
+        var yaml = YamlConfiguration.loadConfiguration(file);
+        var categoryId = yaml.getString("category", folderId);
+        var displayName = yaml.getString("display-name", "");
+        var icon = parseIcon(yaml.getString("icon", "CHEST"));
+        var enabled = yaml.getBoolean("enabled", true);
+        var slot = yaml.getInt("slot", 100);
+        var defaultPrice = yaml.getDouble("default-price", globalDefaultPrice());
+
+        var definition = new ShopCategoryDefinition(categoryId, displayName, icon, enabled, slot);
+        var data = new ShopCategoryData(definition, defaultPrice);
+
         var section = yaml.getConfigurationSection("items");
         if (section != null) {
             for (var yamlKey : section.getKeys(false)) {
-                var path = "items." + yamlKey;
-                var catalogKey = section.getString(yamlKey + ".catalog-key", yamlKey);
-                var materialId = section.getString(yamlKey + ".material", yamlKey);
-                var itemEnabled = section.getBoolean(yamlKey + ".enabled", true);
-                Double price = section.contains(yamlKey + ".price")
-                        ? section.getDouble(yamlKey + ".price")
-                        : null;
-                data.putItem(new ShopItemSetting(catalogKey, materialId, itemEnabled, price));
+                var itemSection = section.getConfigurationSection(yamlKey);
+                if (itemSection == null) continue;
+
+                var materialId = itemSection.getString("material", yamlKey);
+                var catalogKey = itemSection.getString("catalog-key", "");
+                var itemEnabled = itemSection.getBoolean("enabled", true);
+                var price = resolveItemPrice(itemSection, catalogKey, materialId, catalog, defaultPrice);
+
+                var resolved = ShopItemResolver.resolve(catalogKey, materialId, catalog);
+                var resolvedKey = resolved.map(CatalogEntry::getKey).orElse(
+                        catalogKey != null && !catalogKey.isBlank() ? catalogKey : yamlKey);
+
+                data.putItem(new ShopItemSetting(resolvedKey, materialId, itemEnabled, price));
             }
         }
+
+        data.rebuildEnabledEntries(catalog);
         return data;
     }
 
-    private ShopCategoryData createEmptyCategoryData(ItemCategory category) {
-        var global = plugin.getConfig().getDouble("dynamic-pricing.base-price",
-                plugin.getConfig().getDouble("default-prices.base-price", 10.0));
-        return new ShopCategoryData(category, true, global);
+    private double resolveItemPrice(org.bukkit.configuration.ConfigurationSection section,
+                                    String catalogKey, String materialId,
+                                    ItemCatalog catalog, double fallback) {
+        if (section.contains("price")) {
+            return section.getDouble("price");
+        }
+        var entry = ShopItemResolver.resolve(catalogKey, materialId, catalog).orElse(null);
+        if (entry != null) {
+            return priceCalculator.calculate(entry);
+        }
+        return fallback;
     }
 
-    private void syncMissingItems(ItemCategory category, ItemCatalog catalog, File file) {
-        var yaml = YamlConfiguration.loadConfiguration(file);
-        var section = yaml.getConfigurationSection("items");
-        var existingKeys = new java.util.HashSet<String>();
-        if (section != null) {
+    private void backfillMissingPrices(ItemCatalog catalog) {
+        int updated = 0;
+        for (var categoryId : categories.keySet()) {
+            var file = getCategoryFile(categoryId);
+            if (!file.exists()) continue;
+
+            var yaml = YamlConfiguration.loadConfiguration(file);
+            var section = yaml.getConfigurationSection("items");
+            if (section == null) continue;
+
+            boolean changed = false;
             for (var yamlKey : section.getKeys(false)) {
-                var catalogKey = section.getString(yamlKey + ".catalog-key", yamlKey);
-                existingKeys.add(catalogKey);
+                var itemSection = section.getConfigurationSection(yamlKey);
+                if (itemSection == null || itemSection.contains("price")) continue;
+
+                var materialId = itemSection.getString("material", yamlKey);
+                var catalogKey = itemSection.getString("catalog-key", "");
+                var entry = ShopItemResolver.resolve(catalogKey, materialId, catalog).orElse(null);
+                if (entry == null) continue;
+
+                yaml.set("items." + yamlKey + ".price", priceCalculator.calculate(entry));
+                changed = true;
+                updated++;
+            }
+
+            if (changed) {
+                saveYaml(file, yaml);
             }
         }
 
-        boolean changed = false;
-        for (var entry : catalog.getByCategory(category)) {
-            if (existingKeys.contains(entry.getKey())) continue;
-
-            var yamlKey = sanitizeYamlKey(entry);
-            var path = "items." + yamlKey;
-            yaml.set(path + ".catalog-key", entry.getKey());
-            yaml.set(path + ".material", entry.getMaterialId());
-            yaml.set(path + ".enabled", true);
-            changed = true;
-        }
-
-        if (changed) {
-            saveYaml(file, yaml);
-            plugin.getLogger().info("已同步新物品至 shop/" + category.getId() + "/items.yml");
+        if (updated > 0) {
+            plugin.getLogger().info("已補上 " + updated + " 項缺漏 price 至 shop 設定檔");
         }
     }
 
-    private void writeCategoryFile(ItemCategory category, ItemCatalog catalog, File file, boolean allEnabled) {
-        var yaml = new YamlConfiguration();
-        var global = plugin.getConfig().getDouble("dynamic-pricing.base-price",
+    private Material parseIcon(String name) {
+        var material = ShopItemResolver.parseMaterial(name);
+        return material != null ? material : Material.CHEST;
+    }
+
+    private double globalDefaultPrice() {
+        return plugin.getConfig().getDouble("dynamic-pricing.base-price",
                 plugin.getConfig().getDouble("default-prices.base-price", 10.0));
+    }
+
+    private void saveYaml(File file, YamlConfiguration yaml) {
+        try {
+            yaml.save(file);
+        } catch (IOException e) {
+            plugin.getLogger().severe("儲存商店設定失敗 " + file.getName() + "：" + e.getMessage());
+        }
+    }
+
+    private void writeShopReadmeIfAbsent() {
+        var readme = new File(getShopFolder(), "README.txt");
+        if (readme.exists()) return;
+
+        try {
+            Files.writeString(readme.toPath(), """
+                    ashop 系統商店 — 完全由資料夾設定
+                    ==================================
+
+                    結構：
+                      shop/
+                        <分類名稱>/items.yml
+                        _template/items.yml   （範例，不會顯示在 GUI）
+
+                    新增分類：
+                      1. 建立 shop/我的分類/items.yml
+                      2. 參考 _template/items.yml 格式填寫
+                      3. 執行 /shop reload
+
+                    items.yml 格式：
+                      category: my_category      # 可選，預設為資料夾名稱
+                      display-name: 我的分類     # GUI 顯示名稱
+                      icon: DIAMOND              # GUI 圖示（Material 名稱）
+                      enabled: true              # 是否顯示此分類
+                      slot: 0                    # 排序（數字越小越前面）
+                      default-price: 10.0        # 未指定 price 時的預設值
+
+                      items:
+                        stone:
+                          material: STONE        # 或 minecraft:stone
+                          price: 2.5
+                          enabled: true
+                        custom_potion:
+                          material: POTION
+                          catalog-key: "..."     # NBT 變體用（可選）
+                          price: 20.0
+
+                    修改後執行 /shop reload 或重啟伺服器。
+                    """, StandardCharsets.UTF_8);
+        } catch (IOException e) {
+            plugin.getLogger().warning("無法寫入 shop/README.txt：" + e.getMessage());
+        }
+    }
+
+    public boolean isItemSellable(CatalogEntry entry) {
+        return isItemInShop(entry);
+    }
+
+    public boolean isItemPurchasable(CatalogEntry entry) {
+        return isItemSellable(entry);
+    }
+
+    /**
+     * 還原 shop/ 為預設 12 分類 + 全原版物品（管理員指令用）
+     */
+    public ShopRestoreResult restoreDefaults(ItemCatalog catalog) {
+        var shopFolder = getShopFolder();
+        int removed = 0;
+
+        var dirs = shopFolder.listFiles(File::isDirectory);
+        if (dirs != null) {
+            for (var dir : dirs) {
+                if (dir.getName().equalsIgnoreCase(TEMPLATE_FOLDER)) continue;
+                try {
+                    deleteDirectory(dir);
+                    removed++;
+                } catch (IOException e) {
+                    plugin.getLogger().warning("刪除分類資料夾失敗 " + dir.getName() + "：" + e.getMessage());
+                }
+            }
+        }
+
+        int categoryCount = 0;
+        int itemCount = 0;
+        var locale = plugin.getLocaleService().getDefaultLocale();
+
+        for (var category : ItemCategory.values()) {
+            var entries = catalog.getByCategory(category);
+            if (entries.isEmpty()) continue;
+
+            var file = getCategoryFile(category.getId());
+            file.getParentFile().mkdirs();
+            writeDefaultCategoryFile(category, entries, file, locale);
+            categoryCount++;
+            itemCount += entries.size();
+        }
+
+        extractTemplateIfAbsent();
+        load(catalog);
+
+        plugin.getLogger().info("shop 已還原預設：" + categoryCount + " 分類、" + itemCount + " 項物品");
+        return new ShopRestoreResult(categoryCount, itemCount, removed);
+    }
+
+    private void writeDefaultCategoryFile(ItemCategory category, List<CatalogEntry> entries,
+                                          File file, String localeCode) {
+        var yaml = new YamlConfiguration();
+        var displayName = plugin.getLocaleService().msg(localeCode, "category." + category.getId());
 
         yaml.set("category", category.getId());
+        yaml.set("display-name", displayName);
+        yaml.set("icon", category.getIcon().name());
         yaml.set("enabled", true);
-        yaml.set("default-price", global);
+        yaml.set("slot", category.ordinal());
+        yaml.set("default-price", globalDefaultPrice());
         yaml.options().header("""
-                ashop 系統商店 — %s 分類
-                管理員可編輯此檔控制哪些物品出現在商店。
-                enabled: 分類或單項是否上架
-                price: 可選，覆寫該項基準價（動態定價仍會套用）
-                修改後執行 /shop reload
+                ashop 預設分類 — %s
+                由 /shop reset 產生，可自由編輯後 /shop reload
                 """.formatted(category.getId()));
 
         var usedKeys = new java.util.HashSet<String>();
-        for (var entry : catalog.getByCategory(category)) {
+        for (var entry : entries) {
             var yamlKey = uniqueYamlKey(entry, usedKeys);
             var path = "items." + yamlKey;
             yaml.set(path + ".catalog-key", entry.getKey());
             yaml.set(path + ".material", entry.getMaterialId());
-            yaml.set(path + ".enabled", allEnabled);
+            yaml.set(path + ".enabled", true);
+            yaml.set(path + ".price", priceCalculator.calculate(entry));
         }
 
         saveYaml(file, yaml);
@@ -259,62 +476,15 @@ public final class ShopConfigService {
         return key;
     }
 
-    private void saveYaml(File file, YamlConfiguration yaml) {
-        try {
-            yaml.save(file);
-        } catch (IOException e) {
-            plugin.getLogger().severe("儲存商店設定失敗 " + file.getName() + "：" + e.getMessage());
+    private static void deleteDirectory(File dir) throws IOException {
+        var children = dir.listFiles();
+        if (children != null) {
+            for (var child : children) {
+                deleteDirectory(child);
+            }
         }
-    }
-
-    private void writeShopReadmeIfAbsent() {
-        var readme = new File(getShopFolder(), "README.txt");
-        if (readme.exists()) return;
-
-        try {
-            Files.writeString(readme.toPath(), """
-                    ashop 系統商店分類設定
-                    ======================
-
-                    資料夾結構：
-                      shop/
-                        blocks/items.yml      方塊
-                        tools/items.yml       工具
-                        weapons/items.yml     武器
-                        armor/items.yml       護甲
-                        food/items.yml        食物
-                        potions/items.yml     藥水
-                        enchanted_books/      附魔書
-                        redstone/             紅石
-                        transport/            交通
-                        decorations/          裝飾
-                        spawn_eggs/           生怪蛋
-                        misc/                 雜項
-
-                    首次啟動會依原版目錄自動建立各分類 items.yml。
-                    管理員可直接編輯：
-                      - 分類 enabled: false 可關閉整個分類
-                      - 單項 enabled: false 可下架該物品
-                      - price: 可覆寫單項基準價
-
-                    修改後執行 /shop reload 或重啟伺服器。
-                    config.yml 的 categories.* 仍可關閉 GUI 分類入口。
-                    """, StandardCharsets.UTF_8);
-        } catch (IOException e) {
-            plugin.getLogger().warning("無法寫入 shop/README.txt：" + e.getMessage());
+        if (!dir.delete()) {
+            throw new IOException("無法刪除 " + dir.getAbsolutePath());
         }
-    }
-
-    public boolean isItemSellable(CatalogEntry entry) {
-        if (entry == null) return false;
-        if (!isCategoryEnabled(entry.getCategory())) return false;
-        var data = categories.get(entry.getCategory());
-        if (data == null) return false;
-        var setting = data.getItemSetting(entry.getKey());
-        return setting != null && setting.isEnabled();
-    }
-
-    public boolean isItemPurchasable(CatalogEntry entry) {
-        return isItemSellable(entry);
     }
 }

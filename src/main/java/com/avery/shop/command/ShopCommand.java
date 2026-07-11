@@ -37,13 +37,23 @@ public final class ShopCommand implements CommandExecutor, TabCompleter {
 
     @Override
     public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
+        var locale = plugin.getLocaleService();
+
+        if (args.length >= 1) {
+            var sub = args[0].toLowerCase();
+            if (sub.equals("reload") || sub.equals("重新載入")) {
+                return handleReload(sender);
+            }
+            if (sub.equals("reset") || sub.equals("還原") || sub.equals("restore")) {
+                return handleReset(sender);
+            }
+        }
+
         if (!(sender instanceof Player player)) {
-            var locale = plugin.getLocaleService();
             sender.sendMessage("§c" + locale.msg(locale.getDefaultLocale(), "msg.cmd.players-only"));
             return true;
         }
 
-        var locale = plugin.getLocaleService();
         if (!player.hasPermission("shop.use")) {
             player.sendMessage("§c" + locale.msg(player, "msg.cmd.no-permission"));
             return true;
@@ -79,23 +89,12 @@ public final class ShopCommand implements CommandExecutor, TabCompleter {
                     player.sendMessage("§c" + locale.msg(player, "msg.sell.disabled"));
                     return true;
                 }
-                var hand = player.getInventory().getItemInMainHand();
-                var sellQuote = shopManager.getSellToSystemQuote(hand);
-                var result = shopManager.sellToSystem(player);
-                switch (result) {
-                    case SUCCESS -> {
-                        player.sendMessage("§a" + locale.msg(player, "msg.sell.success",
-                                shopManager.getEconomy().format(sellQuote.price())));
-                        if (plugin.getConfig().getBoolean("dynamic-pricing.enabled", true)) {
-                            player.sendMessage("§7" + locale.msg(player, "msg.sell.price-hint"));
-                        }
-                    }
-                    case NO_ITEM -> player.sendMessage("§c" + locale.msg(player, "msg.sell.no-item"));
-                    case NOT_ACCEPTED -> player.sendMessage("§c" + locale.msg(player, "msg.sell.not-accepted"));
-                    case NO_PERMISSION -> player.sendMessage("§c" + locale.msg(player, "msg.sell.no-permission"));
-                    case DISABLED -> player.sendMessage("§c" + locale.msg(player, "msg.sell.disabled"));
-                    default -> player.sendMessage("§c" + locale.msg(player, "msg.sell.failed"));
+                if (guiListener == null) {
+                    player.sendMessage("§c" + locale.msg(player, "msg.cmd.gui-not-ready"));
+                    return true;
                 }
+                var session = guiListener.getOrCreateSession(player);
+                ShopGui.openSellToSystem(shopManager, player, session);
             }
             case "price", "價格" -> {
                 var hand = player.getInventory().getItemInMainHand();
@@ -114,18 +113,6 @@ public final class ShopCommand implements CommandExecutor, TabCompleter {
                             shopManager.getEconomy().format(sellQuote.price())));
                 }
             }
-            case "reload" -> {
-                if (!player.hasPermission("shop.admin")) {
-                    player.sendMessage("§c" + locale.msg(player, "msg.cmd.no-admin"));
-                    return true;
-                }
-                plugin.reloadConfig();
-                plugin.getLocaleService().load();
-                catalog.build();
-                plugin.getShopConfigService().load(catalog);
-                shopManager.load();
-                player.sendMessage("§a" + locale.msg(player, "msg.cmd.reload.success"));
-            }
             default -> {
                 player.sendMessage("§e" + locale.msg(player, "msg.cmd.help.shop"));
                 player.sendMessage("§e" + locale.msg(player, "msg.cmd.help.search"));
@@ -134,6 +121,56 @@ public final class ShopCommand implements CommandExecutor, TabCompleter {
             }
         }
         return true;
+    }
+
+    private boolean handleReload(CommandSender sender) {
+        var locale = plugin.getLocaleService();
+        if (!sender.hasPermission("shop.admin")) {
+            sendError(sender, locale, "msg.cmd.no-admin");
+            return true;
+        }
+        plugin.reloadConfig();
+        plugin.getLocaleService().load();
+        catalog.build();
+        plugin.getShopConfigService().load(catalog);
+        shopManager.load();
+        send(sender, locale, "msg.cmd.reload.success");
+        return true;
+    }
+
+    private boolean handleReset(CommandSender sender) {
+        var locale = plugin.getLocaleService();
+        if (!sender.hasPermission("shop.admin")) {
+            sendError(sender, locale, "msg.cmd.no-admin");
+            return true;
+        }
+        catalog.build();
+        var result = plugin.getShopConfigService().restoreDefaults(catalog);
+        shopManager.load();
+        send(sender, locale, "msg.cmd.reset.success",
+                result.categories(), result.items(), result.removedFolders());
+        return true;
+    }
+
+    private void sendError(CommandSender sender, com.avery.shop.locale.LocaleService locale, String key) {
+        if (sender instanceof Player player) {
+            sender.sendMessage("§c" + locale.msg(player, key));
+        } else {
+            sender.sendMessage("§c" + locale.msg(locale.getDefaultLocale(), key));
+        }
+    }
+
+    private void send(CommandSender sender, com.avery.shop.locale.LocaleService locale,
+                      String key, Object... args) {
+        if (sender instanceof Player player) {
+            sender.sendMessage("§a" + locale.msg(player, key, args));
+        } else {
+            sender.sendMessage("§a" + locale.msg(locale.getDefaultLocale(), key, args));
+        }
+    }
+
+    private void send(CommandSender sender, com.avery.shop.locale.LocaleService locale, String key) {
+        send(sender, locale, key, new Object[0]);
     }
 
     private void openShop(Player player) {
@@ -148,7 +185,8 @@ public final class ShopCommand implements CommandExecutor, TabCompleter {
     @Override
     public List<String> onTabComplete(CommandSender sender, Command command, String alias, String[] args) {
         if (args.length == 1) {
-            return filter(List.of("search", "sell", "price", "reload"), args[0]);
+            var admin = List.of("search", "sell", "price", "reload", "reset", "還原", "restore", "搜尋", "上架", "賣", "價格", "重新載入");
+            return filter(admin, args[0]);
         }
         if (args.length == 2 && args[0].equalsIgnoreCase("search")) {
             return filter(List.of("diamond", "鑽石", "minecraft:stone"), args[1]);

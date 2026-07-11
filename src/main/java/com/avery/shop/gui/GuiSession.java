@@ -1,6 +1,5 @@
 package com.avery.shop.gui;
 
-import com.avery.shop.catalog.ItemCategory;
 import com.avery.shop.shop.ShopManager;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
@@ -23,12 +22,14 @@ import java.util.UUID;
 public final class GuiSession {
 
     public enum ViewType {
-        MAIN, CATEGORY, SEARCH, LISTINGS, BUY_CONFIRM
+        MAIN, CATEGORY, SEARCH, LISTINGS, SELL_TO_SYSTEM
     }
 
     private final Player player;
     private ViewType viewType = ViewType.MAIN;
-    private ItemCategory category;
+    private ShopInventoryHolder shopHolder;
+    private boolean sellConfirming;
+    private String categoryId;
     private String searchQuery;
     private int page;
     private UUID pendingListingId;
@@ -52,12 +53,12 @@ public final class GuiSession {
         this.viewType = viewType;
     }
 
-    public ItemCategory getCategory() {
-        return category;
+    public String getCategoryId() {
+        return categoryId;
     }
 
-    public void setCategory(ItemCategory category) {
-        this.category = category;
+    public void setCategoryId(String categoryId) {
+        this.categoryId = categoryId;
     }
 
     public String getSearchQuery() {
@@ -103,5 +104,26 @@ public final class GuiSession {
 
     public Map<Integer, String> getSlotCatalogMap() {
         return slotCatalogMap;
+    }
+
+    public ShopInventoryHolder getShopHolder() {
+        return shopHolder;
+    }
+
+    public void setShopHolder(ShopInventoryHolder shopHolder) {
+        this.shopHolder = shopHolder;
+    }
+
+    public boolean isSellConfirming() {
+        return sellConfirming;
+    }
+
+    public void setSellConfirming(boolean sellConfirming) {
+        this.sellConfirming = sellConfirming;
+    }
+
+    public boolean isInShopGui() {
+        return shopHolder != null
+                && player.getOpenInventory().getTopInventory().getHolder() == shopHolder;
     }
 }
