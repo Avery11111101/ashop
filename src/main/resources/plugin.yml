@@ -2,7 +2,7 @@ name: ashop
 version: '${version}'
 main: com.avery.shop.ShopPlugin
 api-version: '26.2'
-description: ashop - 原版全物品商店，分類、多語搜尋、動態定價、NBT 上架購買
+description: ashop - 動態經濟商店：越買越貴、越賣越便宜、物以稀為貴
 author: Avery
 softdepend:
   - Vault
@@ -10,7 +10,7 @@ softdepend:
 commands:
   shop:
     description: 開啟商店介面
-    usage: /shop [search <keyword>|sell [price]|price|reload]
+    usage: /shop [search <keyword>|sell|price|reload]
     aliases: [商店, vs]
   lang:
     description: 切換語言
@@ -22,7 +22,7 @@ permissions:
     description: 使用商店
     default: true
   shop.sell:
-    description: 上架物品
+    description: 賣物品給系統
     default: true
   shop.admin:
     description: 管理商店

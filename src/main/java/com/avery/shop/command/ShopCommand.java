@@ -65,41 +65,35 @@ public final class ShopCommand implements CommandExecutor, TabCompleter {
                 session.setSearchQuery(query);
                 session.setPage(0);
                 ShopGui.openSearch(shopManager, player, session);
-                var count = shopManager.searchListings(player, query).size();
+                var count = shopManager.usesCatalogBrowse()
+                        ? shopManager.searchCatalog(player, query).size()
+                        : shopManager.searchListings(player, query).size();
                 player.sendMessage("§a" + locale.msg(player, "msg.search.found", query, count));
             }
-            case "sell", "上架" -> {
+            case "sell", "上架", "賣" -> {
                 if (!player.hasPermission("shop.sell")) {
                     player.sendMessage("§c" + locale.msg(player, "msg.sell.no-permission"));
                     return true;
                 }
-                Double price = null;
-                if (args.length >= 2) {
-                    try {
-                        price = Double.parseDouble(args[1]);
-                    } catch (NumberFormatException e) {
-                        player.sendMessage("§c" + locale.msg(player, "msg.cmd.usage.sell-price-nan"));
-                        return true;
-                    }
-                } else if (!plugin.getConfig().getBoolean("dynamic-pricing.auto-suggest-price", true)) {
-                    player.sendMessage("§c" + locale.msg(player, "msg.cmd.usage.sell"));
+                if (!shopManager.isSellToSystemEnabled()) {
+                    player.sendMessage("§c" + locale.msg(player, "msg.sell.disabled"));
                     return true;
                 }
                 var hand = player.getInventory().getItemInMainHand();
-                var suggestedPrice = shopManager.getSuggestedPrice(hand);
-                var result = shopManager.sellItem(player, price);
+                var sellQuote = shopManager.getSellToSystemQuote(hand);
+                var result = shopManager.sellToSystem(player);
                 switch (result) {
                     case SUCCESS -> {
-                        var actualPrice = price != null ? price : suggestedPrice;
                         player.sendMessage("§a" + locale.msg(player, "msg.sell.success",
-                                shopManager.getEconomy().format(actualPrice)));
+                                shopManager.getEconomy().format(sellQuote.price())));
                         if (plugin.getConfig().getBoolean("dynamic-pricing.enabled", true)) {
                             player.sendMessage("§7" + locale.msg(player, "msg.sell.price-hint"));
                         }
                     }
                     case NO_ITEM -> player.sendMessage("§c" + locale.msg(player, "msg.sell.no-item"));
-                    case INVALID_PRICE -> player.sendMessage("§c" + locale.msg(player, "msg.sell.invalid-price"));
+                    case NOT_ACCEPTED -> player.sendMessage("§c" + locale.msg(player, "msg.sell.not-accepted"));
                     case NO_PERMISSION -> player.sendMessage("§c" + locale.msg(player, "msg.sell.no-permission"));
+                    case DISABLED -> player.sendMessage("§c" + locale.msg(player, "msg.sell.disabled"));
                     default -> player.sendMessage("§c" + locale.msg(player, "msg.sell.failed"));
                 }
             }
@@ -109,17 +103,16 @@ public final class ShopCommand implements CommandExecutor, TabCompleter {
                     player.sendMessage("§c" + locale.msg(player, "msg.price.no-item"));
                     return true;
                 }
-                var suggested = shopManager.getSuggestedPrice(hand);
-                var quote = shopManager.getPricing().quote(
-                        shopManager.getPricing().resolveKey(hand),
-                        plugin.getConfig().getDouble("dynamic-pricing.base-price", 10.0),
-                        shopManager.getPricing().countStock(
-                                shopManager.getPricing().resolveKey(hand),
-                                shopManager.getAllListings()));
-                player.sendMessage("§6" + locale.msg(player, "msg.price.result",
-                        shopManager.getEconomy().format(suggested),
-                        quote.trendSymbol(),
-                        String.format("%+.0f", quote.changePercent())));
+                var buyQuote = shopManager.getItemPriceQuote(hand);
+                var sellQuote = shopManager.getSellToSystemQuote(hand);
+                player.sendMessage("§6" + locale.msg(player, "msg.price.buy-result",
+                        shopManager.getEconomy().format(buyQuote.price()),
+                        buyQuote.trendSymbol(),
+                        String.format("%+.0f", buyQuote.changePercent())));
+                if (shopManager.isSellToSystemEnabled()) {
+                    player.sendMessage("§6" + locale.msg(player, "msg.price.sell-result",
+                            shopManager.getEconomy().format(sellQuote.price())));
+                }
             }
             case "reload" -> {
                 if (!player.hasPermission("shop.admin")) {
@@ -129,6 +122,7 @@ public final class ShopCommand implements CommandExecutor, TabCompleter {
                 plugin.reloadConfig();
                 plugin.getLocaleService().load();
                 catalog.build();
+                plugin.getShopConfigService().load(catalog);
                 shopManager.load();
                 player.sendMessage("§a" + locale.msg(player, "msg.cmd.reload.success"));
             }

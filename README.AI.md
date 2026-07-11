@@ -2,10 +2,10 @@
 
 ## 專案核心用意
 
-為 Paper 26.1.x~26.2 伺服器提供**原版全物品商店**，解決：
-1. 附魔書、藥水等「同 Material 不同 NBT」物品難以區分上架的問題
-2. 缺少以繁體中文或物品 ID 快速搜尋的需求
-3. 需要預設提供全部原版物品供瀏覽/購買
+為 Paper 26.1.x~26.2 伺服器提供**以動態經濟為核心的玩家驅動市場**：
+1. 價格隨買賣與庫存即時浮動（越買越貴、越賣越便宜、物以稀為貴）
+2. 附魔書、藥水等 NBT 變體可納入市場交易
+3. 原版全物品目錄 + 多語搜尋作為交易基礎設施
 
 ## 使用者決策動機
 
@@ -72,6 +72,45 @@ ShopPlugin
 
 1. `README.md` 預設繁體中文，頂部 badge 按鈕切換至 `README.en.md`
 2. `README.en.md` 英文版，頂部按鈕切回中文 README
+
+### 2026-07-11 主打動態經濟定位
+
+1. README 重寫：動態經濟置頂為核心章節
+2. plugin.yml description、GUI 標題改為「動態市場」
+3. 指令表 `/shop price` 提升優先順序
+
+### 2026-07-11 效能優化（卡頓修復）
+
+1. **根因**：數千筆系統上架 + 每次點擊同步寫 YAML + O(n²) 物品比對
+2. 新增 `catalog` 模式（預設）：直接瀏覽 ItemCatalog，不建立實體 listing
+3. `ListingIndex` 快取庫存/分類計數
+4. `AsyncSaveService` 延遲 2 秒非同步存檔
+5. `findMatching` 改 O(1) fingerprint 查表
+6. 啟動時自動略過/清理舊系統上架
+
+### 2026-07-11 自訂語系檔
+
+1. `languages.locales` map：代碼 + 顯示名稱，可新增插件未內建語言
+2. 語系檔路徑 `plugins/ashop/locales/<code>.properties`（覆蓋 JAR 內建）
+3. 首次啟動釋出 zh_tw、en_us、_template、README.txt
+4. 自訂語言缺少檔案時自動從 template + fallback 產生
+
+### 2026-07-11 純系統商店模式
+
+1. 新增 `system-shop.*` 設定，預設 `player-listings: false`
+2. `/shop sell` 改為賣給系統（收購價 = 動態購買價 × sell-ratio）
+3. 啟動時清除玩家上架資料
+4. GUI 移除「我的上架」，綠寶石按鈕改為賣給系統
+5. `/shop price` 顯示系統售價 + 收購價
+
+### 2026-07-11 分類商店設定檔（shop/）
+
+1. 新增 `ShopConfigService`：管理 `plugins/ashop/shop/<分類>/items.yml`
+2. 首次啟動依 ItemCatalog 自動建立 12 分類資料夾與 items.yml
+3. 管理員可編輯：分類/單項 `enabled`、單項 `price` 覆寫基準價
+4. `sync-new-items`：reload 時自動補上原版目錄新增物品
+5. catalog 模式改讀 shop 設定，不再直接暴露完整目錄
+6. `/shop reload` 重新載入 shop 分類設定
 
 ## 待擴充
 

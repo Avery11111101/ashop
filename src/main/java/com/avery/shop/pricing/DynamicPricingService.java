@@ -7,7 +7,6 @@ import com.avery.shop.shop.ShopListing;
 import org.bukkit.inventory.ItemStack;
 
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 
 /**
@@ -124,26 +123,11 @@ public final class DynamicPricingService {
     public void recordBuy(String catalogKey) {
         if (!isEnabled() || catalogKey == null) return;
         market.computeIfAbsent(catalogKey, k -> new MarketData(0, 0)).recordBuy();
-        save();
     }
 
     public void recordSell(String catalogKey) {
         if (!isEnabled() || catalogKey == null) return;
         market.computeIfAbsent(catalogKey, k -> new MarketData(0, 0)).recordSell();
-        save();
-    }
-
-    /**
-     * 統計某物品類型目前在市場上的上架數量
-     */
-    public int countStock(String catalogKey, List<ShopListing> listings) {
-        if (catalogKey == null) return 0;
-        int count = 0;
-        for (var listing : listings) {
-            var key = resolveKey(listing.getItem());
-            if (catalogKey.equals(key)) count++;
-        }
-        return count;
     }
 
     public Map<String, MarketData> getMarketSnapshot() {

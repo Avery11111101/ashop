@@ -6,25 +6,55 @@
 
 # ashop
 
-Paper **26.1.x ~ 26.2** vanilla item shop plugin.
+> **Dynamic Economy Shop** — prices shift with supply and demand. Buy↑ Sell↓ Scarcity matters.
+
+A Paper **26.1.x ~ 26.2** plugin built around a **player-driven dynamic market**, with a full vanilla catalog, multi-language search, and NBT trading.
 
 ---
 
-## Features
+## Dynamic Economy (Core)
 
-- **Full vanilla catalog** — potions, enchanted books, and NBT variants
+ashop is not a fixed-price shop. Every transaction moves the market:
+
+| Player Action | Market Response |
+|---------------|-----------------|
+| **Buy** | Price rises ↑ |
+| **List/Sell** | Price falls ↓ |
+| **Low stock** | Extra premium ↑ (scarcity) |
+
+Prices are calculated from buy/sell history (`market-data.yml`) and live stock.  
+The GUI shows trends in real time (`↑+25%`). All rates are configurable in **percentages**.
+
+```yaml
+dynamic-pricing:
+  enabled: true
+  base-price: 10.0
+  per-buy-increase: 2.0              # +2% per buy
+  per-sell-decrease: 1.5             # -1.5% per list
+  per-stock-shortage-increase: 3.0   # +3% per missing stock unit
+  reference-stock: 5
+  min-multiplier: 0.2
+  max-multiplier: 5.0
+```
+
+Use `/shop price` to check the **live market price** of the item in your hand.
+
+---
+
+## Other Features
+
+- **Full vanilla catalog** — potions, enchanted books, NBT variants
 - **12 categories** — blocks, tools, weapons, armor, and more
-- **Multi-language search** — item ID + localized names (zh_tw / en_us)
+- **Multi-language search** — item ID + localized names
 - **In-game language switch** — `/lang zh_tw` / `/lang en_us`
-- **Full NBT support** — list and buy enchanted books, potions, custom NBT items
-- **Dynamic pricing** — buy↑ sell↓ scarcity-based pricing
+- **Full NBT support** — trade enchanted books, potions, custom NBT items
 - **Vault economy** — optional Vault integration
 
 ---
 
 ## Installation
 
-1. Place `ashop-1.2.1.jar` in the `plugins/` folder
+1. Place `ashop-1.2.2.jar` in the `plugins/` folder
 2. Install [Vault](https://www.spigotmc.org/resources/vault.34315/) and an economy plugin (e.g. EssentialsX)
 3. Restart the server
 
@@ -34,49 +64,22 @@ Paper **26.1.x ~ 26.2** vanilla item shop plugin.
 
 | Command | Description |
 |---------|-------------|
-| `/shop` | Open shop GUI |
+| `/shop` | Open dynamic market GUI |
+| `/shop price` | Check live market price |
 | `/shop search <keyword>` | Search items |
-| `/shop sell [price]` | List held item (omit price for suggested market price) |
-| `/shop price` | Check dynamic market price for held item |
-| `/shop reload` | Reload plugin (admin) |
-| `/lang` | Show available languages |
+| `/shop sell [price]` | List item (omit price for suggested) |
+| `/shop reload` | Reload (admin) |
 | `/lang <code>` | Switch language |
-| `/lang list` | Same as `/lang` |
 
 **Aliases:** `/商店` `/vs` `/language` `/語言`
-
-**Supported languages:** `zh_tw` `en_us`
 
 ---
 
 ## Configuration
 
-```yaml
-languages:
-  default: zh_tw
-  available: [zh_tw, en_us]
-
-dynamic-pricing:
-  enabled: true
-  base-price: 10.0
-  per-buy-increase: 2.0          # +2% per buy
-  per-sell-decrease: 1.5         # -1.5% per list
-  per-stock-shortage-increase: 3.0  # +3% per missing stock unit
-  reference-stock: 5             # scarcity baseline
-  min-multiplier: 0.2            # floor 20%
-  max-multiplier: 5.0            # cap 500%
-  system-shop: true
-  player-listings: false
-  auto-suggest-price: true
-
-default-prices:
-  enabled: true
-  base-price: 10.0
-```
-
-- Language files: `plugins/ashop/locales/` (bundled in JAR)
-- Player language prefs: `plugins/ashop/player-locales.yml`
-- Market stats: `plugins/ashop/market-data.yml`
+See `plugins/ashop/config.yml`.  
+Shop categories: `plugins/ashop/shop/<category>/items.yml` (auto-generated, editable by admins).  
+Market stats: `plugins/ashop/market-data.yml`
 
 ---
 

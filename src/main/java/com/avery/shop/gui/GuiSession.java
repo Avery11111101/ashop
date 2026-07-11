@@ -32,7 +32,9 @@ public final class GuiSession {
     private String searchQuery;
     private int page;
     private UUID pendingListingId;
+    private boolean catalogBrowse;
     private final Map<Integer, UUID> slotListingMap = new HashMap<>();
+    private final Map<Integer, String> slotCatalogMap = new HashMap<>();
 
     public GuiSession(Player player) {
         this.player = player;
@@ -88,5 +90,18 @@ public final class GuiSession {
 
     public void clearSlotMap() {
         slotListingMap.clear();
+        slotCatalogMap.clear();
+    }
+
+    public boolean isCatalogBrowse() {
+        return catalogBrowse;
+    }
+
+    public void setCatalogBrowse(boolean catalogBrowse) {
+        this.catalogBrowse = catalogBrowse;
+    }
+
+    public Map<Integer, String> getSlotCatalogMap() {
+        return slotCatalogMap;
     }
 }

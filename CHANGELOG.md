@@ -5,7 +5,59 @@ ashop 的所有重要變更皆記錄於此。
 
 ---
 
-## [1.2.1] - 2026-07-11
+## [1.2.6] - 2026-07-11
+
+### Changed / 變更
+- **System shop only** — players buy from / sell to system; player listings disabled by default  
+  **純系統商店** — 玩家只能跟系統買賣，預設禁止玩家上架
+- `/shop sell` now sells held item to system at dynamic buy price × `sell-ratio`  
+  `/shop sell` 改為賣給系統，收購價 = 動態購買價 × 比例
+- `/shop price` shows both system sell and buy prices  
+  `/shop price` 同時顯示系統售價與收購價
+- Removed「我的上架」from GUI  
+  GUI 移除「我的上架」
+
+---
+
+## [1.2.5] - 2026-07-11
+
+### Added / 新增
+- **Shop category configs** — `plugins/ashop/shop/<category>/items.yml` auto-generated on first run  
+  **分類商店設定** — 首次啟動自動建立 `shop/<分類>/items.yml`，管理員可直接編輯上下架與單項基準價
+- `/shop reload` reloads shop category files  
+  `/shop reload` 會重新載入 shop 分類設定
+
+---
+
+## [1.2.4] - 2026-07-11
+
+### Added / 新增
+- Custom language files in `plugins/ashop/locales/` with config-driven locale registration  
+  支援 data 資料夾自訂語系檔，config 可登記任意語言代碼
+- Auto-extract `_template.properties` for new custom languages  
+  自訂語言首次載入自動產生翻譯範本
+
+---
+
+### Fixed / 修復
+- **Major lag fix** — catalog browse mode, indexed lookups, debounced async saves  
+  **大幅修復卡頓** — 目錄即時瀏覽、索引快取、延遲非同步存檔
+
+### Changed / 變更
+- Default `default-prices.mode: catalog` (no thousands of YAML listings)  
+  預設改為 `catalog` 模式，不再建立數千筆系統上架
+- Item matching O(1) via fingerprint index  
+  物品比對改為 O(1) 指紋索引
+
+---
+
+### Changed / 變更
+- Repositioned branding around **dynamic economy** as the core feature  
+  品牌定位調整為以**動態經濟**為核心賣點
+- README, plugin description, and GUI title updated  
+  更新 README、插件描述與 GUI 標題
+
+---
 
 ### Changed / 變更
 - README defaults to Traditional Chinese; English version at `README.en.md` with switch button  

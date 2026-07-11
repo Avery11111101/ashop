@@ -5,22 +5,21 @@ import org.bukkit.Material;
 import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.entity.Player;
 
-import java.io.BufferedReader;
 import java.io.File;
 import java.io.IOException;
-import java.io.InputStreamReader;
-import java.nio.charset.StandardCharsets;
 import java.util.*;
 
 /**
- * 多語系服務 - 物品名稱、介面訊息、玩家語言偏好
+ * 多語系服務 - 支援 data/locales 自訂語系檔與 config 擴充語言
  */
 public final class LocaleService {
 
     private final ShopPlugin plugin;
     private final Map<String, Map<String, String>> localeData = new LinkedHashMap<>();
+    private final Map<String, String> displayNames = new LinkedHashMap<>();
     private final Map<UUID, String> playerLocales = new HashMap<>();
     private String defaultLocale = "zh_tw";
+    private String fallbackLocale = "en_us";
     private List<String> availableLocales = List.of("zh_tw", "en_us");
 
     public LocaleService(ShopPlugin plugin) {
@@ -28,53 +27,76 @@ public final class LocaleService {
     }
 
     public void load() {
-        defaultLocale = plugin.getConfig().getString("languages.default", "zh_tw");
-        availableLocales = plugin.getConfig().getStringList("languages.available");
-        if (availableLocales.isEmpty()) {
-            availableLocales = List.of("zh_tw", "en_us");
-        }
+        LocaleFileLoader.extractBundledDefaults(plugin);
+        parseLanguageConfig();
 
         localeData.clear();
-        for (var locale : availableLocales) {
-            loadLocaleFile(locale);
+        // 先載入 fallback，再載入其餘語言（供自訂語系繼承）
+        var loadOrder = new ArrayList<String>();
+        if (fallbackLocale != null && availableLocales.contains(fallbackLocale)) {
+            loadOrder.add(fallbackLocale);
+        }
+        for (var loc : availableLocales) {
+            if (!loadOrder.contains(loc)) loadOrder.add(loc);
+        }
+
+        for (var locale : loadOrder) {
+            var inheritFrom = locale.equals(fallbackLocale) ? null : fallbackLocale;
+            var data = LocaleFileLoader.loadLocale(plugin, locale, inheritFrom, localeData);
+            if ("en_us".equals(locale) && data.size() < 50) {
+                buildEnglishFallback(data);
+            }
+            localeData.put(locale, data);
         }
 
         loadPlayerLocales();
-        plugin.getLogger().info("已載入 " + localeData.size() + " 種語言，預設：" + defaultLocale);
+        plugin.getLogger().info("已載入 " + localeData.size() + " 種語言，預設："
+                + defaultLocale + "，fallback：" + fallbackLocale);
+        for (var loc : availableLocales) {
+            if (!localeData.containsKey(loc) || localeData.get(loc).isEmpty()) {
+                plugin.getLogger().warning("語言「" + loc + "」未載入任何翻譯，請檢查 locales/" + loc + ".properties");
+            }
+        }
     }
 
-    private void loadLocaleFile(String locale) {
-        var data = new HashMap<String, String>();
-        var resource = "locales/" + locale + ".properties";
-        try (var stream = plugin.getResource(resource)) {
-            if (stream == null) {
-                plugin.getLogger().warning("找不到語系檔：" + resource);
-                if ("en_us".equals(locale)) buildEnglishFallback(data);
-                localeData.put(locale, data);
-                return;
-            }
-            parseProperties(stream, data);
-        } catch (Exception e) {
-            plugin.getLogger().severe("載入語系 " + locale + " 失敗：" + e.getMessage());
-        }
-        if ("en_us".equals(locale) && data.size() < 50) {
-            buildEnglishFallback(data);
-        }
-        localeData.put(locale, data);
-    }
+    private void parseLanguageConfig() {
+        displayNames.clear();
+        availableLocales = new ArrayList<>();
 
-    private void parseProperties(java.io.InputStream stream, Map<String, String> data) throws IOException {
-        try (var reader = new BufferedReader(new InputStreamReader(stream, StandardCharsets.UTF_8))) {
-            String line;
-            while ((line = reader.readLine()) != null) {
-                line = line.trim();
-                if (line.isEmpty() || line.startsWith("#")) continue;
-                int eq = line.indexOf('=');
-                if (eq <= 0) continue;
-                var key = line.substring(0, eq).trim();
-                var value = line.substring(eq + 1).trim();
-                data.put(key.toLowerCase(Locale.ROOT), value);
+        defaultLocale = plugin.getConfig().getString("languages.default", "zh_tw")
+                .toLowerCase(Locale.ROOT);
+        fallbackLocale = plugin.getConfig().getString("languages.fallback", "en_us")
+                .toLowerCase(Locale.ROOT);
+
+        var localesSection = plugin.getConfig().getConfigurationSection("languages.locales");
+        if (localesSection != null) {
+            for (var key : localesSection.getKeys(false)) {
+                var code = key.toLowerCase(Locale.ROOT);
+                availableLocales.add(code);
+                displayNames.put(code, localesSection.getString(key, code));
             }
+        } else {
+            for (var code : plugin.getConfig().getStringList("languages.available")) {
+                code = code.toLowerCase(Locale.ROOT);
+                availableLocales.add(code);
+                displayNames.putIfAbsent(code, code);
+            }
+        }
+
+        if (availableLocales.isEmpty()) {
+            availableLocales.add("zh_tw");
+            availableLocales.add("en_us");
+            displayNames.put("zh_tw", "繁體中文");
+            displayNames.put("en_us", "English");
+        }
+
+        if (!availableLocales.contains(defaultLocale)) {
+            plugin.getLogger().warning("languages.default (" + defaultLocale
+                    + ") 不在 locales 清單中，已改用第一個語言");
+            defaultLocale = availableLocales.getFirst();
+        }
+        if (!availableLocales.contains(fallbackLocale)) {
+            fallbackLocale = availableLocales.contains("en_us") ? "en_us" : defaultLocale;
         }
     }
 
@@ -103,7 +125,10 @@ public final class LocaleService {
 
         for (var key : section.getKeys(false)) {
             try {
-                playerLocales.put(UUID.fromString(key), section.getString(key, defaultLocale));
+                var saved = section.getString(key, defaultLocale).toLowerCase(Locale.ROOT);
+                if (isAvailable(saved)) {
+                    playerLocales.put(UUID.fromString(key), saved);
+                }
             } catch (IllegalArgumentException ignored) {}
         }
     }
@@ -125,8 +150,6 @@ public final class LocaleService {
         return new File(plugin.getDataFolder(), "player-locales.yml");
     }
 
-    // --- 玩家語系 ---
-
     public String getPlayerLocale(Player player) {
         return playerLocales.getOrDefault(player.getUniqueId(), defaultLocale);
     }
@@ -146,24 +169,29 @@ public final class LocaleService {
         return defaultLocale;
     }
 
+    public String getFallbackLocale() {
+        return fallbackLocale;
+    }
+
     public List<String> getAvailableLocales() {
         return Collections.unmodifiableList(availableLocales);
     }
 
     public boolean isAvailable(String locale) {
-        return locale != null && availableLocales.contains(locale.toLowerCase(Locale.ROOT));
+        if (locale == null) return false;
+        return availableLocales.contains(locale.toLowerCase(Locale.ROOT));
     }
 
     public String getLanguageDisplayName(String locale) {
-        var key = "lang.name." + locale.toLowerCase(Locale.ROOT);
-        var name = getRaw(defaultLocale, key);
-        if (name.equals(key)) {
-            return locale;
+        locale = locale.toLowerCase(Locale.ROOT);
+        if (displayNames.containsKey(locale)) {
+            return displayNames.get(locale);
         }
-        return name;
+        var key = "lang.name." + locale;
+        var name = getRaw(defaultLocale, key);
+        if (!name.equals(key)) return name;
+        return locale;
     }
-
-    // --- 訊息 ---
 
     public String msg(Player player, String key, Object... args) {
         return format(getPlayerLocale(player), key, args);
@@ -191,20 +219,20 @@ public final class LocaleService {
         if (data != null && data.containsKey(normalized)) {
             return data.get(normalized);
         }
-        // fallback 至預設語系
-        var fallback = localeData.get(defaultLocale);
-        if (fallback != null && fallback.containsKey(normalized)) {
-            return fallback.get(normalized);
+        if (!locale.equals(defaultLocale)) {
+            var def = localeData.get(defaultLocale);
+            if (def != null && def.containsKey(normalized)) {
+                return def.get(normalized);
+            }
         }
-        // fallback 至 en_us
-        var en = localeData.get("en_us");
-        if (en != null && en.containsKey(normalized)) {
-            return en.get(normalized);
+        if (!locale.equals(fallbackLocale)) {
+            var fb = localeData.get(fallbackLocale);
+            if (fb != null && fb.containsKey(normalized)) {
+                return fb.get(normalized);
+            }
         }
         return key;
     }
-
-    // --- 物品名稱 ---
 
     public String getDisplayName(String locale, Material material) {
         return getDisplayName(locale, material.name());
@@ -235,9 +263,6 @@ public final class LocaleService {
         return "minecraft:" + material.name().toLowerCase(Locale.ROOT);
     }
 
-    /**
-     * 取得物品所有可搜尋文字（含當前語系與全部已載入語系名稱）
-     */
     public String[] getSearchableTexts(String locale, Material material, String extraTag) {
         var id = material.name().toLowerCase(Locale.ROOT);
         var mcId = "minecraft:" + id;
@@ -249,7 +274,6 @@ public final class LocaleService {
         texts.add(english);
         texts.add(getDisplayName(locale, material));
 
-        // 跨語系搜尋：任一語言名稱皆可命中
         for (var loc : availableLocales) {
             texts.add(getDisplayName(loc, material).toLowerCase(Locale.ROOT));
         }

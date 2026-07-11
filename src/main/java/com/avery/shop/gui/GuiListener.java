@@ -66,20 +66,37 @@ public final class GuiListener implements Listener {
 
         if (slot == ShopGui.getSellSlot()) {
             player.closeInventory();
-            player.sendMessage("§e" + locale.msg(player, "msg.sell.hint"));
-            return;
-        }
-
-        if (slot == 47) {
-            session.setPage(0);
-            ShopGui.openMyListings(shopManager, player, session);
+            if (shopManager.isSellToSystemEnabled()) {
+                var hand = player.getInventory().getItemInMainHand();
+                if (hand.getType().isAir()) {
+                    player.sendMessage("§c" + locale.msg(player, "msg.sell.no-item"));
+                    return;
+                }
+                var sellPrice = shopManager.getSellToSystemQuote(hand).price();
+                var result = shopManager.sellToSystem(player);
+                switch (result) {
+                    case SUCCESS -> {
+                        player.sendMessage("§a" + locale.msg(player, "msg.sell.success",
+                                shopManager.getEconomy().format(sellPrice)));
+                        if (shopManager.getPricing().isEnabled()) {
+                            player.sendMessage("§7" + locale.msg(player, "msg.sell.price-hint"));
+                        }
+                    }
+                    case NOT_ACCEPTED -> player.sendMessage("§c" + locale.msg(player, "msg.sell.not-accepted"));
+                    case NO_PERMISSION -> player.sendMessage("§c" + locale.msg(player, "msg.sell.no-permission"));
+                    case DISABLED -> player.sendMessage("§c" + locale.msg(player, "msg.sell.disabled"));
+                    default -> player.sendMessage("§c" + locale.msg(player, "msg.sell.failed"));
+                }
+            } else {
+                player.sendMessage("§c" + locale.msg(player, "msg.sell.disabled"));
+            }
             return;
         }
 
         var categories = ItemCategory.values();
         int catIndex = 0;
         for (var category : categories) {
-            if (!shopManager.getPlugin().getConfig().getBoolean("categories." + category.getId(), true)) continue;
+            if (!shopManager.isCategoryVisible(category)) continue;
             if (catIndex == slot) {
                 session.setCategory(category);
                 session.setPage(0);
@@ -109,6 +126,27 @@ public final class GuiListener implements Listener {
         }
 
         var listingId = session.getSlotListingMap().get(slot);
+        var catalogKey = session.getSlotCatalogMap().get(slot);
+
+        if (session.isCatalogBrowse() && catalogKey != null) {
+            if (click != ClickType.LEFT) return;
+            var result = shopManager.buyCatalogEntry(player, catalogKey);
+            switch (result) {
+                case SUCCESS -> {
+                    player.sendMessage("§a" + locale.msg(player, "msg.buy.success"));
+                    refreshListingView(player, session);
+                }
+                case NO_MONEY -> player.sendMessage("§c" + locale.msg(player, "msg.buy.no-money"));
+                case NO_SPACE -> player.sendMessage("§c" + locale.msg(player, "msg.buy.no-space"));
+                case ECONOMY_DISABLED -> player.sendMessage("§c" + locale.msg(player, "msg.buy.economy-disabled"));
+                case NOT_FOUND -> player.sendMessage("§c" + locale.msg(player, "msg.buy.not-found"));
+                default -> player.sendMessage("§c" + locale.msg(player, "msg.buy.failed"));
+            }
+            return;
+        }
+
+        if (!shopManager.isPlayerListingsEnabled()) return;
+
         if (listingId == null) return;
 
         if (click == ClickType.RIGHT) {

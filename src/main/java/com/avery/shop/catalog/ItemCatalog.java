@@ -148,10 +148,8 @@ public final class ItemCatalog {
     }
 
     public CatalogEntry findMatching(ItemStack stack) {
-        for (var entry : entries.values()) {
-            if (entry.matches(stack)) return entry;
-        }
-        return null;
+        if (stack == null || stack.getType().isAir()) return null;
+        return entries.get(com.avery.shop.catalog.ItemMatcher.fingerprint(stack));
     }
 
     /**

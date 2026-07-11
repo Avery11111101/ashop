@@ -63,6 +63,7 @@ public final class LangCommand implements CommandExecutor, TabCompleter {
             player.sendMessage(prefix + "§f" + loc + " §8- §f" + name);
         }
         player.sendMessage("§7" + locale.msg(player, "msg.lang.usage"));
+        player.sendMessage("§8" + locale.msg(player, "msg.lang.file-hint"));
     }
 
     @Override

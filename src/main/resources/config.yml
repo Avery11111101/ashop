@@ -2,17 +2,40 @@
 
 languages:
   default: zh_tw
-  available:
-    - zh_tw
-    - en_us
+  fallback: en_us
+  # 語言代碼: 顯示名稱（語系檔：plugins/ashop/locales/<代碼>.properties）
+  # 可自由新增插件未內建的語言，建立對應 .properties 即可
+  locales:
+    zh_tw: 繁體中文
+    en_us: English
+    # ja_jp: 日本語
+    # ko_kr: 한국어
 
 economy:
   enabled: true
   currency-symbol: "$"
 
+# 系統商店（玩家只能跟系統買賣，不能上架）
+system-shop:
+  enabled: true
+  player-listings: false    # false = 禁止玩家上架
+  sell-to-system: true      # 允許 /shop sell 賣給系統
+  sell-ratio: 0.5           # 收購價 = 動態購買價 × 比例
+  require-listed-item: true # 只能賣 shop/ 設定中已啟用的物品
+
 default-prices:
   enabled: true
+  mode: catalog          # catalog=讀 shop/ 分類設定（高效能）| listings=逐項上架（舊模式）
   base-price: 10.0
+
+# 系統商店分類設定（首次啟動自動建立）
+shop:
+  folder: shop           # plugins/ashop/shop/<分類>/items.yml
+  auto-seed: true        # 自動建立各分類預設商品
+  sync-new-items: true   # reload 時同步原版目錄新增物品
+
+performance:
+  save-delay-ticks: 40   # 存檔延遲（40 tick = 2 秒），避免每次交易卡頓
 
 # 動態定價：越買越貴、越賣越便宜、物以稀為貴
 dynamic-pricing:
