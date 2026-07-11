@@ -21,6 +21,30 @@ ashop 的所有重要變更皆記錄於此。
 
 ---
 
+## [1.6.3] - 2026-07-11
+
+### Changed / 變更
+- Default shop (`/shop reset` & first-run seed) now only includes survival-obtainable items  
+  預設商店僅含生存可取得物品，排除指令方塊、光源方塊、生怪蛋等
+- Config: `shop.survival-only-defaults: true` (set false to restore old all-items behavior)  
+  設定檔可關閉此過濾
+
+### Fixed / 修復
+- Shift+Right-click admin edit works in search results GUI  
+  搜尋結果頁 Shift+右鍵管理員編輯
+
+---
+
+## [1.6.2] - 2026-07-11
+
+### Added / 新增
+- `/ashop help` full command & GUI tutorial (`/shop help` also works)  
+  `/ashop help` 完整指令與 GUI 教學
+- Auto-seed default full-item nested shop on first install when shop/ is empty  
+  首次安裝且 shop/ 為空時，自動建立預設全物品商店
+
+---
+
 ## [1.6.1] - 2026-07-11
 
 ### Added / 新增

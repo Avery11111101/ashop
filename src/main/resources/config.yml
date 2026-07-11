@@ -32,6 +32,8 @@ default-prices:
 shop:
   folder: shop
   extract-template: true   # 首次釋出 shop/_template/items.yml 範例
+  auto-seed-on-first-run: true   # shop/ 尚無分類時，自動建立預設全物品巢狀商店
+  survival-only-defaults: true   # 預設商店僅含生存可取得物品（排除指令方塊、光源方塊、生怪蛋等）
   pricing:
     reference-price: 10.0
     # 伺服器匯率：實際價格 = 基準價 × multiply + add（改 config 後 /shop reload 即生效）

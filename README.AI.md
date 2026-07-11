@@ -248,6 +248,25 @@ ShopPlugin
 3. 收購不受影響（仍可賣給系統）
 4. 管理員：分類頁 slot 48 或 Shift+右鍵子分類 → 分類設定 GUI
 
+### 2026-07-11 /ashop help 與首次自動載入（v1.6.2）
+
+**需求**：要有 `/ashop help` 教學；首次安裝無 shop 設定時預設載入全物品。
+
+**實作**：
+1. `shop` 指令新增別名 `ashop`；`help` 子指令顯示玩家/管理員/GUI/設定檔說明
+2. `shop.auto-seed-on-first-run: true`（config 預設）— shop/ 無分類或零商品時自動 `restoreDefaults`
+3. `/shop reload` 若偵測空 shop 也會補建預設
+
+### 2026-07-11 預設商店僅生存可取得物品（v1.6.3）
+
+**需求**：全物品預設商店不應含光源方塊、指令方塊等生存無法取得的物品。
+
+**實作**：
+1. 新增 `SurvivalObtainability` 過濾器
+2. `/shop reset` 與首次 auto-seed 套用過濾
+3. `shop.survival-only-defaults: true`（config 可關閉恢復舊行為）
+4. 排除：指令方塊、光源、屏障、結構方塊、生怪蛋、試煉生怪籠、寶庫、強化深板岩、除錯棒等
+
 ## 待擴充
 
 - 可匯入完整 Minecraft zh_tw.json 擴充翻譯覆蓋率

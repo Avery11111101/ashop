@@ -353,8 +353,12 @@ public final class ShopGui {
             lore.add(Component.empty());
             boolean purchasable = manager.getShopConfig().isItemPurchasable(entry);
             if (purchasable) {
-                lore.add(Component.text(locale.msg(player, "msg.gui.buy-select"))
+                lore.add(Component.text(locale.msg(player, "msg.gui.buy-one"))
                         .color(NamedTextColor.GREEN).decoration(TextDecoration.ITALIC, false));
+                lore.add(Component.text(locale.msg(player, "msg.gui.buy-stack"))
+                        .color(NamedTextColor.GREEN).decoration(TextDecoration.ITALIC, false));
+                lore.add(Component.text(locale.msg(player, "msg.gui.buy-custom"))
+                        .color(NamedTextColor.YELLOW).decoration(TextDecoration.ITALIC, false));
             } else {
                 lore.add(Component.text(locale.msg(player, "msg.gui.buy-disabled"))
                         .color(NamedTextColor.RED).decoration(TextDecoration.ITALIC, false));

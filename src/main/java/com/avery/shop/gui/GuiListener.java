@@ -108,9 +108,43 @@ public final class GuiListener implements Listener {
 
         switch (session.getViewType()) {
             case MAIN -> handleMainClick(player, session, slot);
-            case CATEGORY, SEARCH, LISTINGS -> handleListingClick(player, session, slot, event.getClick());
+            case CATEGORY, SEARCH, LISTINGS -> handleListingClick(player, session, slot, event);
             default -> {}
         }
+    }
+
+    /** 管理員 Shift+右鍵編輯（部分客戶端回報為 RIGHT + shift） */
+    private static boolean isAdminEditClick(InventoryClickEvent event) {
+        var click = event.getClick();
+        if (click == ClickType.SHIFT_RIGHT) {
+            return true;
+        }
+        return event.isShiftClick() && click == ClickType.RIGHT;
+    }
+
+    private static boolean isPlainLeftClick(InventoryClickEvent event) {
+        return event.getClick() == ClickType.LEFT && !event.isShiftClick();
+    }
+
+    private static boolean isShiftLeftClick(InventoryClickEvent event) {
+        var click = event.getClick();
+        if (click == ClickType.SHIFT_LEFT) {
+            return true;
+        }
+        return event.isShiftClick() && click == ClickType.LEFT;
+    }
+
+    private static boolean isPlainRightClick(InventoryClickEvent event) {
+        return event.getClick() == ClickType.RIGHT && !event.isShiftClick();
+    }
+
+    private static boolean isCatalogItemView(GuiSession session, String catalogKey) {
+        if (catalogKey == null) {
+            return false;
+        }
+        var view = session.getViewType();
+        return (view == GuiSession.ViewType.SEARCH || view == GuiSession.ViewType.CATEGORY)
+                && session.isCatalogBrowse();
     }
 
     @EventHandler
@@ -325,11 +359,16 @@ public final class GuiListener implements Listener {
         ShopGui.openMain(shopManager, player, session);
     }
 
-    private void handleListingClick(Player player, GuiSession session, int slot, ClickType click) {
+    private void handleListingClick(Player player, GuiSession session, int slot, InventoryClickEvent event) {
         var locale = shopManager.getPlugin().getLocaleService();
+        var click = event.getClick();
 
         if (slot == ShopGui.getBackSlot()) {
-            navigateCategoryBack(player, session);
+            if (session.getViewType() == GuiSession.ViewType.SEARCH) {
+                ShopGui.openMain(shopManager, player, session);
+            } else {
+                navigateCategoryBack(player, session);
+            }
             return;
         }
         if (slot == ShopAdminGui.ADMIN_CATEGORY_SLOT && player.hasPermission("shop.admin")
@@ -354,7 +393,7 @@ public final class GuiListener implements Listener {
         var subcategoryId = session.getSlotSubcategoryMap().get(slot);
 
         if (subcategoryId != null) {
-            if (player.hasPermission("shop.admin") && click == ClickType.SHIFT_RIGHT) {
+            if (player.hasPermission("shop.admin") && isAdminEditClick(event)) {
                 session.setReturnViewType(session.getViewType());
                 ShopAdminGui.openAdminCategoryEdit(shopManager, player, session, subcategoryId);
                 return;
@@ -365,20 +404,34 @@ public final class GuiListener implements Listener {
             return;
         }
 
-        if (session.isCatalogBrowse() && catalogKey != null) {
-            if (player.hasPermission("shop.admin") && click == ClickType.SHIFT_RIGHT) {
+        if (isCatalogItemView(session, catalogKey)) {
+            if (player.hasPermission("shop.admin") && isAdminEditClick(event)) {
                 session.setReturnViewType(session.getViewType());
                 ShopAdminGui.openAdminItemEdit(shopManager, player, session, catalogKey);
                 return;
             }
-            if (click != ClickType.LEFT) return;
+
             var entry = shopManager.getCatalog().getByKey(catalogKey);
             if (entry != null && !shopManager.getShopConfig().isItemPurchasable(entry)) {
                 player.sendMessage("§c" + locale.msg(player, "msg.buy.category-disabled"));
                 return;
             }
+
             session.setReturnViewType(session.getViewType());
-            ShopGui.openBuyQuantity(shopManager, player, session, catalogKey);
+
+            if (isShiftLeftClick(event)) {
+                if (entry == null) return;
+                executeCatalogBuy(player, session, catalogKey, entry.getTemplate().getMaxStackSize());
+                return;
+            }
+            if (isPlainRightClick(event)) {
+                ShopGui.openBuyQuantity(shopManager, player, session, catalogKey);
+                return;
+            }
+            if (isPlainLeftClick(event)) {
+                executeCatalogBuy(player, session, catalogKey, 1);
+                return;
+            }
             return;
         }
 
@@ -634,14 +687,20 @@ public final class GuiListener implements Listener {
                 } else {
                     player.sendMessage("§a" + locale.msg(player, "msg.buy.success"));
                 }
-                returnFromBuyQuantity(player, session);
+                if (session.getViewType() == GuiSession.ViewType.BUY_QUANTITY) {
+                    returnFromBuyQuantity(player, session);
+                } else {
+                    refreshListingView(player, session);
+                }
             }
             case NO_MONEY -> player.sendMessage("§c" + locale.msg(player, "msg.buy.no-money"));
             case NO_SPACE -> player.sendMessage("§c" + locale.msg(player, "msg.buy.no-space"));
             case ECONOMY_DISABLED -> player.sendMessage("§c" + locale.msg(player, "msg.buy.economy-disabled"));
             case NOT_FOUND -> {
                 player.sendMessage("§c" + locale.msg(player, "msg.buy.not-found"));
-                returnFromBuyQuantity(player, session);
+                if (session.getViewType() == GuiSession.ViewType.BUY_QUANTITY) {
+                    returnFromBuyQuantity(player, session);
+                }
             }
             default -> player.sendMessage("§c" + locale.msg(player, "msg.buy.failed"));
         }

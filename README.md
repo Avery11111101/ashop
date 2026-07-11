@@ -64,12 +64,16 @@ dynamic-pricing:
 
 | 指令 | 說明 |
 |------|------|
-| `/shop` | 開啟動態市場 GUI |
-| `/shop price` | 查詢系統售價與收購價 |
-| `/shop search <關鍵字>` | 搜尋物品 |
-| `/shop sell` | 賣手持物品給系統 |
-| `/shop reload` | 重新載入（管理員） |
-| `/shop reset` | 還原預設全物品商店（管理員） |
+| `/ashop` 或 `/shop` | 開啟動態市場 GUI |
+| `/ashop help` | 查看完整指令與 GUI 教學 |
+| `/ashop price` | 查詢系統售價與收購價 |
+| `/ashop search <關鍵字>` | 搜尋物品 |
+| `/ashop sell` | 賣手持物品給系統 |
+| `/ashop reload` | 重新載入（管理員） |
+| `/ashop reset` | 還原預設全物品商店（管理員） |
+| `/lang <語言>` | 切換介面語言 |
+
+**首次安裝**：若 `plugins/ashop/shop/` 尚無商品分類，插件會自動建立預設巢狀商店（僅含**生存可取得**物品，可在 `config.yml` 關閉 `shop.survival-only-defaults`）。
 | `/lang <代碼>` | 切換語言 |
 
 **別名：** `/商店` `/vs` `/language` `/語言`

@@ -40,6 +40,11 @@ public final class ShopPlugin extends JavaPlugin {
 
         shopConfigService = new ShopConfigService(this);
         shopConfigService.load(itemCatalog);
+        var seedResult = shopConfigService.seedDefaultsIfEmpty(itemCatalog);
+        if (seedResult != null) {
+            getLogger().info("首次啟動已建立預設商店：" + seedResult.categories() + " 個節點、"
+                    + seedResult.items() + " 項物品");
+        }
         shopAdminService = new ShopAdminService(this, shopConfigService);
 
         shopManager = new ShopManager(this, itemCatalog, economyService, pricingService, shopConfigService);

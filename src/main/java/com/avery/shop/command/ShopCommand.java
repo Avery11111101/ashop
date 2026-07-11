@@ -41,6 +41,10 @@ public final class ShopCommand implements CommandExecutor, TabCompleter {
 
         if (args.length >= 1) {
             var sub = args[0].toLowerCase();
+            if (sub.equals("help") || sub.equals("說明") || sub.equals("?")) {
+                sendHelp(sender);
+                return true;
+            }
             if (sub.equals("reload") || sub.equals("重新載入")) {
                 return handleReload(sender);
             }
@@ -132,14 +136,48 @@ public final class ShopCommand implements CommandExecutor, TabCompleter {
                     }
                 }
             }
-            default -> {
-                player.sendMessage("§e" + locale.msg(player, "msg.cmd.help.shop"));
-                player.sendMessage("§e" + locale.msg(player, "msg.cmd.help.search"));
-                player.sendMessage("§e" + locale.msg(player, "msg.cmd.help.sell"));
-                player.sendMessage("§e" + locale.msg(player, "msg.cmd.help.price"));
-            }
+            default -> sendHelp(sender);
         }
         return true;
+    }
+
+    private void sendHelp(CommandSender sender) {
+        var locale = plugin.getLocaleService();
+        var loc = sender instanceof Player player ? locale.getPlayerLocale(player) : locale.getDefaultLocale();
+
+        sender.sendMessage("§6§l" + locale.msg(loc, "msg.cmd.help.title"));
+        sender.sendMessage("§7" + locale.msg(loc, "msg.cmd.help.subtitle"));
+        sender.sendMessage("");
+
+        sender.sendMessage("§e§l" + locale.msg(loc, "msg.cmd.help.section.player"));
+        sender.sendMessage("§f" + locale.msg(loc, "msg.cmd.help.open"));
+        sender.sendMessage("§f" + locale.msg(loc, "msg.cmd.help.search"));
+        sender.sendMessage("§f" + locale.msg(loc, "msg.cmd.help.sell"));
+        sender.sendMessage("§f" + locale.msg(loc, "msg.cmd.help.price"));
+        sender.sendMessage("§f" + locale.msg(loc, "msg.cmd.help.lang"));
+        sender.sendMessage("");
+
+        sender.sendMessage("§a§l" + locale.msg(loc, "msg.cmd.help.section.gui"));
+        for (var line : locale.msg(loc, "msg.cmd.help.gui").split("\n")) {
+            sender.sendMessage("§7" + line);
+        }
+        sender.sendMessage("");
+
+        if (sender.hasPermission("shop.admin")) {
+            sender.sendMessage("§c§l" + locale.msg(loc, "msg.cmd.help.section.admin"));
+            sender.sendMessage("§f" + locale.msg(loc, "msg.cmd.help.reload"));
+            sender.sendMessage("§f" + locale.msg(loc, "msg.cmd.help.reset"));
+            sender.sendMessage("§7" + locale.msg(loc, "msg.cmd.help.reset.warn"));
+            sender.sendMessage("§f" + locale.msg(loc, "msg.cmd.help.admin-gui"));
+            sender.sendMessage("");
+
+            sender.sendMessage("§c§l" + locale.msg(loc, "msg.cmd.help.section.config"));
+            for (var line : locale.msg(loc, "msg.cmd.help.config").split("\n")) {
+                sender.sendMessage("§7" + line);
+            }
+        }
+
+        sender.sendMessage("§8" + locale.msg(loc, "msg.cmd.help.footer"));
     }
 
     private boolean handleReload(CommandSender sender) {
@@ -152,6 +190,10 @@ public final class ShopCommand implements CommandExecutor, TabCompleter {
         plugin.getLocaleService().load();
         catalog.build();
         plugin.getShopConfigService().load(catalog);
+        var seedResult = plugin.getShopConfigService().seedDefaultsIfEmpty(catalog);
+        if (seedResult != null) {
+            send(sender, locale, "msg.cmd.seed.success", seedResult.categories(), seedResult.items());
+        }
         shopManager.load();
         send(sender, locale, "msg.cmd.reload.success");
         return true;
@@ -204,8 +246,11 @@ public final class ShopCommand implements CommandExecutor, TabCompleter {
     @Override
     public List<String> onTabComplete(CommandSender sender, Command command, String alias, String[] args) {
         if (args.length == 1) {
-            var admin = List.of("search", "sell", "price", "reload", "reset", "還原", "restore", "搜尋", "上架", "賣", "價格", "重新載入");
-            return filter(admin, args[0]);
+            var options = new ArrayList<>(List.of("help", "search", "sell", "price", "說明", "搜尋", "上架", "賣", "價格"));
+            if (sender.hasPermission("shop.admin")) {
+                options.addAll(List.of("reload", "reset", "還原", "restore", "重新載入"));
+            }
+            return filter(options, args[0]);
         }
         if (args.length == 2 && args[0].equalsIgnoreCase("search")) {
             return filter(List.of("diamond", "鑽石", "minecraft:stone"), args[1]);

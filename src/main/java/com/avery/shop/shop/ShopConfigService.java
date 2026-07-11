@@ -4,6 +4,7 @@ import com.avery.shop.ShopPlugin;
 import com.avery.shop.catalog.CatalogEntry;
 import com.avery.shop.catalog.ItemCatalog;
 import com.avery.shop.catalog.ItemCategory;
+import com.avery.shop.catalog.SurvivalObtainability;
 import org.bukkit.Material;
 import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.entity.Player;
@@ -120,6 +121,26 @@ public final class ShopConfigService {
         int roots = getRootCategories().size();
         plugin.getLogger().info("商店載入完成：" + roots + " 個頂層分類、"
                 + categories.size() + " 個節點、" + total + " 項商品");
+    }
+
+    /** shop/ 尚無有效分類或商品時，是否應自動建立預設全物品商店 */
+    public boolean shouldAutoSeedDefaults() {
+        if (!plugin.getConfig().getBoolean("shop.auto-seed-on-first-run", true)) {
+            return false;
+        }
+        if (getRootCategories().isEmpty()) {
+            return true;
+        }
+        return categories.values().stream().mapToInt(d -> d.getEnabledEntries().size()).sum() == 0;
+    }
+
+    /** 首次啟動自動建立預設商店（等同 /shop reset，但不刪除既有自訂分類以外的內容） */
+    public ShopRestoreResult seedDefaultsIfEmpty(ItemCatalog catalog) {
+        if (!shouldAutoSeedDefaults()) {
+            return null;
+        }
+        plugin.getLogger().info("偵測到 shop/ 尚無商品分類，正在自動建立預設全物品商店…");
+        return restoreDefaults(catalog);
     }
 
     private void loadCategoryFilesRecursively(File shopRoot, File dir, ItemCatalog catalog,
@@ -612,8 +633,15 @@ public final class ShopConfigService {
         return entry != null && isItemPurchasable(entry);
     }
 
+    private boolean includeInDefaultShop(CatalogEntry entry) {
+        if (!plugin.getConfig().getBoolean("shop.survival-only-defaults", true)) {
+            return true;
+        }
+        return SurvivalObtainability.isObtainableInSurvival(entry);
+    }
+
     /**
-     * 還原 shop/ 為預設 12 分類 + 全原版物品（管理員指令用）
+     * 還原 shop/ 為預設 12 分類 + 生存可取得之原版物品（管理員指令用）
      */
     public ShopRestoreResult restoreDefaults(ItemCatalog catalog) {
         var shopFolder = getShopFolder();
@@ -637,7 +665,9 @@ public final class ShopConfigService {
         var locale = plugin.getLocaleService().getDefaultLocale();
 
         for (var category : ItemCategory.values()) {
-            var entries = catalog.getByCategory(category);
+            var entries = catalog.getByCategory(category).stream()
+                    .filter(this::includeInDefaultShop)
+                    .toList();
             if (entries.isEmpty()) continue;
 
             var bySubPath = new LinkedHashMap<String, List<CatalogEntry>>();
@@ -653,7 +683,9 @@ public final class ShopConfigService {
         extractTemplateIfAbsent();
         load(catalog);
 
-        plugin.getLogger().info("shop 已還原預設：" + categoryCount + " 個分類節點、" + itemCount + " 項物品");
+        plugin.getLogger().info("shop 已還原預設：" + categoryCount + " 個分類節點、" + itemCount + " 項物品"
+                + (plugin.getConfig().getBoolean("shop.survival-only-defaults", true)
+                ? "（僅生存可取得）" : ""));
         return new ShopRestoreResult(categoryCount, itemCount, removed);
     }
 
