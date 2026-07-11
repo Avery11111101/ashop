@@ -51,6 +51,9 @@ public final class ShopCommand implements CommandExecutor, TabCompleter {
             if (sub.equals("reset") || sub.equals("還原") || sub.equals("restore")) {
                 return handleReset(sender);
             }
+            if (sub.equals("resync-prices") || sub.equals("重算價格") || sub.equals("resync")) {
+                return handleResyncPrices(sender);
+            }
         }
 
         if (!(sender instanceof Player player)) {
@@ -167,6 +170,7 @@ public final class ShopCommand implements CommandExecutor, TabCompleter {
             sender.sendMessage("§c§l" + locale.msg(loc, "msg.cmd.help.section.admin"));
             sender.sendMessage("§f" + locale.msg(loc, "msg.cmd.help.reload"));
             sender.sendMessage("§f" + locale.msg(loc, "msg.cmd.help.reset"));
+            sender.sendMessage("§f" + locale.msg(loc, "msg.cmd.help.resync-prices"));
             sender.sendMessage("§7" + locale.msg(loc, "msg.cmd.help.reset.warn"));
             sender.sendMessage("§f" + locale.msg(loc, "msg.cmd.help.admin-gui"));
             sender.sendMessage("");
@@ -196,6 +200,19 @@ public final class ShopCommand implements CommandExecutor, TabCompleter {
         }
         shopManager.load();
         send(sender, locale, "msg.cmd.reload.success");
+        return true;
+    }
+
+    private boolean handleResyncPrices(CommandSender sender) {
+        var locale = plugin.getLocaleService();
+        if (!sender.hasPermission("shop.admin")) {
+            sendError(sender, locale, "msg.cmd.no-admin");
+            return true;
+        }
+        catalog.build();
+        var count = plugin.getShopConfigService().resyncSurvivalPrices(catalog);
+        shopManager.load();
+        send(sender, locale, "msg.cmd.resync-prices.success", count);
         return true;
     }
 
@@ -248,7 +265,7 @@ public final class ShopCommand implements CommandExecutor, TabCompleter {
         if (args.length == 1) {
             var options = new ArrayList<>(List.of("help", "search", "sell", "price", "說明", "搜尋", "上架", "賣", "價格"));
             if (sender.hasPermission("shop.admin")) {
-                options.addAll(List.of("reload", "reset", "還原", "restore", "重新載入"));
+                options.addAll(List.of("reload", "reset", "resync-prices", "重算價格", "還原", "restore", "重新載入"));
             }
             return filter(options, args[0]);
         }

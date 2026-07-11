@@ -5,6 +5,20 @@ ashop 的所有重要變更皆記錄於此。
 
 ---
 
+## [1.6.5] - 2026-07-11
+
+### Changed / 變更
+- **Survival-based pricing** — prices derived from obtain method, crafting cost, and loot rarity  
+  **生存定價** — 依取得方式、配方成本、戰利品稀有度計算基準價
+- Calibrated anchors: Diorite 9/6, Diamond Pickaxe 1000/700, Mace 180000/120000, Elytra 130000/9500  
+  校準基準：閃長岩、鑽石鎬、重錘、鞘翅
+- Default `sell-ratio` changed to 2/3 (0.667); Elytra uses per-item sell-ratio override  
+  預設收購比例改為 2/3；鞘翅另設低收購比例
+- Admin: `/ashop resync-prices` recalculates existing `shop/` prices without wiping categories  
+  管理員可用 `/ashop resync-prices` 重算現有商品價格
+
+---
+
 ## [1.6.0] - 2026-07-11
 
 ### Added / 新增

@@ -9,12 +9,20 @@ public final class ShopItemSetting {
     private final String materialId;
     private final boolean enabled;
     private final double price;
+  /** 覆寫全域收購比例；null 表示使用 config 預設 */
+    private final Double sellRatio;
 
     public ShopItemSetting(String catalogKey, String materialId, boolean enabled, double price) {
+        this(catalogKey, materialId, enabled, price, null);
+    }
+
+    public ShopItemSetting(String catalogKey, String materialId, boolean enabled, double price,
+                           Double sellRatio) {
         this.catalogKey = catalogKey;
         this.materialId = materialId;
         this.enabled = enabled;
         this.price = price;
+        this.sellRatio = sellRatio;
     }
 
     public String getCatalogKey() {
@@ -31,5 +39,9 @@ public final class ShopItemSetting {
 
     public double getPrice() {
         return price;
+    }
+
+    public Double getSellRatio() {
+        return sellRatio;
     }
 }

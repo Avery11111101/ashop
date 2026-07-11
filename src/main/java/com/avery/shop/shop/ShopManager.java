@@ -258,9 +258,21 @@ public final class ShopManager {
         if (!buyQuote.available()) {
             return PriceQuote.unavailable();
         }
-        var sellPrice = Math.max(0.01, buyQuote.price() * getSellRatio());
-        var sellChange = buyQuote.changePercent() * getSellRatio();
-        return new PriceQuote(sellPrice, buyQuote.multiplier() * getSellRatio(), sellChange);
+        var ratio = resolveSellRatio(tradeItem);
+        var sellPrice = Math.max(0.01, buyQuote.price() * ratio);
+        var sellChange = buyQuote.changePercent() * ratio;
+        return new PriceQuote(sellPrice, buyQuote.multiplier() * ratio, sellChange);
+    }
+
+    private double resolveSellRatio(ItemStack item) {
+        var resolved = shopConfig.resolvePlayerItem(item, catalog);
+        if (resolved.isPresent()) {
+            var shopItem = resolved.get();
+            return shopConfig.resolveSellRatio(
+                    shopItem.setting().getCatalogKey(),
+                    shopItem.entry().getTemplate().getType());
+        }
+        return getSellRatio();
     }
 
     public List<ShopListing> getAllListings() {

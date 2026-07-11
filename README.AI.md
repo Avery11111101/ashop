@@ -267,6 +267,18 @@ ShopPlugin
 3. `shop.survival-only-defaults: true`（config 可關閉恢復舊行為）
 4. 排除：指令方塊、光源、屏障、結構方塊、生怪蛋、試煉生怪籠、寶庫、強化深板岩、除錯棒等
 
+### 2026-07-11 生存定價模型（v1.6.5）
+
+**需求**：依純生存取得方式與機率重算全物品價格，並以使用者基準校準：
+- 閃長岩 購9/售6、鑽石鎬 購1000/售700、重錘 購180000/售120000、鞘翅 購130000/售9500
+
+**實作**：
+1. 新增 `SurvivalPriceModel`：基礎資源價、配方拆解、戰利品稀有度、四項錨點精確對齊
+2. `ItemPriceCalculator` 改委派至生存定價模型
+3. `system-shop.sell-ratio` 預設改為 2/3（0.667）
+4. 鞘翅等特殊物品支援 `items.yml` 的 `sell-ratio` 覆寫（預設 ~0.073）
+5. 管理員 `/ashop resync-prices` 重算現有 shop/ 價格（不刪分類結構）
+
 ## 待擴充
 
 - 可匯入完整 Minecraft zh_tw.json 擴充翻譯覆蓋率

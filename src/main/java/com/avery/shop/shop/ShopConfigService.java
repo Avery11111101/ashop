@@ -5,6 +5,7 @@ import com.avery.shop.catalog.CatalogEntry;
 import com.avery.shop.catalog.ItemCatalog;
 import com.avery.shop.catalog.ItemCategory;
 import com.avery.shop.catalog.SurvivalObtainability;
+import com.avery.shop.catalog.SurvivalPriceModel;
 import org.bukkit.Material;
 import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.entity.Player;
@@ -406,12 +407,14 @@ public final class ShopConfigService {
                 var catalogKey = itemSection.getString("catalog-key", "");
                 var itemEnabled = itemSection.getBoolean("enabled", true);
                 var price = resolveItemPrice(itemSection, catalogKey, materialId, catalog, defaultPrice);
+                Double sellRatio = itemSection.contains("sell-ratio")
+                        ? itemSection.getDouble("sell-ratio") : null;
 
                 var resolved = ShopItemResolver.resolve(catalogKey, materialId, catalog);
                 var resolvedKey = resolved.map(CatalogEntry::getKey).orElse(
                         catalogKey != null && !catalogKey.isBlank() ? catalogKey : yamlKey);
 
-                data.putItem(new ShopItemSetting(resolvedKey, materialId, itemEnabled, price));
+                data.putItem(new ShopItemSetting(resolvedKey, materialId, itemEnabled, price, sellRatio));
             }
         }
 
@@ -623,8 +626,83 @@ public final class ShopConfigService {
         return copy;
     }
 
+    public double resolveSellRatio(String catalogKey, Material material) {
+        var setting = findItemSetting(catalogKey);
+        if (setting.isPresent() && setting.get().getSellRatio() != null) {
+            return setting.get().getSellRatio();
+        }
+        return SurvivalPriceModel.sellRatioOverride(material)
+                .orElse(plugin.getConfig().getDouble("system-shop.sell-ratio",
+                        SurvivalPriceModel.defaultSellRatio()));
+    }
+
+    /**
+     * 依生存定價模型重算 shop/ 內所有商品價格（管理員用，不刪除分類結構）
+     */
+    public int resyncSurvivalPrices(ItemCatalog catalog) {
+        var counter = new int[]{0};
+        resyncPricesInDirectory(getShopFolder(), catalog, counter);
+        load(catalog);
+        plugin.getLogger().info("已依生存定價重算 " + counter[0] + " 項商品價格");
+        return counter[0];
+    }
+
+    private void resyncPricesInDirectory(File dir, ItemCatalog catalog, int[] counter) {
+        var itemsFile = new File(dir, "items.yml");
+        if (itemsFile.exists() && !dir.getName().equalsIgnoreCase(TEMPLATE_FOLDER)) {
+            var yaml = YamlConfiguration.loadConfiguration(itemsFile);
+            var section = yaml.getConfigurationSection("items");
+            if (section != null) {
+                boolean fileChanged = false;
+                for (var yamlKey : section.getKeys(false)) {
+                    var itemSection = section.getConfigurationSection(yamlKey);
+                    if (itemSection == null) continue;
+
+                    var materialId = itemSection.getString("material", yamlKey);
+                    var catalogKey = itemSection.getString("catalog-key", "");
+                    var entry = ShopItemResolver.resolve(catalogKey, materialId, catalog).orElse(null);
+                    if (entry == null) continue;
+
+                    boolean itemChanged = false;
+                    var newPrice = priceCalculator.calculate(entry);
+                    if (itemSection.getDouble("price") != newPrice) {
+                        yaml.set("items." + yamlKey + ".price", newPrice);
+                        itemChanged = true;
+                    }
+
+                    var ratioOpt = SurvivalPriceModel.sellRatioOverride(entry.getTemplate().getType());
+                    if (ratioOpt.isPresent()) {
+                        if (itemSection.getDouble("sell-ratio") != ratioOpt.get()) {
+                            yaml.set("items." + yamlKey + ".sell-ratio", ratioOpt.get());
+                            itemChanged = true;
+                        }
+                    } else if (itemSection.contains("sell-ratio")) {
+                        yaml.set("items." + yamlKey + ".sell-ratio", null);
+                        itemChanged = true;
+                    }
+
+                    if (itemChanged) {
+                        counter[0]++;
+                        fileChanged = true;
+                    }
+                }
+                if (fileChanged) {
+                    saveYaml(itemsFile, yaml);
+                }
+            }
+        }
+
+        var children = dir.listFiles(File::isDirectory);
+        if (children == null) return;
+        for (var child : children) {
+            if (child.getName().startsWith(".") || child.getName().equalsIgnoreCase(TEMPLATE_FOLDER)) {
+                continue;
+            }
+            resyncPricesInDirectory(child, catalog, counter);
+        }
+    }
+
     public boolean canPlayerSell(org.bukkit.inventory.ItemStack stack, ItemCatalog catalog) {
-        if (!plugin.getConfig().getBoolean("system-shop.sell-to-system", true)) return false;
         return resolvePlayerItem(stack, catalog).isPresent();
     }
 
@@ -794,6 +872,8 @@ public final class ShopConfigService {
             yaml.set(path + ".material", entry.getMaterialId());
             yaml.set(path + ".enabled", true);
             yaml.set(path + ".price", priceCalculator.calculate(entry));
+            SurvivalPriceModel.sellRatioOverride(entry.getTemplate().getType())
+                    .ifPresent(ratio -> yaml.set(path + ".sell-ratio", ratio));
         }
 
         saveYaml(file, yaml);

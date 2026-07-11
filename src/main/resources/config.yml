@@ -20,7 +20,7 @@ system-shop:
   enabled: true
   player-listings: false    # false = 禁止玩家上架
   sell-to-system: true      # 允許 /shop sell 賣給系統
-  sell-ratio: 0.5           # 收購價 = 動態購買價 × 比例
+  sell-ratio: 0.667          # 收購價 = 購買價 × 2/3（閃長岩 9→6、重錘 180000→120000）
   require-listed-item: true # 只能賣 shop/ 設定中已啟用的物品
 
 default-prices:
