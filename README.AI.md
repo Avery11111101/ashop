@@ -279,6 +279,23 @@ ShopPlugin
 4. 鞘翅等特殊物品支援 `items.yml` 的 `sell-ratio` 覆寫（預設 ~0.073）
 5. 管理員 `/ashop resync-prices` 重算現有 shop/ 價格（不刪分類結構）
 
+### 2026-07-11 動態定價漲停有效計次（v1.6.6）
+
+**需求（Avery）**：
+1. GUI / `/shop price` 顯示「已達上限／下限」
+2. 後台仍累加全部交易次數（total-buys / total-sells）
+3. 收購價也顯示趨勢 %
+4. 漲停後多買的不計入有效 buys；恢復原價只需賣出「漲停前有效次數」等量（1:1 預設）
+
+**實作**：
+1. `MarketData` 拆分：`buys`/`sells`（有效計價）與 `total-buys`/`total-sells`（全部交易）
+2. `DynamicPricingService.recordBuy/Sell` 僅在未達漲停／跌停時增加有效次數
+3. `PriceQuote` 新增 `PriceCap`（MAX/MIN/NONE）與 `formatTrend()`
+4. GUI 商品價、收購面板單價、`/shop price` 顯示趨勢與上限提示
+5. `config.yml` 預設 `per-sell-decrease: 2.0`（與 per-buy-increase 1:1）
+
+**涉及檔案**：`DynamicPricingService`、`MarketData`、`MarketStorage`、`PriceQuote`、`ShopManager`、`ShopGui`、`ShopCommand`、語系檔、`config.yml`
+
 ## 待擴充
 
 - 可匯入完整 Minecraft zh_tw.json 擴充翻譯覆蓋率

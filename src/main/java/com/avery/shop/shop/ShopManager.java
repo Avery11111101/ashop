@@ -261,7 +261,7 @@ public final class ShopManager {
         var ratio = resolveSellRatio(tradeItem);
         var sellPrice = Math.max(0.01, buyQuote.price() * ratio);
         var sellChange = buyQuote.changePercent() * ratio;
-        return new PriceQuote(sellPrice, buyQuote.multiplier() * ratio, sellChange);
+        return new PriceQuote(sellPrice, buyQuote.multiplier() * ratio, sellChange, buyQuote.cap());
     }
 
     private double resolveSellRatio(ItemStack item) {
@@ -396,8 +396,9 @@ public final class ShopManager {
         }
 
         for (var entry : sellCounts.entrySet()) {
+            var stock = quoteStock(entry.getKey());
             for (int i = 0; i < entry.getValue(); i++) {
-                pricing.recordSell(entry.getKey());
+                pricing.recordSell(entry.getKey(), stock);
             }
         }
         if (soldCount > 0) {
@@ -481,7 +482,7 @@ public final class ShopManager {
             return SellToSystemResult.NO_ECONOMY;
         }
 
-        pricing.recordSell(key);
+        pricing.recordSell(key, quoteStock(key));
         markDirty();
         return SellToSystemResult.SUCCESS;
     }
@@ -522,8 +523,9 @@ public final class ShopManager {
             buyer.getInventory().addItem(stack);
         }
 
+        var stock = quoteStock(catalogKey);
         for (int i = 0; i < amount; i++) {
-            pricing.recordBuy(catalogKey);
+            pricing.recordBuy(catalogKey, stock);
         }
         markDirty();
         return BuyResult.SUCCESS;
@@ -577,7 +579,8 @@ public final class ShopManager {
             listings.remove(listing);
             index.unregister(listing, catalog);
             markDirty();
-            pricing.recordBuy(catalogKey);
+            var stock = index.getStock(catalogKey);
+            pricing.recordBuy(catalogKey, stock);
 
             if (!listing.getSellerId().equals(SYSTEM_SELLER_ID)) {
                 economy.deposit(listing.getSellerId(), price);

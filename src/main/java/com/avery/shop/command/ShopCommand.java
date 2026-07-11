@@ -122,8 +122,7 @@ public final class ShopCommand implements CommandExecutor, TabCompleter {
                 if (canBuy && buyQuote.available()) {
                     player.sendMessage("§a" + locale.msg(player, "msg.price.buy-result",
                             shopManager.getEconomy().format(buyQuote.price()),
-                            buyQuote.trendSymbol(),
-                            String.format("%+.0f", buyQuote.changePercent())));
+                            buyQuote.formatTrend(locale, player)));
                 } else if (canBuy) {
                     player.sendMessage("§c" + locale.msg(player, "msg.price.buy-unavailable"));
                 }
@@ -131,7 +130,8 @@ public final class ShopCommand implements CommandExecutor, TabCompleter {
                 if (shopManager.isSellToSystemEnabled()) {
                     if (canSell && sellQuote.available()) {
                         player.sendMessage("§a" + locale.msg(player, "msg.price.sell-result",
-                                shopManager.getEconomy().format(sellQuote.price())));
+                                shopManager.getEconomy().format(sellQuote.price()),
+                                sellQuote.formatTrend(locale, player)));
                     } else if (canSell) {
                         player.sendMessage("§c" + locale.msg(player, "msg.price.sell-unavailable"));
                     } else {

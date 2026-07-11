@@ -11,8 +11,13 @@ import java.util.Map;
 
 /**
  * 動態定價 - 越買越貴、越賣越便宜、物以稀為貴
+ * <p>
+ * 漲停／跌停後的買賣仍寫入 total-buys / total-sells，但不增加有效 buys / sells，
+ * 避免「買 100 個漲停、卻要賣 100 個才恢復」的問題。
  */
 public final class DynamicPricingService {
+
+    private static final double CAP_EPSILON = 1e-9;
 
     private final ShopPlugin plugin;
     private final ItemCatalog catalog;
@@ -55,28 +60,16 @@ public final class DynamicPricingService {
         }
 
         var data = market.getOrDefault(catalogKey, MarketData.EMPTY);
-        var cfg = plugin.getConfig();
+        var cfg = readConfig();
 
-        double perBuy = cfg.getDouble("dynamic-pricing.per-buy-increase", 2.0) / 100.0;
-        double perSell = cfg.getDouble("dynamic-pricing.per-sell-decrease", 1.5) / 100.0;
-        double perShortage = cfg.getDouble("dynamic-pricing.per-stock-shortage-increase", 3.0) / 100.0;
-        int referenceStock = cfg.getInt("dynamic-pricing.reference-stock", 5);
-        double minMult = cfg.getDouble("dynamic-pricing.min-multiplier", 0.2);
-        double maxMult = cfg.getDouble("dynamic-pricing.max-multiplier", 5.0);
-
-        double multiplier = 1.0;
-        multiplier += data.getTotalBuys() * perBuy;
-        multiplier -= data.getTotalSells() * perSell;
-
-        int shortage = Math.max(0, referenceStock - activeStock);
-        multiplier += shortage * perShortage;
-
-        multiplier = Math.max(minMult, Math.min(maxMult, multiplier));
+        double rawMultiplier = rawMultiplier(data, activeStock, cfg);
+        double multiplier = clamp(rawMultiplier, cfg.minMult, cfg.maxMult);
 
         double price = Math.max(0.01, basePrice * multiplier);
         double changePercent = (multiplier - 1.0) * 100.0;
+        var cap = resolveCap(rawMultiplier, multiplier, cfg);
 
-        return new PriceQuote(price, multiplier, changePercent);
+        return new PriceQuote(price, multiplier, changePercent, cap);
     }
 
     public PriceQuote quoteForListing(ShopListing listing, int activeStock) {
@@ -120,17 +113,90 @@ public final class DynamicPricingService {
         return quote(key, base, activeStock).price();
     }
 
-    public void recordBuy(String catalogKey) {
+    /**
+     * 記錄購買：全部交易寫入 total-buys；僅在未達漲停時增加有效 buys
+     */
+    public void recordBuy(String catalogKey, int activeStock) {
         if (!isEnabled() || catalogKey == null) return;
-        market.computeIfAbsent(catalogKey, k -> new MarketData(0, 0)).recordBuy();
+        var data = market.computeIfAbsent(catalogKey, k -> new MarketData(0, 0));
+        data.recordAllBuy();
+        if (!isAtMaxCap(catalogKey, activeStock)) {
+            data.recordBuy();
+        }
     }
 
-    public void recordSell(String catalogKey) {
+    /**
+     * 記錄出售：全部交易寫入 total-sells；僅在未達跌停時增加有效 sells
+     */
+    public void recordSell(String catalogKey, int activeStock) {
         if (!isEnabled() || catalogKey == null) return;
-        market.computeIfAbsent(catalogKey, k -> new MarketData(0, 0)).recordSell();
+        var data = market.computeIfAbsent(catalogKey, k -> new MarketData(0, 0));
+        data.recordAllSell();
+        if (!isAtMinCap(catalogKey, activeStock)) {
+            data.recordSell();
+        }
     }
 
     public Map<String, MarketData> getMarketSnapshot() {
         return Map.copyOf(market);
     }
+
+    private boolean isAtMaxCap(String catalogKey, int activeStock) {
+        var cfg = readConfig();
+        var data = market.getOrDefault(catalogKey, MarketData.EMPTY);
+        return rawMultiplier(data, activeStock, cfg) >= cfg.maxMult - CAP_EPSILON;
+    }
+
+    private boolean isAtMinCap(String catalogKey, int activeStock) {
+        var cfg = readConfig();
+        var data = market.getOrDefault(catalogKey, MarketData.EMPTY);
+        return rawMultiplier(data, activeStock, cfg) <= cfg.minMult + CAP_EPSILON;
+    }
+
+    private static double rawMultiplier(MarketData data, int activeStock, PricingConfig cfg) {
+        double multiplier = 1.0;
+        multiplier += data.getTotalBuys() * cfg.perBuy;
+        multiplier -= data.getTotalSells() * cfg.perSell;
+        int shortage = Math.max(0, cfg.referenceStock - activeStock);
+        multiplier += shortage * cfg.perShortage;
+        return multiplier;
+    }
+
+    private static double clamp(double value, double min, double max) {
+        return Math.max(min, Math.min(max, value));
+    }
+
+    private static PriceQuote.PriceCap resolveCap(double rawMultiplier, double clampedMultiplier,
+                                                   PricingConfig cfg) {
+        if (rawMultiplier >= cfg.maxMult - CAP_EPSILON
+                || clampedMultiplier >= cfg.maxMult - CAP_EPSILON) {
+            return PriceQuote.PriceCap.MAX;
+        }
+        if (rawMultiplier <= cfg.minMult + CAP_EPSILON
+                || clampedMultiplier <= cfg.minMult + CAP_EPSILON) {
+            return PriceQuote.PriceCap.MIN;
+        }
+        return PriceQuote.PriceCap.NONE;
+    }
+
+    private PricingConfig readConfig() {
+        var cfg = plugin.getConfig();
+        return new PricingConfig(
+                cfg.getDouble("dynamic-pricing.per-buy-increase", 2.0) / 100.0,
+                cfg.getDouble("dynamic-pricing.per-sell-decrease", 2.0) / 100.0,
+                cfg.getDouble("dynamic-pricing.per-stock-shortage-increase", 3.0) / 100.0,
+                cfg.getInt("dynamic-pricing.reference-stock", 5),
+                cfg.getDouble("dynamic-pricing.min-multiplier", 0.2),
+                cfg.getDouble("dynamic-pricing.max-multiplier", 5.0)
+        );
+    }
+
+    private record PricingConfig(
+            double perBuy,
+            double perSell,
+            double perShortage,
+            int referenceStock,
+            double minMult,
+            double maxMult
+    ) {}
 }

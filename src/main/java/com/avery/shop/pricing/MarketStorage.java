@@ -10,6 +10,8 @@ import java.util.Map;
 
 /**
  * 市場統計持久化
+ * <p>
+ * buys / sells：有效計價次數；total-buys / total-sells：含漲停／跌停期間的全部交易
  */
 public final class MarketStorage {
 
@@ -27,7 +29,9 @@ public final class MarketStorage {
         for (var key : section.getKeys(false)) {
             var buys = section.getInt(key + ".buys", 0);
             var sells = section.getInt(key + ".sells", 0);
-            result.put(key, new MarketData(buys, sells));
+            var allBuys = section.getInt(key + ".total-buys", buys);
+            var allSells = section.getInt(key + ".total-sells", sells);
+            result.put(key, new MarketData(buys, sells, allBuys, allSells));
         }
         return result;
     }
@@ -38,8 +42,11 @@ public final class MarketStorage {
 
         for (var entry : market.entrySet()) {
             var path = "items." + entry.getKey();
-            yaml.set(path + ".buys", entry.getValue().getTotalBuys());
-            yaml.set(path + ".sells", entry.getValue().getTotalSells());
+            var data = entry.getValue();
+            yaml.set(path + ".buys", data.getTotalBuys());
+            yaml.set(path + ".sells", data.getTotalSells());
+            yaml.set(path + ".total-buys", data.getAllBuys());
+            yaml.set(path + ".total-sells", data.getAllSells());
         }
 
         try {

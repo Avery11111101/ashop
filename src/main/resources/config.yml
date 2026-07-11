@@ -56,8 +56,8 @@ dynamic-pricing:
   # 每被「購買」1 次，價格上漲基準價的 X%（%）
   per-buy-increase: 2.0
 
-  # 每被「上架」1 次，價格下跌基準價的 X%（%）
-  per-sell-decrease: 1.5
+  # 每「賣給系統」1 次，價格下跌基準價的 X%（%）；建議與 per-buy-increase 相同（1:1 恢復）
+  per-sell-decrease: 2.0
 
   # 物以稀為貴：市場庫存每少 1 件（相對 reference-stock），額外上漲 X%（%）
   per-stock-shortage-increase: 3.0

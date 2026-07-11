@@ -161,9 +161,16 @@ public final class ShopGui {
                     var unit = sellQuote.price();
                     var subtotal = unit * display.getAmount();
                     total += subtotal;
-                    lore.add(Component.text(locale.msg(player, "msg.gui.sell.unit-price",
-                                    manager.getEconomy().format(unit)))
-                            .color(NamedTextColor.GOLD).decoration(TextDecoration.ITALIC, false));
+                    if (manager.getPricing().isEnabled()) {
+                        lore.add(Component.text(locale.msg(player, "msg.gui.sell.unit-price-dynamic",
+                                        manager.getEconomy().format(unit),
+                                        sellQuote.formatTrend(locale, player)))
+                                .color(NamedTextColor.GOLD).decoration(TextDecoration.ITALIC, false));
+                    } else {
+                        lore.add(Component.text(locale.msg(player, "msg.gui.sell.unit-price",
+                                        manager.getEconomy().format(unit)))
+                                .color(NamedTextColor.GOLD).decoration(TextDecoration.ITALIC, false));
+                    }
                     lore.add(Component.text(locale.msg(player, "msg.gui.sell.subtotal",
                                     manager.getEconomy().format(subtotal)))
                             .color(NamedTextColor.YELLOW).decoration(TextDecoration.ITALIC, false));
@@ -514,7 +521,7 @@ public final class ShopGui {
         var priceStr = manager.getEconomy().format(quote.price());
         if (dynamic) {
             lore.add(Component.text(locale.msg(player, "msg.gui.price-dynamic",
-                            priceStr, quote.trendSymbol(), String.format("%+.0f", quote.changePercent())))
+                            priceStr, quote.formatTrend(locale, player)))
                     .color(NamedTextColor.GOLD).decoration(TextDecoration.ITALIC, false));
         } else {
             lore.add(Component.text(locale.msg(player, "msg.gui.price", priceStr))
