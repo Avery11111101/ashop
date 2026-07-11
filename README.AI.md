@@ -142,6 +142,27 @@ ShopPlugin
 
 1. 使用 `git filter-branch` 移除了最近 Git 提交歷史中的 `Co-authored-by: Cursor` 標籤，保留使用者自身為唯一作者。
 
+### 2026-07-11 查價可收購但實際拒絕（v1.3.2）
+
+**使用者回報**：`/shop price` 顯示可收購，但收購箱確認出售時被拒。
+
+**根因分析（子代理 + 程式碼審查）**：
+1. 查價路徑未統一檢查物品是否在 `shop/` 設定中，fallback 計價仍顯示價格
+2. `ItemCatalog.findMatching` 用完整 fingerprint（含耐久），損耗工具無法對上 shop 模板
+3. **關鍵**：`ShopGui.refreshSellPanel` 將單價 lore 寫回真實 ItemStack，確認出售時 fingerprint 改變 → `canSellToSystem` 失敗
+
+**修復步驟**：
+1. 新增 `ResolvedShopItem`、`ShopConfigService.resolvePlayerItem()`（含 `normalizeForLookup` + `ItemMatcher.matchesForTrade`）
+2. `canSellToSystem` / `getItemPriceQuote` / `getSellToSystemQuote` 全部走 `resolvePlayerItem`
+3. 新增 `ShopManager.tradeItem()` → 交易前 `stripSellGuiLore`，避免 GUI lore 污染比對
+4. `/shop price` UX：區分「可購買 / 可收購 / 不在商店 / 不收購」
+5. `PriceQuote.unavailable()` 表示無法報價
+6. `sellDepositToSystem`：`economy.deposit` 失敗時退還 `pendingSold`
+7. `buyCatalogEntry` / `buyListing`：先 `withdraw` 再 `addItem`，背包滿則 `deposit` 退款
+8. 收購箱 UX：`msg.gui.sell.all-rejected` 全數被拒時明確提示
+
+**驗證**：第三、四輪獨立子代理連續 PASS（查價/收購一致、lore 修復、經濟回滾）
+
 ## 待擴充
 
 - 可匯入完整 Minecraft zh_tw.json 擴充翻譯覆蓋率

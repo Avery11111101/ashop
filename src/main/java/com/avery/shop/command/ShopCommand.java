@@ -102,15 +102,34 @@ public final class ShopCommand implements CommandExecutor, TabCompleter {
                     player.sendMessage("§c" + locale.msg(player, "msg.price.no-item"));
                     return true;
                 }
+                var canBuy = shopManager.canBuyFromSystem(hand);
+                var canSell = shopManager.canSellToSystem(hand);
                 var buyQuote = shopManager.getItemPriceQuote(hand);
                 var sellQuote = shopManager.getSellToSystemQuote(hand);
-                player.sendMessage("§6" + locale.msg(player, "msg.price.buy-result",
-                        shopManager.getEconomy().format(buyQuote.price()),
-                        buyQuote.trendSymbol(),
-                        String.format("%+.0f", buyQuote.changePercent())));
+
+                if (!canBuy && !canSell) {
+                    player.sendMessage("§c" + locale.msg(player, "msg.price.not-in-shop"));
+                    return true;
+                }
+
+                if (canBuy && buyQuote.available()) {
+                    player.sendMessage("§a" + locale.msg(player, "msg.price.buy-result",
+                            shopManager.getEconomy().format(buyQuote.price()),
+                            buyQuote.trendSymbol(),
+                            String.format("%+.0f", buyQuote.changePercent())));
+                } else if (canBuy) {
+                    player.sendMessage("§c" + locale.msg(player, "msg.price.buy-unavailable"));
+                }
+
                 if (shopManager.isSellToSystemEnabled()) {
-                    player.sendMessage("§6" + locale.msg(player, "msg.price.sell-result",
-                            shopManager.getEconomy().format(sellQuote.price())));
+                    if (canSell && sellQuote.available()) {
+                        player.sendMessage("§a" + locale.msg(player, "msg.price.sell-result",
+                                shopManager.getEconomy().format(sellQuote.price())));
+                    } else if (canSell) {
+                        player.sendMessage("§c" + locale.msg(player, "msg.price.sell-unavailable"));
+                    } else {
+                        player.sendMessage("§7" + locale.msg(player, "msg.price.sell-not-accepted"));
+                    }
                 }
             }
             default -> {

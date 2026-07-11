@@ -41,6 +41,31 @@ public final class ItemMatcher {
         return ItemStackUtil.serialize(a).equals(ItemStackUtil.serialize(b));
     }
 
+    /**
+     * 交易比對 — 忽略數量與耐久，用於收購/查價與 shop 設定對照
+     */
+    public static boolean matchesForTrade(ItemStack player, ItemStack template) {
+        if (player == null || template == null) return false;
+        if (player.getType() != template.getType()) return false;
+
+        var normalizedPlayer = normalizeForTrade(player);
+        var normalizedTemplate = normalizeForTrade(template);
+        return matches(normalizedPlayer, normalizedTemplate);
+    }
+
+    private static ItemStack normalizeForTrade(ItemStack stack) {
+        var copy = stack.clone();
+        copy.setAmount(1);
+        var meta = copy.getItemMeta();
+        if (meta == null) return copy;
+
+        if (meta instanceof org.bukkit.inventory.meta.Damageable damageable) {
+            damageable.setDamage(0);
+            copy.setItemMeta(damageable);
+        }
+        return copy;
+    }
+
     public static String fingerprint(ItemStack stack) {
         if (stack == null) return "air";
         var sb = new StringBuilder(stack.getType().name());

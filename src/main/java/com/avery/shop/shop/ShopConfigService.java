@@ -387,6 +387,83 @@ public final class ShopConfigService {
     }
 
     /**
+     * 解析玩家手持物品是否在 shop 設定中（含耐久/normalized 比對）
+     */
+    public Optional<ResolvedShopItem> resolvePlayerItem(org.bukkit.inventory.ItemStack stack,
+                                                          ItemCatalog catalog) {
+        if (stack == null || stack.getType().isAir()) {
+            return Optional.empty();
+        }
+
+        var entry = catalog.findMatching(stack);
+        if (entry != null) {
+            var resolved = resolveByCatalogKey(entry);
+            if (resolved.isPresent()) return resolved;
+        }
+
+        var fingerprint = com.avery.shop.catalog.ItemMatcher.fingerprint(
+                normalizeForLookup(stack));
+        var byFingerprint = resolveByCatalogKey(catalog.getByKey(fingerprint));
+        if (byFingerprint.isPresent()) return byFingerprint;
+
+        for (var data : categories.values()) {
+            if (!data.getDefinition().isEnabled()) continue;
+            for (var shopEntry : data.getEnabledEntries()) {
+                if (!com.avery.shop.catalog.ItemMatcher.matchesForTrade(stack, shopEntry.getTemplate())) {
+                    continue;
+                }
+                var setting = data.getItemSetting(shopEntry.getKey());
+                if (setting.isPresent() && setting.get().isEnabled()) {
+                    return Optional.of(new ResolvedShopItem(shopEntry, setting.get(), data.getCategoryId()));
+                }
+            }
+        }
+        return Optional.empty();
+    }
+
+    private Optional<ResolvedShopItem> resolveByCatalogKey(CatalogEntry entry) {
+        if (entry == null) return Optional.empty();
+        var setting = findItemSetting(entry.getKey());
+        if (setting.isEmpty() || !setting.get().isEnabled()) return Optional.empty();
+        var categoryId = findCategoryIdForKey(entry.getKey());
+        if (categoryId == null || !isCategoryVisible(categoryId)) return Optional.empty();
+        return Optional.of(new ResolvedShopItem(entry, setting.get(), categoryId));
+    }
+
+    private String findCategoryIdForKey(String catalogKey) {
+        for (var data : categories.values()) {
+            if (data.getItemSetting(catalogKey).isPresent()) {
+                return data.getCategoryId();
+            }
+        }
+        return null;
+    }
+
+    private static org.bukkit.inventory.ItemStack normalizeForLookup(org.bukkit.inventory.ItemStack stack) {
+        var copy = stack.clone();
+        copy.setAmount(1);
+        var meta = copy.getItemMeta();
+        if (meta instanceof org.bukkit.inventory.meta.Damageable damageable) {
+            damageable.setDamage(0);
+            copy.setItemMeta(damageable);
+        }
+        return copy;
+    }
+
+    public boolean canPlayerSell(org.bukkit.inventory.ItemStack stack, ItemCatalog catalog) {
+        if (!plugin.getConfig().getBoolean("system-shop.sell-to-system", true)) return false;
+        if (!plugin.getConfig().getBoolean("system-shop.require-listed-item", true)) {
+            return catalog.findMatching(stack) != null
+                    || resolvePlayerItem(stack, catalog).isPresent();
+        }
+        return resolvePlayerItem(stack, catalog).isPresent();
+    }
+
+    public boolean canPlayerBuy(org.bukkit.inventory.ItemStack stack, ItemCatalog catalog) {
+        return resolvePlayerItem(stack, catalog).isPresent();
+    }
+
+    /**
      * 還原 shop/ 為預設 12 分類 + 全原版物品（管理員指令用）
      */
     public ShopRestoreResult restoreDefaults(ItemCatalog catalog) {

@@ -191,23 +191,57 @@ public final class ShopManager {
         return pricing.getEffectivePrice(listing, index.getStock(key));
     }
 
+    public double getSuggestedPrice(ItemStack item) {
+        var key = pricing.resolveKey(item);
+        return pricing.getSuggestedPrice(item, index.getStock(key));
+    }
+
     public PriceQuote getPriceQuote(ShopListing listing) {
         var key = index.getKey(listing.getId());
         if (key == null) key = pricing.resolveKey(listing.getItem());
         return pricing.quoteForListing(listing, index.getStock(key));
     }
 
-    public double getSuggestedPrice(ItemStack item) {
-        var key = pricing.resolveKey(item);
-        return pricing.getSuggestedPrice(item, index.getStock(key));
+    public PriceQuote getItemPriceQuote(ItemStack item) {
+        var resolved = shopConfig.resolvePlayerItem(tradeItem(item), catalog);
+        if (resolved.isEmpty()) {
+            return PriceQuote.unavailable();
+        }
+        var key = resolved.get().entry().getKey();
+        var base = resolved.get().setting().getPrice();
+        return pricing.quote(key, base, index.getStock(key));
     }
 
-    public PriceQuote getItemPriceQuote(ItemStack item) {
-        var key = pricing.resolveKey(item);
-        var global = plugin.getConfig().getDouble("dynamic-pricing.base-price",
-                plugin.getConfig().getDouble("default-prices.base-price", 10.0));
-        var base = shopConfig.resolveBasePrice(catalog, key, global);
-        return pricing.quote(key, base, index.getStock(key));
+    public Optional<ResolvedShopItem> resolvePlayerItem(ItemStack item) {
+        return shopConfig.resolvePlayerItem(tradeItem(item), catalog);
+    }
+
+    /** 交易前移除收購箱 GUI 寫入的 lore，避免比對失敗 */
+    private static ItemStack tradeItem(ItemStack item) {
+        if (item == null || item.getType().isAir()) return item;
+        return stripSellGuiLore(item.clone());
+    }
+
+    public boolean canSellToSystem(ItemStack item) {
+        return shopConfig.canPlayerSell(tradeItem(item), catalog);
+    }
+
+    public boolean canBuyFromSystem(ItemStack item) {
+        return shopConfig.canPlayerBuy(tradeItem(item), catalog);
+    }
+
+    public PriceQuote getSellToSystemQuote(ItemStack item) {
+        var tradeItem = tradeItem(item);
+        if (!shopConfig.canPlayerSell(tradeItem, catalog)) {
+            return PriceQuote.unavailable();
+        }
+        var buyQuote = getItemPriceQuote(tradeItem);
+        if (!buyQuote.available()) {
+            return PriceQuote.unavailable();
+        }
+        var sellPrice = Math.max(0.01, buyQuote.price() * getSellRatio());
+        var sellChange = buyQuote.changePercent() * getSellRatio();
+        return new PriceQuote(sellPrice, buyQuote.multiplier() * getSellRatio(), sellChange);
     }
 
     public List<ShopListing> getAllListings() {
@@ -271,23 +305,6 @@ public final class ShopManager {
         }
     }
 
-    public PriceQuote getSellToSystemQuote(ItemStack item) {
-        var buyQuote = getItemPriceQuote(item);
-        var sellPrice = Math.max(0.01, buyQuote.price() * getSellRatio());
-        var sellChange = buyQuote.changePercent() * getSellRatio();
-        return new PriceQuote(sellPrice, buyQuote.multiplier() * getSellRatio(), sellChange);
-    }
-
-    public boolean canSellToSystem(ItemStack item) {
-        if (item == null || item.getType().isAir()) return false;
-        var entry = catalog.findMatching(item);
-        var requireListed = plugin.getConfig().getBoolean("system-shop.require-listed-item", true);
-        if (requireListed) {
-            return shopConfig.isItemSellable(entry);
-        }
-        return entry != null;
-    }
-
     public double calculateStackSellTotal(ItemStack stack) {
         if (!canSellToSystem(stack)) return 0;
         return getSellToSystemQuote(stack).price() * stack.getAmount();
@@ -308,14 +325,16 @@ public final class ShopManager {
         double total = 0;
         int soldCount = 0;
         var rejected = new ArrayList<ItemStack>();
+        var pendingSold = new ArrayList<ItemStack>();
         var sellCounts = new HashMap<String, Integer>();
 
         for (int slot = startSlot; slot <= endSlot; slot++) {
             var stack = depositInv.getItem(slot);
             if (stack == null || stack.getType().isAir()) continue;
 
-            if (!canSellToSystem(stack)) {
-                rejected.add(stripSellGuiLore(stack.clone()));
+            var tradeStack = tradeItem(stack);
+            if (!shopConfig.canPlayerSell(tradeStack, catalog)) {
+                rejected.add(tradeStack);
                 depositInv.setItem(slot, null);
                 continue;
             }
@@ -323,13 +342,16 @@ public final class ShopManager {
             var unitPrice = getSellToSystemQuote(stack).price();
             total += unitPrice * stack.getAmount();
             soldCount += stack.getAmount();
-            var key = pricing.resolveKey(stack);
+            var key = shopConfig.resolvePlayerItem(tradeStack, catalog)
+                    .map(r -> r.entry().getKey())
+                    .orElseGet(() -> pricing.resolveKey(tradeStack));
             sellCounts.merge(key, stack.getAmount(), Integer::sum);
+            pendingSold.add(tradeStack);
             depositInv.setItem(slot, null);
         }
 
         if (total > 0 && !economy.deposit(player, total)) {
-            // 存款失敗時不應發生；保守起見只清空已扣物品（此處物品已從 deposit 移除）
+            rejected.addAll(pendingSold);
             return new SellBatchResult(0, 0, rejected);
         }
 
@@ -396,13 +418,13 @@ public final class ShopManager {
         var hand = player.getInventory().getItemInMainHand();
         if (hand.getType().isAir()) return SellToSystemResult.NO_ITEM;
 
-        var entry = catalog.findMatching(hand);
-        var requireListed = plugin.getConfig().getBoolean("system-shop.require-listed-item", true);
-        if (requireListed && !shopConfig.isItemSellable(entry)) {
+        if (!canSellToSystem(hand)) {
             return SellToSystemResult.NOT_ACCEPTED;
         }
 
-        var key = entry != null ? entry.getKey() : pricing.resolveKey(hand);
+        var resolved = resolvePlayerItem(hand);
+        var key = resolved.map(r -> r.entry().getKey())
+                .orElseGet(() -> pricing.resolveKey(tradeItem(hand)));
         var sellPrice = getSellToSystemQuote(hand).price();
         var toSell = hand.clone();
         toSell.setAmount(1);
@@ -437,12 +459,14 @@ public final class ShopManager {
         var quote = getCatalogPriceQuote(catalogKey);
         double price = quote.price();
         if (!economy.has(buyer, price)) return BuyResult.NO_MONEY;
+        if (!economy.withdraw(buyer, price)) return BuyResult.NO_MONEY;
 
         var item = entry.getTemplate().clone();
         var leftover = buyer.getInventory().addItem(item);
-        if (!leftover.isEmpty()) return BuyResult.NO_SPACE;
-
-        if (!economy.withdraw(buyer, price)) return BuyResult.NO_MONEY;
+        if (!leftover.isEmpty()) {
+            economy.deposit(buyer, price);
+            return BuyResult.NO_SPACE;
+        }
 
         pricing.recordBuy(catalogKey);
         markDirty();
@@ -462,12 +486,14 @@ public final class ShopManager {
 
         double price = getEffectivePrice(listing);
         if (!economy.has(buyer, price)) return BuyResult.NO_MONEY;
+        if (!economy.withdraw(buyer, price)) return BuyResult.NO_MONEY;
 
         var item = listing.getItem();
         var leftover = buyer.getInventory().addItem(item.clone());
-        if (!leftover.isEmpty()) return BuyResult.NO_SPACE;
-
-        if (!economy.withdraw(buyer, price)) return BuyResult.NO_MONEY;
+        if (!leftover.isEmpty()) {
+            economy.deposit(buyer, price);
+            return BuyResult.NO_SPACE;
+        }
 
         var catalogKey = index.getKey(listing.getId());
         if (catalogKey == null) catalogKey = pricing.resolveKey(listing.getItem());

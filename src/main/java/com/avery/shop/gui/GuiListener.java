@@ -147,19 +147,21 @@ public final class GuiListener implements Listener {
             for (var rejected : result.rejected()) {
                 giveItemBack(player, rejected);
             }
-            if (result.hasRejected()) {
-                player.sendMessage("§c" + locale.msg(player, "msg.gui.sell.rejected-return"));
-            }
         }
 
         if (result.soldCount() > 0) {
             player.sendMessage("§a" + locale.msg(player, "msg.gui.sell.confirm-success",
                     shopManager.getEconomy().format(result.totalPaid()),
                     result.soldCount()));
+            if (result.hasRejected()) {
+                player.sendMessage("§c" + locale.msg(player, "msg.gui.sell.rejected-return"));
+            }
             if (shopManager.getPricing().isEnabled()) {
                 player.sendMessage("§7" + locale.msg(player, "msg.sell.price-hint"));
             }
-        } else if (!result.hasRejected()) {
+        } else if (result.hasRejected()) {
+            player.sendMessage("§c" + locale.msg(player, "msg.gui.sell.all-rejected"));
+        } else {
             player.sendMessage("§c" + locale.msg(player, "msg.gui.sell.empty"));
         }
 
