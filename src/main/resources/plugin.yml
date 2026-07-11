@@ -1,0 +1,32 @@
+name: ashop
+version: '${version}'
+main: com.avery.shop.ShopPlugin
+api-version: '26.2'
+description: ashop - 原版全物品商店，分類、多語搜尋、動態定價、NBT 上架購買
+author: Avery
+softdepend:
+  - Vault
+
+commands:
+  shop:
+    description: 開啟商店介面
+    usage: /shop [search <keyword>|sell [price]|price|reload]
+    aliases: [商店, vs]
+  lang:
+    description: 切換語言
+    usage: /lang [語言代碼|list]
+    aliases: [language, 語言]
+
+permissions:
+  shop.use:
+    description: 使用商店
+    default: true
+  shop.sell:
+    description: 上架物品
+    default: true
+  shop.admin:
+    description: 管理商店
+    default: op
+  shop.lang:
+    description: 切換語言
+    default: true

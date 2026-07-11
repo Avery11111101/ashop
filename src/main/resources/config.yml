@@ -1,0 +1,69 @@
+# ashop 設定
+
+languages:
+  default: zh_tw
+  available:
+    - zh_tw
+    - en_us
+
+economy:
+  enabled: true
+  currency-symbol: "$"
+
+default-prices:
+  enabled: true
+  base-price: 10.0
+
+# 動態定價：越買越貴、越賣越便宜、物以稀為貴
+dynamic-pricing:
+  enabled: true
+  base-price: 10.0
+
+  # 每被「購買」1 次，價格上漲基準價的 X%（%）
+  per-buy-increase: 2.0
+
+  # 每被「上架」1 次，價格下跌基準價的 X%（%）
+  per-sell-decrease: 1.5
+
+  # 物以稀為貴：市場庫存每少 1 件（相對 reference-stock），額外上漲 X%（%）
+  per-stock-shortage-increase: 3.0
+
+  # 參考庫存量（用於計算稀缺度，庫存低於此值時漲價）
+  reference-stock: 5
+
+  # 價格上下限（基準價倍率）
+  min-multiplier: 0.2
+  max-multiplier: 5.0
+
+  # 套用範圍
+  system-shop: true
+  player-listings: false
+
+  # /shop sell 不帶價格時，自動使用建議動態價
+  auto-suggest-price: true
+
+gui:
+  rows: 6
+  items-per-page: 45
+
+categories:
+  blocks: true
+  tools: true
+  weapons: true
+  armor: true
+  food: true
+  potions: true
+  enchanted_books: true
+  redstone: true
+  transport: true
+  decorations: true
+  spawn_eggs: true
+  misc: true
+
+search:
+  min-length: 1
+  max-results: 100
+
+storage:
+  listings-file: listings.yml
+  market-file: market-data.yml
