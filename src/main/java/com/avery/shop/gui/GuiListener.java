@@ -309,6 +309,7 @@ public final class GuiListener implements Listener {
             session.setShopHolder(null);
             player.closeInventory();
             player.sendMessage("§e" + locale.msg(player, "msg.search.prompt"));
+            player.sendMessage("§e(英文或物品ID比較容易搜尋到，中文查不到不妨用物品ID)");
             player.sendMessage("§7" + locale.msg(player, "msg.search.example"));
             return;
         }

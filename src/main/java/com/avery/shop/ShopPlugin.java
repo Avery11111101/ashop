@@ -11,6 +11,7 @@ import com.avery.shop.shop.AsyncSaveService;
 import com.avery.shop.shop.ShopAdminService;
 import com.avery.shop.shop.ShopConfigService;
 import com.avery.shop.shop.ShopManager;
+import com.avery.shop.util.DiscordWebhookService;
 import org.bukkit.plugin.java.JavaPlugin;
 
 public final class ShopPlugin extends JavaPlugin {
@@ -22,10 +23,13 @@ public final class ShopPlugin extends JavaPlugin {
     private ShopAdminService shopAdminService;
     private EconomyService economyService;
     private DynamicPricingService pricingService;
+    private DiscordWebhookService discordWebhookService;
 
     @Override
     public void onEnable() {
         saveDefaultConfig();
+        getConfig().options().copyDefaults(true);
+        saveConfig();
 
         localeService = new LocaleService(this);
         localeService.load();
@@ -46,6 +50,8 @@ public final class ShopPlugin extends JavaPlugin {
                     + seedResult.items() + " 項物品");
         }
         shopAdminService = new ShopAdminService(this, shopConfigService);
+
+        discordWebhookService = new DiscordWebhookService(this);
 
         shopManager = new ShopManager(this, itemCatalog, economyService, pricingService, shopConfigService);
         var asyncSave = new AsyncSaveService(this, shopManager);
@@ -104,5 +110,9 @@ public final class ShopPlugin extends JavaPlugin {
 
     public ShopAdminService getShopAdminService() {
         return shopAdminService;
+    }
+
+    public DiscordWebhookService getDiscordWebhookService() {
+        return discordWebhookService;
     }
 }

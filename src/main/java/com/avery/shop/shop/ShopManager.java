@@ -403,6 +403,10 @@ public final class ShopManager {
         }
         if (soldCount > 0) {
             markDirty();
+            plugin.getDiscordWebhookService().sendMessage(
+                String.format("玩家 **%s** 透過收購箱賣給系統 %d 個物品，共獲得 **%s**",
+                    player.getName(), soldCount, economy.format(total))
+            );
         }
 
         return new SellBatchResult(total, soldCount, rejected);
@@ -484,6 +488,10 @@ public final class ShopManager {
 
         pricing.recordSell(key, quoteStock(key));
         markDirty();
+        plugin.getDiscordWebhookService().sendMessage(
+            String.format("玩家 **%s** 賣給系統 1 個物品 (%s)，獲得 **%s**",
+                player.getName(), key, economy.format(sellPrice))
+        );
         return SellToSystemResult.SUCCESS;
     }
 
@@ -528,6 +536,10 @@ public final class ShopManager {
             pricing.recordBuy(catalogKey, stock);
         }
         markDirty();
+        plugin.getDiscordWebhookService().sendMessage(
+            String.format("玩家 **%s** 從系統購買了 %d 個物品 (%s)，花費了 **%s**",
+                buyer.getName(), amount, catalogKey, economy.format(totalPrice))
+        );
         return BuyResult.SUCCESS;
     }
 
@@ -581,6 +593,11 @@ public final class ShopManager {
             markDirty();
             var stock = index.getStock(catalogKey);
             pricing.recordBuy(catalogKey, stock);
+
+            plugin.getDiscordWebhookService().sendMessage(
+                String.format("玩家 **%s** 購買了上架物品 (賣家: **%s**, 物品: %s)，花費了 **%s**",
+                    buyer.getName(), listing.getSellerName(), catalogKey, economy.format(price))
+            );
 
             if (!listing.getSellerId().equals(SYSTEM_SELLER_ID)) {
                 economy.deposit(listing.getSellerId(), price);

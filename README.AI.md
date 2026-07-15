@@ -306,6 +306,32 @@ ShopPlugin
 2. 透過 `slotSubcategoryMap` 來建立自訂 slot 與類別 ID 的對應。
 3. `GuiListener.java`：在 `handleMainClick` 內改用 `slotSubcategoryMap` 解析玩家點擊的類別，並同時補上支援管理員 Shift+右鍵 編輯主分類的邏輯，修正主選單原本不支援分類設定 GUI 的問題。
 
+### 2026-07-15 搜尋加入提示與防 Discord 同步 (v1.6.7)
+
+**需求 (Avery)**：
+1. 移除先前鐵砧介面的作法，改回原版的聊天室搜尋輸入。
+2. 加入提示字樣，提醒使用者「英文或物品ID比較容易搜尋到，中文查不到不妨用物品ID」。
+3. 確保玩家在聊天室的搜尋文字不會被其他玩家看到，也不會同步到 Discord。
+4. 版本號保持不變。
+
+**實作**：
+1. `build.gradle.kts`：移除 `com.gradleup.shadow` 插件與 `net.wesjd:anvilgui` 依賴，還原預設編譯設定，解決 Java 25 造成的 build 錯誤。
+2. `GuiListener.java`：還原 `awaitingSearch` 聊天室攔截邏輯，並在點擊搜尋按鈕時加入黃色字體的提示：「(英文或物品ID比較容易搜尋到，中文查不到不妨用物品ID)」。
+3. `ShopCommand.java`：當輸入 `/shop search` 缺少參數時，也補充上述的提示文字。
+4. **防外流機制**：在 `AsyncChatEvent` 中使用 `EventPriority.LOWEST` 加上 `event.setCancelled(true)`。這能確保訊息最優先被攔截並取消廣播，Vanilla 與多數 Discord 橋接插件 (如 DiscordSRV) 都會無視已被取消的聊天事件，避免玩家的搜尋指令外流。
+
+### 2026-07-15 實裝 Discord Webhook 交易紀錄推播 (v1.6.7)
+
+**需求 (Avery)**：
+1. 有玩家販賣或買入時，都要可以將紀錄傳送到設定的 Discord webhook。
+
+**實作**：
+1. 新增 `DiscordWebhookService`，處理非同步 POST 請求以發送 JSON payload 到 Discord webhook URL。
+2. 在 `config.yml` 中新增 `discord-webhook.enabled` 和 `discord-webhook.url` 設定項。
+3. 於 `ShopPlugin.java` 內初始化 `DiscordWebhookService` 並透過 getter 開放存取。
+4. 在 `ShopManager.java` 內各交易邏輯節點（`sellDepositToSystem`、`sellToSystem`、`buyCatalogEntry`、`buyListing`）觸發推播，以粗體 Markdown 語法記錄玩家 ID、物品資訊與交易金額。
+5. 在 `ShopPlugin.java` 的 `onEnable()` 中加入 `getConfig().options().copyDefaults(true); saveConfig();`，確保舊版設定檔能自動補齊這個新區塊。
+
 ## 待擴充
 
 - 可匯入完整 Minecraft zh_tw.json 擴充翻譯覆蓋率

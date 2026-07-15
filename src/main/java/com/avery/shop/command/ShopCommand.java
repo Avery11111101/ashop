@@ -75,6 +75,7 @@ public final class ShopCommand implements CommandExecutor, TabCompleter {
             case "search", "搜尋" -> {
                 if (args.length < 2) {
                     player.sendMessage("§c" + locale.msg(player, "msg.cmd.usage.search"));
+                    player.sendMessage("§e(英文或物品ID比較容易搜尋到，中文查不到不妨用物品ID)");
                     return true;
                 }
                 var query = String.join(" ", Arrays.copyOfRange(args, 1, args.length));
