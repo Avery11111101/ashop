@@ -107,7 +107,7 @@ public final class GuiListener implements Listener {
         if (slot < 0 || slot >= event.getView().getTopInventory().getSize()) return;
 
         switch (session.getViewType()) {
-            case MAIN -> handleMainClick(player, session, slot);
+            case MAIN -> handleMainClick(player, session, slot, event);
             case CATEGORY, SEARCH, LISTINGS -> handleListingClick(player, session, slot, event);
             default -> {}
         }
@@ -301,7 +301,7 @@ public final class GuiListener implements Listener {
                 player.getWorld().dropItemNaturally(player.getLocation(), stack));
     }
 
-    private void handleMainClick(Player player, GuiSession session, int slot) {
+    private void handleMainClick(Player player, GuiSession session, int slot, InventoryClickEvent event) {
         var locale = shopManager.getPlugin().getLocaleService();
 
         if (slot == ShopGui.getSearchSlot()) {
@@ -332,17 +332,17 @@ public final class GuiListener implements Listener {
             return;
         }
 
-        int catIndex = 0;
-        for (var category : shopManager.getShopConfig().getCategories()) {
-            if (!category.isEnabled()) continue;
-            if (!shopManager.isCategoryVisible(category.getId())) continue;
-            if (catIndex == slot) {
-                session.setCategoryId(category.getId());
-                session.setPage(0);
-                ShopGui.openCategory(shopManager, player, session);
+        var categoryId = session.getSlotSubcategoryMap().get(slot);
+        if (categoryId != null) {
+            if (player.hasPermission("shop.admin") && isAdminEditClick(event)) {
+                session.setReturnViewType(session.getViewType());
+                ShopAdminGui.openAdminCategoryEdit(shopManager, player, session, categoryId);
                 return;
             }
-            catIndex++;
+            session.setCategoryId(categoryId);
+            session.setPage(0);
+            ShopGui.openCategory(shopManager, player, session);
+            return;
         }
     }
 

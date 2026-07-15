@@ -296,6 +296,16 @@ ShopPlugin
 
 **涉及檔案**：`DynamicPricingService`、`MarketData`、`MarketStorage`、`PriceQuote`、`ShopManager`、`ShopGui`、`ShopCommand`、語系檔、`config.yml`
 
+### 2026-07-15 分類置中排版 (v1.6.7)
+
+**需求 (Avery)**：
+主選單與子分類選單中的分類圖示需置中排版（依據提供之圖片，將分類排列在中間的 5x4 區塊）。
+
+**實作**：
+1. `ShopGui.java`：在 `openMain` 和 `openSubcategoryPage` 中，將原先依序遞增的 `slot` 演算法，改為以置中 5 行 (columns 2~6) 的公式：`int slot = (1 + slotIndex / 5) * 9 + 2 + (slotIndex % 5)`。
+2. 透過 `slotSubcategoryMap` 來建立自訂 slot 與類別 ID 的對應。
+3. `GuiListener.java`：在 `handleMainClick` 內改用 `slotSubcategoryMap` 解析玩家點擊的類別，並同時補上支援管理員 Shift+右鍵 編輯主分類的邏輯，修正主選單原本不支援分類設定 GUI 的問題。
+
 ## 待擴充
 
 - 可匯入完整 Minecraft zh_tw.json 擴充翻譯覆蓋率

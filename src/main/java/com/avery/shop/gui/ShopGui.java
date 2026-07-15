@@ -64,10 +64,16 @@ public final class ShopGui {
                         .color(NamedTextColor.GOLD).decorate(TextDecoration.BOLD),
                 session);
 
-        int slot = 0;
+        int slotIndex = 0;
         for (var category : manager.getShopConfig().getCategories()) {
             if (!category.isEnabled()) continue;
             if (!manager.isCategoryVisible(category.getId())) continue;
+
+            int row = 1 + slotIndex / 5;
+            int col = 2 + (slotIndex % 5);
+            int slot = row * 9 + col;
+            
+            session.getSlotSubcategoryMap().put(slot, category.getId());
 
             var icon = new ItemStack(category.getIcon());
             var meta = icon.getItemMeta();
@@ -77,7 +83,8 @@ public final class ShopGui {
             int count = manager.getCategoryDisplayCount(category.getId());
             meta.lore(buildSubcategoryLore(manager, player, locale, category.getId()));
             icon.setItemMeta(meta);
-            inv.setItem(slot++, icon);
+            inv.setItem(slot, icon);
+            slotIndex++;
         }
 
         inv.setItem(SEARCH_SLOT, button(
@@ -268,10 +275,14 @@ public final class ShopGui {
                 Component.text(title).color(NamedTextColor.GOLD).decorate(TextDecoration.BOLD),
                 session);
 
-        int slot = 0;
+        int slotIndex = 0;
         for (var category : children) {
             if (!category.isEnabled()) continue;
             if (!manager.isCategoryVisible(category.getId())) continue;
+
+            int row = 1 + slotIndex / 5;
+            int col = 2 + (slotIndex % 5);
+            int slot = row * 9 + col;
 
             session.getSlotSubcategoryMap().put(slot, category.getId());
 
@@ -283,7 +294,8 @@ public final class ShopGui {
             int count = manager.getCategoryDisplayCount(category.getId());
             meta.lore(buildSubcategoryLore(manager, player, locale, category.getId()));
             icon.setItemMeta(meta);
-            inv.setItem(slot++, icon);
+            inv.setItem(slot, icon);
+            slotIndex++;
         }
 
         inv.setItem(BACK_SLOT, button(Material.BARRIER, locale.msg(player, "msg.gui.back")));

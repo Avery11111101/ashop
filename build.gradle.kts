@@ -3,7 +3,7 @@ plugins {
 }
 
 group = "com.avery"
-version = "1.6.6"
+version = "1.6.7"
 
 repositories {
     mavenCentral()
