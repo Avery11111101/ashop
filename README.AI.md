@@ -332,6 +332,39 @@ ShopPlugin
 4. 在 `ShopManager.java` 內各交易邏輯節點（`sellDepositToSystem`、`sellToSystem`、`buyCatalogEntry`、`buyListing`）觸發推播，以粗體 Markdown 語法記錄玩家 ID、物品資訊與交易金額。
 5. 在 `ShopPlugin.java` 的 `onEnable()` 中加入 `getConfig().options().copyDefaults(true); saveConfig();`，確保舊版設定檔能自動補齊這個新區塊。
 
+### 2026-07-15 修復預設商店生存過濾與耐久度收購價 (v1.6.8)
+
+**需求 (Avery)**：
+1. 預設的商店為何可以取得生存不能獲得的兩種測試方塊（如 Jigsaw/Structure Block），儘管已開啟生存避開設定。
+2. 賣物品的時候，耐久度有減少就該依原本收購價的一半，剩下的一半再根據使用的剩餘耐久度去給予金錢。
+
+**根因分析與實作**：
+1. **生存過濾漏套用**：`ShopManager.seedDefaultListings()` 在非 catalog 模式生成預設商店上架清單時，迴圈遍歷 `catalog.getAll()` 卻遺漏了 `SurvivalObtainability.isObtainableInSurvival` 檢查。
+   - **修復**：在迴圈內新增判斷，若 `shop.survival-only-defaults` 為 true 則跳過非生存可取得物品。
+2. **耐久度收購價未遞減**：原本的 `getSellToSystemQuote()` 計算收購價時，直接回傳 `buyQuote.price() * ratio`，未將工具損耗納入計算。
+   - **修復**：檢查物品的 `ItemMeta` 是否實作 `Damageable` 且包含耐久度損耗。計算公式修改為：`基礎收購價 / 2.0 + (基礎收購價 / 2.0) * (剩餘耐久 / 最大耐久)`，確保最低有 50% 殘值並依比例浮動。
+
+### 2026-07-16 優化 Discord Webhook 交易紀錄排版與中文顯示 (v1.6.9)
+
+**需求 (Avery)**：
+1. 傳送到 Discord 的 log 要更好閱讀。
+2. 物品名稱需顯示為中文。
+3. 原本的原始資訊需保留並標記在訊息最底下。
+
+**實作**：
+1. `ShopManager.java` 新增 `getChineseItemName()` 輔助方法：統一呼叫 `plugin.getLocaleService().getDisplayName("zh_tw", ...)` 取得物品之中文名稱與變體標籤。
+2. `ShopManager.java` 新增 `buildDiscordMessage()` 輔助方法：產生包含標題、玩家、金額等 Markdown 語法格式的易讀文字，並將傳入的原始 JSON/YAML 資訊放入最底部的 Markdown 程式碼區塊內。
+3. 將原本在 `sellDepositToSystem`、`sellToSystem`、`buyCatalogEntry`、`buyListing` 內的 `plugin.getDiscordWebhookService().sendMessage()` 呼叫，全部改用新建立的 `buildDiscordMessage()` 進行建構。
+
+### 2026-07-16 過濾 Paper 1.21.x 新增的測試方塊 (v1.6.9)
+
+**需求 (Avery)**：
+1. `minecraft:test_block` 和 `minecraft:test_instance_block` 等開發測試方塊仍然出現在商店中，這些在生存模式中無法取得，應該刪除。
+
+**根因分析與實作**：
+1. **Material Enum 變更**：Paper 1.21+ 將 Mojang 內部的測試用方塊（如 `TEST_BLOCK`, `TEST_INSTANCE_BLOCK` 等）暴露在 API 的 `Material` enum 中，導致原本的黑名單無法攔截。
+   - **修復**：在 `SurvivalObtainability.java` 的 `isObtainableInSurvival` 方法中新增 `name.contains("TEST")` 的判斷條件，攔截所有這類內部測試用的方塊，避免它們進入商店商品名單。
+
 ## 待擴充
 
 - 可匯入完整 Minecraft zh_tw.json 擴充翻譯覆蓋率

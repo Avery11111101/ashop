@@ -68,6 +68,9 @@ public final class SurvivalObtainability {
         if (name.contains("STRUCTURE_VOID") || name.equals("STRUCTURE_BLOCK") || name.equals("JIGSAW")) {
             return false;
         }
+        if (name.contains("TEST")) {
+            return false;
+        }
 
         // 生怪蛋變體（部分版本 meta 標記）
         if (entry != null && entry.getTemplate().hasItemMeta()) {

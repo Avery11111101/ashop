@@ -154,7 +154,12 @@ public final class ShopManager {
         var systemName = plugin.getLocaleService().msg(
                 plugin.getLocaleService().getDefaultLocale(), "msg.system.shop-name");
 
+        boolean survivalOnly = plugin.getConfig().getBoolean("shop.survival-only-defaults", true);
+
         for (var entry : catalog.getAll()) {
+            if (survivalOnly && !com.avery.shop.catalog.SurvivalObtainability.isObtainableInSurvival(entry)) {
+                continue;
+            }
             var item = entry.getTemplate();
             item.setAmount(1);
             var listing = new ShopListing(
@@ -259,7 +264,20 @@ public final class ShopManager {
             return PriceQuote.unavailable();
         }
         var ratio = resolveSellRatio(tradeItem);
-        var sellPrice = Math.max(0.01, buyQuote.price() * ratio);
+        var baseSellPrice = buyQuote.price() * ratio;
+        var sellPrice = baseSellPrice;
+        
+        var meta = tradeItem.getItemMeta();
+        if (meta instanceof org.bukkit.inventory.meta.Damageable damageable) {
+            int maxDurability = tradeItem.getType().getMaxDurability();
+            if (maxDurability > 0 && damageable.getDamage() > 0) {
+                double remainingDurability = Math.max(0, maxDurability - damageable.getDamage());
+                double durabilityRatio = remainingDurability / maxDurability;
+                sellPrice = (baseSellPrice / 2.0) + ((baseSellPrice / 2.0) * durabilityRatio);
+            }
+        }
+        
+        sellPrice = Math.max(0.01, sellPrice);
         var sellChange = buyQuote.changePercent() * ratio;
         return new PriceQuote(sellPrice, buyQuote.multiplier() * ratio, sellChange, buyQuote.cap());
     }
@@ -403,10 +421,21 @@ public final class ShopManager {
         }
         if (soldCount > 0) {
             markDirty();
-            plugin.getDiscordWebhookService().sendMessage(
-                String.format("玩家 **%s** 透過收購箱賣給系統 %d 個物品，共獲得 **%s**",
-                    player.getName(), soldCount, economy.format(total))
-            );
+            
+            List<String> itemsList = new ArrayList<>();
+            StringBuilder rawItems = new StringBuilder();
+            for (var entry : sellCounts.entrySet()) {
+                String catKey = entry.getKey();
+                itemsList.add("**" + getChineseItemName(catKey) + "** x " + entry.getValue());
+                rawItems.append(catKey).append(": ").append(entry.getValue()).append(", ");
+            }
+            
+            plugin.getDiscordWebhookService().sendMessage(buildDiscordMessage(
+                "🛍️ 收購箱大量販售",
+                player.getName(), null, economy.format(total), null,
+                itemsList,
+                "Action: SellBox\nPlayer: " + player.getName() + "\nTotalEarned: " + total + "\nTotalItems: " + soldCount + "\nItems: {" + rawItems.toString() + "}"
+            ));
         }
 
         return new SellBatchResult(total, soldCount, rejected);
@@ -488,10 +517,12 @@ public final class ShopManager {
 
         pricing.recordSell(key, quoteStock(key));
         markDirty();
-        plugin.getDiscordWebhookService().sendMessage(
-            String.format("玩家 **%s** 賣給系統 1 個物品 (%s)，獲得 **%s**",
-                player.getName(), key, economy.format(sellPrice))
-        );
+            plugin.getDiscordWebhookService().sendMessage(buildDiscordMessage(
+                "🛒 單件物品販售",
+                player.getName(), null, economy.format(sellPrice), null,
+                List.of("**" + getChineseItemName(key) + "** x 1"),
+                "Action: SellSingle\nPlayer: " + player.getName() + "\nEarned: " + sellPrice + "\nItemKey: " + key
+            ));
         return SellToSystemResult.SUCCESS;
     }
 
@@ -536,10 +567,12 @@ public final class ShopManager {
             pricing.recordBuy(catalogKey, stock);
         }
         markDirty();
-        plugin.getDiscordWebhookService().sendMessage(
-            String.format("玩家 **%s** 從系統購買了 %d 個物品 (%s)，花費了 **%s**",
-                buyer.getName(), amount, catalogKey, economy.format(totalPrice))
-        );
+        plugin.getDiscordWebhookService().sendMessage(buildDiscordMessage(
+            "🛍️ 系統商店購買",
+            buyer.getName(), null, null, economy.format(totalPrice),
+            List.of("**" + getChineseItemName(catalogKey) + "** x " + amount),
+            "Action: BuySystem\nPlayer: " + buyer.getName() + "\nCost: " + totalPrice + "\nAmount: " + amount + "\nItemKey: " + catalogKey
+        ));
         return BuyResult.SUCCESS;
     }
 
@@ -594,10 +627,12 @@ public final class ShopManager {
             var stock = index.getStock(catalogKey);
             pricing.recordBuy(catalogKey, stock);
 
-            plugin.getDiscordWebhookService().sendMessage(
-                String.format("玩家 **%s** 購買了上架物品 (賣家: **%s**, 物品: %s)，花費了 **%s**",
-                    buyer.getName(), listing.getSellerName(), catalogKey, economy.format(price))
-            );
+            plugin.getDiscordWebhookService().sendMessage(buildDiscordMessage(
+                "🏪 玩家商店購買",
+                buyer.getName(), listing.getSellerName(), null, economy.format(price),
+                List.of("**" + getChineseItemName(catalogKey) + "** x " + listing.getItem().getAmount()),
+                "Action: BuyPlayerListing\nBuyer: " + buyer.getName() + "\nSeller: " + listing.getSellerName() + "\nCost: " + price + "\nItemKey: " + catalogKey + "\nAmount: " + listing.getItem().getAmount()
+            ));
 
             if (!listing.getSellerId().equals(SYSTEM_SELLER_ID)) {
                 economy.deposit(listing.getSellerId(), price);
@@ -659,5 +694,47 @@ public final class ShopManager {
 
     public boolean isCategoryVisible(String categoryId) {
         return shopConfig.isCategoryVisible(categoryId);
+    }
+    
+    private String getChineseItemName(String catalogKey) {
+        var entry = catalog.getByKey(catalogKey);
+        String locale = "zh_tw";
+        if (entry != null) {
+            String base = plugin.getLocaleService().getDisplayName(locale, entry.getTemplate().getType());
+            if (entry.getDisplayTag() != null) {
+                return base + " " + plugin.getLocaleService().getVariantName(locale, entry.getDisplayTag());
+            }
+            return base;
+        }
+        return catalogKey;
+    }
+
+    private String buildDiscordMessage(String title, String player, String seller, String earned, String cost, List<String> items, String rawJson) {
+        StringBuilder sb = new StringBuilder();
+        sb.append("**").append(title).append("**\n");
+        if (player != null) {
+            sb.append("> 👤 玩家: `").append(player).append("`\n");
+        }
+        if (seller != null) {
+            sb.append("> 🏪 賣家: `").append(seller).append("`\n");
+        }
+        if (earned != null) {
+            sb.append("> 💰 獲得: `").append(earned).append("`\n");
+        }
+        if (cost != null) {
+            sb.append("> 💸 花費: `").append(cost).append("`\n");
+        }
+        if (items != null && !items.isEmpty()) {
+            sb.append("\n**📋 物品明細:**\n");
+            for (String item : items) {
+                sb.append("• ").append(item).append("\n");
+            }
+        }
+        sb.append("\n_ _\n");
+        sb.append("`[原始資訊]`\n");
+        sb.append("```yaml\n");
+        sb.append(rawJson).append("\n");
+        sb.append("```");
+        return sb.toString();
     }
 }
