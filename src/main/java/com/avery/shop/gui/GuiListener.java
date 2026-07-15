@@ -1,7 +1,7 @@
 package com.avery.shop.gui;
 
 import com.avery.shop.shop.ShopManager;
-import io.papermc.paper.event.player.AsyncChatEvent;
+import org.bukkit.event.player.AsyncPlayerChatEvent;
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
@@ -733,14 +733,15 @@ public final class GuiListener implements Listener {
     }
 
     @EventHandler(priority = EventPriority.LOWEST)
-    public void onChat(AsyncChatEvent event) {
+    public void onChat(AsyncPlayerChatEvent event) {
         var player = event.getPlayer();
         var locale = shopManager.getPlugin().getLocaleService();
 
         var adminPrompt = awaitingAdminChat.remove(player.getUniqueId());
         if (adminPrompt != null) {
             event.setCancelled(true);
-            var input = PlainTextComponentSerializer.plainText().serialize(event.message()).trim();
+            event.getRecipients().clear();
+            var input = event.getMessage().trim();
             if (input.equalsIgnoreCase("cancel") || input.equalsIgnoreCase("取消")) {
                 shopManager.getPlugin().getServer().getScheduler().runTask(shopManager.getPlugin(), () -> {
                     var session = sessions.get(player.getUniqueId());
@@ -761,7 +762,8 @@ public final class GuiListener implements Listener {
 
         if (awaitingBuyQuantity.remove(player.getUniqueId()) != null) {
             event.setCancelled(true);
-            var input = PlainTextComponentSerializer.plainText().serialize(event.message()).trim();
+            event.getRecipients().clear();
+            var input = event.getMessage().trim();
             if (input.equalsIgnoreCase("cancel") || input.equalsIgnoreCase("取消")) {
                 shopManager.getPlugin().getServer().getScheduler().runTask(shopManager.getPlugin(), () -> {
                     var session = sessions.get(player.getUniqueId());
@@ -778,7 +780,8 @@ public final class GuiListener implements Listener {
         if (!awaitingSearch.containsKey(player.getUniqueId())) return;
 
         event.setCancelled(true);
-        var query = PlainTextComponentSerializer.plainText().serialize(event.message()).trim();
+        event.getRecipients().clear();
+        var query = event.getMessage().trim();
 
         if (query.isEmpty()) {
             player.sendMessage("§c" + locale.msg(player, "msg.search.empty"));

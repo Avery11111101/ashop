@@ -318,7 +318,7 @@ ShopPlugin
 1. `build.gradle.kts`：移除 `com.gradleup.shadow` 插件與 `net.wesjd:anvilgui` 依賴，還原預設編譯設定，解決 Java 25 造成的 build 錯誤。
 2. `GuiListener.java`：還原 `awaitingSearch` 聊天室攔截邏輯，並在點擊搜尋按鈕時加入黃色字體的提示：「(英文或物品ID比較容易搜尋到，中文查不到不妨用物品ID)」。
 3. `ShopCommand.java`：當輸入 `/shop search` 缺少參數時，也補充上述的提示文字。
-4. **防外流機制**：在 `AsyncChatEvent` 中使用 `EventPriority.LOWEST` 加上 `event.setCancelled(true)`。這能確保訊息最優先被攔截並取消廣播，Vanilla 與多數 Discord 橋接插件 (如 DiscordSRV) 都會無視已被取消的聊天事件，避免玩家的搜尋指令外流。
+4. **防外流機制修復**：原本使用 Paper 的 `AsyncChatEvent` 可能因為相容性原因被其他舊版插件 (如 DiscordSRV) 讀取。為了確保 100% 攔截，已改為監聽 Bukkit 的 `AsyncPlayerChatEvent`，除了呼叫 `event.setCancelled(true)` 外，還強制執行 `event.getRecipients().clear()` 清空所有接收者。這能徹底防止搜尋字串在伺服器聊天室出現，以及防止被跨服/Discord 插件同步出去。
 
 ### 2026-07-15 實裝 Discord Webhook 交易紀錄推播 (v1.6.7)
 
