@@ -430,12 +430,13 @@ public final class ShopManager {
                 rawItems.append(catKey).append(": ").append(entry.getValue()).append(", ");
             }
             
-            plugin.getDiscordWebhookService().sendMessage(buildDiscordMessage(
+            sendDiscordEmbed(
                 "🛍️ 收購箱大量販售",
                 player.getName(), null, economy.format(total), null,
                 itemsList,
-                "Action: SellBox\nPlayer: " + player.getName() + "\nTotalEarned: " + total + "\nTotalItems: " + soldCount + "\nItems: {" + rawItems.toString() + "}"
-            ));
+                "Action: SellBox\nPlayer: " + player.getName() + "\nTotalEarned: " + total + "\nTotalItems: " + soldCount + "\nItems: {" + rawItems.toString() + "}",
+                65280 // Green
+            );
         }
 
         return new SellBatchResult(total, soldCount, rejected);
@@ -517,12 +518,13 @@ public final class ShopManager {
 
         pricing.recordSell(key, quoteStock(key));
         markDirty();
-            plugin.getDiscordWebhookService().sendMessage(buildDiscordMessage(
-                "🛒 單件物品販售",
-                player.getName(), null, economy.format(sellPrice), null,
-                List.of("**" + getChineseItemName(key) + "** x 1"),
-                "Action: SellSingle\nPlayer: " + player.getName() + "\nEarned: " + sellPrice + "\nItemKey: " + key
-            ));
+        sendDiscordEmbed(
+            "🛒 單件物品販售",
+            player.getName(), null, economy.format(sellPrice), null,
+            List.of("**" + getChineseItemName(key) + "** x 1"),
+            "Action: SellSingle\nPlayer: " + player.getName() + "\nEarned: " + sellPrice + "\nItemKey: " + key,
+            65280 // Green
+        );
         return SellToSystemResult.SUCCESS;
     }
 
@@ -567,12 +569,13 @@ public final class ShopManager {
             pricing.recordBuy(catalogKey, stock);
         }
         markDirty();
-        plugin.getDiscordWebhookService().sendMessage(buildDiscordMessage(
+        sendDiscordEmbed(
             "🛍️ 系統商店購買",
             buyer.getName(), null, null, economy.format(totalPrice),
             List.of("**" + getChineseItemName(catalogKey) + "** x " + amount),
-            "Action: BuySystem\nPlayer: " + buyer.getName() + "\nCost: " + totalPrice + "\nAmount: " + amount + "\nItemKey: " + catalogKey
-        ));
+            "Action: BuySystem\nPlayer: " + buyer.getName() + "\nCost: " + totalPrice + "\nAmount: " + amount + "\nItemKey: " + catalogKey,
+            16753920 // Orange
+        );
         return BuyResult.SUCCESS;
     }
 
@@ -627,12 +630,13 @@ public final class ShopManager {
             var stock = index.getStock(catalogKey);
             pricing.recordBuy(catalogKey, stock);
 
-            plugin.getDiscordWebhookService().sendMessage(buildDiscordMessage(
+            sendDiscordEmbed(
                 "🏪 玩家商店購買",
                 buyer.getName(), listing.getSellerName(), null, economy.format(price),
                 List.of("**" + getChineseItemName(catalogKey) + "** x " + listing.getItem().getAmount()),
-                "Action: BuyPlayerListing\nBuyer: " + buyer.getName() + "\nSeller: " + listing.getSellerName() + "\nCost: " + price + "\nItemKey: " + catalogKey + "\nAmount: " + listing.getItem().getAmount()
-            ));
+                "Action: BuyPlayerListing\nBuyer: " + buyer.getName() + "\nSeller: " + listing.getSellerName() + "\nCost: " + price + "\nItemKey: " + catalogKey + "\nAmount: " + listing.getItem().getAmount(),
+                255 // Blue
+            );
 
             if (!listing.getSellerId().equals(SYSTEM_SELLER_ID)) {
                 economy.deposit(listing.getSellerId(), price);
@@ -709,32 +713,69 @@ public final class ShopManager {
         return catalogKey;
     }
 
-    private String buildDiscordMessage(String title, String player, String seller, String earned, String cost, List<String> items, String rawJson) {
+    private boolean appendDiscordField(StringBuilder sb, String name, String value, boolean inline, boolean first) {
+        if (!first) sb.append(",");
+        sb.append("{\"name\": \"").append(plugin.getDiscordWebhookService().escapeJson(name))
+          .append("\", \"value\": \"").append(plugin.getDiscordWebhookService().escapeJson(value))
+          .append("\", \"inline\": ").append(inline).append("}");
+        return false;
+    }
+
+    private void sendDiscordEmbed(String title, String player, String seller, String earned, String cost, List<String> items, String rawJson, int color) {
         StringBuilder sb = new StringBuilder();
-        sb.append("**").append(title).append("**\n");
+        sb.append("{");
+        sb.append("\"embeds\": [{");
+        sb.append("\"title\": \"").append(plugin.getDiscordWebhookService().escapeJson(title)).append("\",");
+        sb.append("\"color\": ").append(color).append(",");
+        sb.append("\"fields\": [");
+        
+        boolean first = true;
         if (player != null) {
-            sb.append("> 👤 玩家: `").append(player).append("`\n");
+            first = appendDiscordField(sb, "👤 玩家", "`" + player + "`", true, first);
         }
         if (seller != null) {
-            sb.append("> 🏪 賣家: `").append(seller).append("`\n");
+            first = appendDiscordField(sb, "🏪 賣家", "`" + seller + "`", true, first);
         }
         if (earned != null) {
-            sb.append("> 💰 獲得: `").append(earned).append("`\n");
+            first = appendDiscordField(sb, "💰 獲得", "`" + earned + "`", true, first);
         }
         if (cost != null) {
-            sb.append("> 💸 花費: `").append(cost).append("`\n");
+            first = appendDiscordField(sb, "💸 花費", "`" + cost + "`", true, first);
         }
+        
         if (items != null && !items.isEmpty()) {
-            sb.append("\n**📋 物品明細:**\n");
+            StringBuilder currentChunk = new StringBuilder();
+            int part = 1;
             for (String item : items) {
-                sb.append("• ").append(item).append("\n");
+                String line = "• " + item + "\n";
+                if (currentChunk.length() + line.length() > 950) {
+                    first = appendDiscordField(sb, "📋 物品明細" + (part > 1 ? " (" + part + ")" : ""), currentChunk.toString(), false, first);
+                    currentChunk.setLength(0);
+                    part++;
+                }
+                currentChunk.append(line);
+            }
+            if (currentChunk.length() > 0) {
+                first = appendDiscordField(sb, "📋 物品明細" + (part > 1 ? " (" + part + ")" : ""), currentChunk.toString(), false, first);
             }
         }
-        sb.append("\n_ _\n");
-        sb.append("`[原始資訊]`\n");
-        sb.append("```yaml\n");
-        sb.append(rawJson).append("\n");
-        sb.append("```");
-        return sb.toString();
+        
+        if (rawJson != null) {
+            String truncatedRawJson = rawJson;
+            if (rawJson.length() > 900) {
+                truncatedRawJson = rawJson.substring(0, 900) + "\n... (過長已截斷，完整請見附檔)";
+            }
+            appendDiscordField(sb, "原始資訊", "```yaml\n" + truncatedRawJson + "\n```", false, first);
+        }
+        
+        sb.append("]");
+        sb.append("}]");
+        sb.append("}");
+
+        if (rawJson != null && rawJson.length() > 900) {
+            plugin.getDiscordWebhookService().sendPayloadWithFile(sb.toString(), "raw_data.txt", rawJson);
+        } else {
+            plugin.getDiscordWebhookService().sendPayload(sb.toString());
+        }
     }
 }

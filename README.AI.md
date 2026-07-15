@@ -344,17 +344,19 @@ ShopPlugin
 2. **耐久度收購價未遞減**：原本的 `getSellToSystemQuote()` 計算收購價時，直接回傳 `buyQuote.price() * ratio`，未將工具損耗納入計算。
    - **修復**：檢查物品的 `ItemMeta` 是否實作 `Damageable` 且包含耐久度損耗。計算公式修改為：`基礎收購價 / 2.0 + (基礎收購價 / 2.0) * (剩餘耐久 / 最大耐久)`，確保最低有 50% 殘值並依比例浮動。
 
-### 2026-07-16 優化 Discord Webhook 交易紀錄排版與中文顯示 (v1.6.9)
+### 2026-07-16 優化 Discord Webhook 交易紀錄為 Embed 崁入訊息 (v1.6.9)
 
 **需求 (Avery)**：
-1. 傳送到 Discord 的 log 要更好閱讀。
+1. 傳送到 Discord 的 log 要更好閱讀，並且改為使用 Embed 崁入訊息格式。
 2. 物品名稱需顯示為中文。
 3. 原本的原始資訊需保留並標記在訊息最底下。
 
 **實作**：
 1. `ShopManager.java` 新增 `getChineseItemName()` 輔助方法：統一呼叫 `plugin.getLocaleService().getDisplayName("zh_tw", ...)` 取得物品之中文名稱與變體標籤。
-2. `ShopManager.java` 新增 `buildDiscordMessage()` 輔助方法：產生包含標題、玩家、金額等 Markdown 語法格式的易讀文字，並將傳入的原始 JSON/YAML 資訊放入最底部的 Markdown 程式碼區塊內。
-3. 將原本在 `sellDepositToSystem`、`sellToSystem`、`buyCatalogEntry`、`buyListing` 內的 `plugin.getDiscordWebhookService().sendMessage()` 呼叫，全部改用新建立的 `buildDiscordMessage()` 進行建構。
+2. `DiscordWebhookService.java` 新增 `sendPayload()` 方法，支援直接發送建構好的 JSON Payload，不再強制包裝為單純的 text content。
+3. `ShopManager.java` 新增 `sendDiscordEmbed()` 輔助方法：產生包含標題、顏色、欄位（玩家、金額、物品明細）的 Embed JSON 結構，並將傳入的原始資訊放入最底部的 field 內。
+4. 將原本的文字推播改為發送帶有顏色與欄位排版的 Embed 訊息。
+5. 新增長文字防護機制：若玩家單次交易超過 950 字元（例如大量不同的物品），程式會自動將「物品明細」拆分為多個獨立的 Embed 欄位（如明細 (1)、明細 (2)）。原始 JSON 若超過 900 字元則會在結尾進行截斷，並透過 `multipart/form-data` 以 `raw_data.txt` 附檔的形式完整上傳至 Discord。
 
 ### 2026-07-16 過濾 Paper 1.21.x 新增的測試方塊 (v1.6.9)
 
