@@ -367,6 +367,20 @@ ShopPlugin
 1. **Material Enum 變更**：Paper 1.21+ 將 Mojang 內部的測試用方塊（如 `TEST_BLOCK`, `TEST_INSTANCE_BLOCK` 等）暴露在 API 的 `Material` enum 中，導致原本的黑名單無法攔截。
    - **修復**：在 `SurvivalObtainability.java` 的 `isObtainableInSurvival` 方法中新增 `name.contains("TEST")` 的判斷條件，攔截所有這類內部測試用的方塊，避免它們進入商店商品名單。
 
+### 2026-07-20 修復聊天輸入廣播漏洞 (v1.6.10)
+
+**需求 (Avery)**：
+玩家在商店插件輸入文字時（例如購買數量、自訂價格等），雖然有被處理，但仍然會被廣播到伺服器上，沒被正確隱藏。
+
+**根因分析與實作**：
+1. **問題原因**：原先使用 `AsyncPlayerChatEvent` 且設定 `EventPriority.LOWEST` 來攔截訊息，雖然呼叫了 `event.setCancelled(true)` 與 `event.getRecipients().clear()`，但其他聊天管理插件或格式化插件可能會在較高優先級強制處理或廣播，導致攔截失效。
+2. **修復**：徹底移除 `AsyncPlayerChatEvent` 監聽器，改用 Bukkit 內建的 `Conversation API` (`ConversationFactory`) 來實作聊天輸入。
+3. **實作細節**：
+   - 建立 `ChatPrompt.java` 工具類，封裝 `ConversationFactory`，設定 `withModality(true)` 獨占焦點，並使用 `withLocalEcho(false)` 確保玩家輸入的文字不會回顯。
+   - `GuiListener` 移除所有 `awaitingSearch`, `awaitingBuyQuantity`, `awaitingAdminChat` 等 Map 與相關狀態變數，移除原本的 `onChat` 監聽。
+   - 購買數量、搜尋、管理員設定的對話流程，全面改為呼叫 `ChatPrompt.start()` 接收輸入。
+   - 清理 Session 時 (`onClose` / `getActiveSession`) 透過 `player.isConversing()` 確認玩家是否在對話中，以防 Session 提前被清空。
+
 ## 待擴充
 
 - 可匯入完整 Minecraft zh_tw.json 擴充翻譯覆蓋率

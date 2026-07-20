@@ -710,7 +710,7 @@ public final class ShopManager {
             }
             return base;
         }
-        return catalogKey;
+        return plugin.getLocaleService().getDisplayName(locale, catalogKey);
     }
 
     private boolean appendDiscordField(StringBuilder sb, String name, String value, boolean inline, boolean first) {
