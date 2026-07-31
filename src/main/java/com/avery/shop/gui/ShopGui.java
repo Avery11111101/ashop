@@ -29,7 +29,9 @@ public final class ShopGui {
 
     public static final int SELL_DEPOSIT_SIZE = 45;
     public static final int SELL_CANCEL_SLOT = 45;
+    public static final int SELL_FILL_ALL_SLOT = 46;
     public static final int SELL_TOTAL_SLOT = 49;
+    public static final int SELL_VIEW_SELLABLE_SLOT = 52;
     public static final int SELL_CONFIRM_SLOT = 53;
 
     public static final int BUY_QTY_ONE_SLOT = 11;
@@ -121,7 +123,8 @@ public final class ShopGui {
 
         var filler = fillerPane(locale.msg(player, "msg.gui.sell.deposit-hint"));
         for (int slot = SELL_CANCEL_SLOT; slot < ROWS * 9; slot++) {
-            if (slot == SELL_CANCEL_SLOT || slot == SELL_TOTAL_SLOT || slot == SELL_CONFIRM_SLOT) {
+            if (slot == SELL_CANCEL_SLOT || slot == SELL_FILL_ALL_SLOT || slot == SELL_TOTAL_SLOT
+                    || slot == SELL_VIEW_SELLABLE_SLOT || slot == SELL_CONFIRM_SLOT) {
                 continue;
             }
             inv.setItem(slot, filler);
@@ -131,6 +134,16 @@ public final class ShopGui {
                 Material.RED_STAINED_GLASS_PANE,
                 locale.msg(player, "msg.gui.sell.cancel"),
                 locale.msg(player, "msg.gui.sell.cancel.lore")));
+
+        inv.setItem(SELL_FILL_ALL_SLOT, button(
+                Material.HOPPER,
+                locale.msg(player, "msg.gui.sell.fill-all"),
+                locale.msg(player, "msg.gui.sell.fill-all.lore")));
+
+        inv.setItem(SELL_VIEW_SELLABLE_SLOT, button(
+                Material.BOOK,
+                locale.msg(player, "msg.gui.sell.view-sellable"),
+                locale.msg(player, "msg.gui.sell.view-sellable.lore")));
 
         inv.setItem(SELL_CONFIRM_SLOT, button(
                 Material.LIME_STAINED_GLASS_PANE,
@@ -570,6 +583,98 @@ public final class ShopGui {
                     locale.msg(player, "msg.gui.next.lore", page + 2)));
         }
         inv.setItem(BACK_SLOT, button(Material.BARRIER, locale.msg(player, "msg.gui.back")));
+    }
+
+    public static void openSellableCatalog(ShopManager manager, Player player, GuiSession session, int page) {
+        session.setViewType(GuiSession.ViewType.SELLABLE_ITEMS);
+        session.setCatalogBrowse(true);
+        session.setPage(page);
+        session.clearSlotMap();
+
+        var locale = manager.getPlugin().getLocaleService();
+        var allEntries = manager.getSellableCatalogEntries(player);
+        int totalPages = Math.max(1, (int) Math.ceil(allEntries.size() / (double) PAGE_SIZE));
+        page = Math.clamp(page, 0, totalPages - 1);
+        session.setPage(page);
+
+        int start = page * PAGE_SIZE;
+        int end = Math.min(start + PAGE_SIZE, allEntries.size());
+
+        var title = locale.msg(player, "msg.gui.sellable-title")
+                + " " + locale.msg(player, "msg.gui.page", page + 1);
+
+        var holder = new ShopInventoryHolder(ShopInventoryHolder.Kind.SEARCH);
+        var inv = createShopInventory(holder, ROWS * 9,
+                Component.text(title).color(NamedTextColor.GREEN).decorate(TextDecoration.BOLD),
+                session);
+
+        for (int i = start; i < end; i++) {
+            var entry = allEntries.get(i);
+            int slot = i - start;
+            session.getSlotCatalogMap().put(slot, entry.getKey());
+
+            var stack = entry.getTemplate().clone();
+            var meta = stack.getItemMeta();
+            if (meta == null) {
+                meta = Bukkit.getItemFactory().getItemMeta(stack.getType());
+            }
+
+            var lore = new ArrayList<Component>();
+            lore.add(Component.text("─────────")
+                    .color(NamedTextColor.DARK_GRAY).decoration(TextDecoration.ITALIC, false));
+
+            var sellQuote = manager.getSellToSystemQuote(entry.getTemplate());
+            if (sellQuote.available()) {
+                var unit = sellQuote.price();
+                if (manager.getPricing().isEnabled()) {
+                    lore.add(Component.text(locale.msg(player, "msg.gui.sellable.price-dynamic",
+                                    manager.getEconomy().format(unit),
+                                    sellQuote.formatTrend(locale, player)))
+                            .color(NamedTextColor.GOLD).decoration(TextDecoration.ITALIC, false));
+                } else {
+                    lore.add(Component.text(locale.msg(player, "msg.gui.sellable.price",
+                                    manager.getEconomy().format(unit)))
+                            .color(NamedTextColor.GOLD).decoration(TextDecoration.ITALIC, false));
+                }
+            } else {
+                lore.add(Component.text(locale.msg(player, "msg.gui.sell.rejected"))
+                        .color(NamedTextColor.RED).decoration(TextDecoration.ITALIC, false));
+            }
+
+            lore.add(Component.text(locale.msg(player, "msg.gui.sellable.hint"))
+                    .color(NamedTextColor.GRAY).decoration(TextDecoration.ITALIC, false));
+
+            if (player.hasPermission("shop.admin")) {
+                lore.add(Component.text(locale.msg(player, "msg.gui.admin.item.hint"))
+                        .color(NamedTextColor.LIGHT_PURPLE).decoration(TextDecoration.ITALIC, false));
+            }
+
+            if (meta != null) {
+                meta.lore(lore);
+                stack.setItemMeta(meta);
+            }
+            inv.setItem(slot, stack);
+        }
+
+        if (page > 0) {
+            inv.setItem(PREV_SLOT, button(
+                    Material.ARROW,
+                    locale.msg(player, "msg.gui.prev"),
+                    locale.msg(player, "msg.gui.prev.lore", page)));
+        }
+
+        inv.setItem(BACK_SLOT, button(
+                Material.BARRIER,
+                locale.msg(player, "msg.gui.back")));
+
+        if (page < totalPages - 1) {
+            inv.setItem(NEXT_SLOT, button(
+                    Material.ARROW,
+                    locale.msg(player, "msg.gui.next"),
+                    locale.msg(player, "msg.gui.next.lore", page + 2)));
+        }
+
+        player.openInventory(inv);
     }
 
     public static ItemStack button(Material material, String name, String... lore) {

@@ -22,7 +22,7 @@ import java.util.UUID;
 public final class GuiSession {
 
     public enum ViewType {
-        MAIN, CATEGORY, SEARCH, LISTINGS, SELL_TO_SYSTEM, BUY_QUANTITY,
+        MAIN, CATEGORY, SEARCH, LISTINGS, SELL_TO_SYSTEM, SELLABLE_ITEMS, BUY_QUANTITY,
         ADMIN_ITEM_EDIT, ADMIN_CATEGORY_EDIT, ADMIN_SETTINGS
     }
 

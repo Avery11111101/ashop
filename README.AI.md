@@ -425,9 +425,36 @@ ShopPlugin
    - 啟動與熱載入時，自動掃描並修復舊 `items.yml` 中殘留的英文目錄路徑 `display-name`（如 `building/logs` -> `原木`）。
    - GUI 渲染優先呈現語系檔中的標準繁體中文名稱，確保視覺 100% 中文化。
 
+### 2026-07-31 收購箱角落一鍵放入與查看可收購物品 (v1.7.1)
+
+**使用者決策動機 (Avery)**：
+1. 希望在收購箱（`/shop sell`）中能更快速方便地處置物品，不必手動逐一 Shift+點擊 背包物品。
+2. 要求將「所有可以收購的東西放在收購箱角落」，即在收購箱底欄角落提供「一鍵填入」功能按鈕。
+3. 要求提供「查看可收購的物品」功能，使玩家能直接瀏覽目前伺服器開放系統收購的所有商品與即時單價。
+
+**實作與變更細節**：
+1. **收購箱角落控制列按鈕排版** (`ShopGui.java`)：
+   - `Slot 45`: 取消返還 (紅)
+   - `Slot 46`: **一鍵放入可收購物品** (`SELL_FILL_ALL_SLOT` / Hopper 漏斗)
+   - `Slot 49`: 本批總計收益 (金錠)
+   - `Slot 52`: **查看可收購物品** (`SELL_VIEW_SELLABLE_SLOT` / Book 書本)
+   - `Slot 53`: 確認出售 (綠)
+2. **一鍵自動填入邏輯** (`GuiListener.java` -> `handleFillAllSellable`)：
+   - 遍歷玩家主背包 36 個欄位，自動檢查 `shopManager.canSellToSystem(item)` 與收購報價可用性。
+   - 自動尋找收購箱 (Slots 0~44) 之空位或可堆疊欄位進行搬移，並自動觸發 `refreshSellPanel` 即時顯示總金額。
+   - 提示轉移成功的組數，若收購箱空間已滿則彈出相應提示。
+3. **查看可收購物品 GUI 與指令** (`ShopGui.java`, `ShopManager.java` & `ShopCommand.java`)：
+   - `ShopManager.getSellableCatalogEntries(Player)`: 篩選所有 `TradeMode` 包含 `allowsSell()` 且上架啟用的商品。
+   - `ShopGui.openSellableCatalog`: 以分頁 GUI 展示全可收購商品，包含即時系統收購單價、漲跌趨勢與出售操作提示。
+   - `GuiSession.ViewType.SELLABLE_ITEMS`: 支援完整的上一頁/下一頁分頁導覽與返回上一層機制。
+   - 指令新增 `/shop sellable` (別名 `/shop sell-list`, `/shop list-sellable`, `/shop 可收購`)，方便玩家指令開啟。
+4. **多語言支援** (`locales/zh_tw.properties`)：
+   - 補齊一鍵放入、查看可收購物品、全收購商品 GUI 標題與說明字串。
+
 ## 待擴充
 
 - 可匯入完整 Minecraft zh_tw.json 擴充翻譯覆蓋率
 - 可加入更多語言（ja_jp 等）
 - 可加入議價、限購、分頁效能優化（大量上架時）
+
 

@@ -96,7 +96,7 @@ public final class GuiListener implements Listener {
 
         switch (session.getViewType()) {
             case MAIN -> handleMainClick(player, session, slot, event);
-            case CATEGORY, SEARCH, LISTINGS -> handleListingClick(player, session, slot, event);
+            case CATEGORY, SEARCH, LISTINGS, SELLABLE_ITEMS -> handleListingClick(player, session, slot, event);
             default -> {}
         }
     }
@@ -131,7 +131,7 @@ public final class GuiListener implements Listener {
             return false;
         }
         var view = session.getViewType();
-        return (view == GuiSession.ViewType.SEARCH || view == GuiSession.ViewType.CATEGORY)
+        return (view == GuiSession.ViewType.SEARCH || view == GuiSession.ViewType.CATEGORY || view == GuiSession.ViewType.SELLABLE_ITEMS)
                 && session.isCatalogBrowse();
     }
 
@@ -217,6 +217,16 @@ public final class GuiListener implements Listener {
                 ShopGui.openMain(shopManager, player, session);
                 return;
             }
+            if (rawSlot == ShopGui.SELL_FILL_ALL_SLOT) {
+                event.setCancelled(true);
+                handleFillAllSellable(player, event.getView().getTopInventory());
+                return;
+            }
+            if (rawSlot == ShopGui.SELL_VIEW_SELLABLE_SLOT) {
+                event.setCancelled(true);
+                ShopGui.openSellableCatalog(shopManager, player, session, 0);
+                return;
+            }
             if (rawSlot == ShopGui.SELL_CONFIRM_SLOT) {
                 event.setCancelled(true);
                 if (session.isSellConfirming()) return;
@@ -235,6 +245,72 @@ public final class GuiListener implements Listener {
         if (event.getClick() == ClickType.SHIFT_LEFT || event.getClick() == ClickType.SHIFT_RIGHT) {
             scheduleSellPanelRefresh(player);
         }
+    }
+
+    private void handleFillAllSellable(Player player, org.bukkit.inventory.Inventory topInv) {
+        var locale = shopManager.getPlugin().getLocaleService();
+        var pInv = player.getInventory();
+        int movedStacks = 0;
+        boolean full = false;
+
+        for (int i = 0; i < 36; i++) {
+            var item = pInv.getItem(i);
+            if (item == null || item.getType().isAir()) continue;
+
+            if (shopManager.canSellToSystem(item)) {
+                var quote = shopManager.getSellToSystemQuote(item);
+                if (!quote.available()) continue;
+
+                int targetSlot = findFirstAvailableSlot(topInv, item);
+                if (targetSlot == -1) {
+                    full = true;
+                    break;
+                }
+
+                var existing = topInv.getItem(targetSlot);
+                if (existing == null || existing.getType().isAir()) {
+                    topInv.setItem(targetSlot, item.clone());
+                    pInv.setItem(i, null);
+                } else {
+                    int maxStack = existing.getMaxStackSize();
+                    int space = maxStack - existing.getAmount();
+                    if (space > 0) {
+                        int transfer = Math.min(space, item.getAmount());
+                        existing.setAmount(existing.getAmount() + transfer);
+                        item.setAmount(item.getAmount() - transfer);
+                        if (item.getAmount() <= 0) {
+                            pInv.setItem(i, null);
+                        }
+                    }
+                }
+                movedStacks++;
+            }
+        }
+
+        ShopGui.refreshSellPanel(shopManager, player, topInv);
+
+        if (movedStacks > 0) {
+            if (full) {
+                player.sendMessage("§e" + locale.msg(player, "msg.gui.sell.fill-all.full"));
+            } else {
+                player.sendMessage("§a" + locale.msg(player, "msg.gui.sell.fill-all.success", movedStacks));
+            }
+        } else {
+            player.sendMessage("§c" + locale.msg(player, "msg.gui.sell.fill-all.none"));
+        }
+    }
+
+    private int findFirstAvailableSlot(org.bukkit.inventory.Inventory inv, ItemStack item) {
+        for (int slot = 0; slot < ShopGui.SELL_DEPOSIT_SIZE; slot++) {
+            var current = inv.getItem(slot);
+            if (current == null || current.getType().isAir()) {
+                return slot;
+            }
+            if (current.isSimilar(item) && current.getAmount() < current.getMaxStackSize()) {
+                return slot;
+            }
+        }
+        return -1;
     }
 
     private void confirmSell(Player player, GuiSession session, org.bukkit.inventory.Inventory inv) {
@@ -352,6 +428,10 @@ public final class GuiListener implements Listener {
     }
 
     private void navigateCategoryBack(Player player, GuiSession session) {
+        if (session.getViewType() == GuiSession.ViewType.SELLABLE_ITEMS) {
+            ShopGui.openSellToSystem(shopManager, player, session);
+            return;
+        }
         if (session.getViewType() == GuiSession.ViewType.CATEGORY && session.getCategoryId() != null) {
             var parent = shopManager.getShopConfig().getParentCategoryId(session.getCategoryId());
             if (parent != null) {
@@ -748,6 +828,9 @@ public final class GuiListener implements Listener {
         } else if (returnTo == GuiSession.ViewType.CATEGORY) {
             session.setViewType(GuiSession.ViewType.CATEGORY);
             ShopGui.openCategory(shopManager, player, session);
+        } else if (returnTo == GuiSession.ViewType.SELLABLE_ITEMS) {
+            session.setViewType(GuiSession.ViewType.SELLABLE_ITEMS);
+            ShopGui.openSellableCatalog(shopManager, player, session, session.getPage());
         } else {
             ShopGui.openMain(shopManager, player, session);
         }
@@ -758,6 +841,7 @@ public final class GuiListener implements Listener {
             case CATEGORY -> ShopGui.openCategory(shopManager, player, session);
             case SEARCH -> ShopGui.openSearch(shopManager, player, session);
             case LISTINGS -> ShopGui.openMyListings(shopManager, player, session);
+            case SELLABLE_ITEMS -> ShopGui.openSellableCatalog(shopManager, player, session, session.getPage());
             default -> ShopGui.openMain(shopManager, player, session);
         }
     }

@@ -70,7 +70,8 @@ dynamic-pricing:
 | `/ashop help` | 查看完整指令與 GUI 教學 |
 | `/ashop price` | 查詢系統售價與收購價 |
 | `/ashop search <關鍵字>` | 搜尋物品 |
-| `/ashop sell` | 賣手持物品給系統 |
+| `/ashop sell` | 開啟收購箱（角落支援一鍵填入與查看可收購商品） |
+| `/ashop sellable` | 查看目前開放系統收購的所有商品清單 |
 | `/ashop reload` | 重新載入（管理員） |
 | `/ashop reset` | 還原預設全物品商店（管理員） |
 | `/lang <語言>` | 切換介面語言 |

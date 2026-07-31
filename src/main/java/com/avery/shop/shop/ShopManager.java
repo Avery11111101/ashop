@@ -254,6 +254,20 @@ public final class ShopManager {
         return shopConfig.canPlayerBuy(tradeItem(item), catalog);
     }
 
+    public List<CatalogEntry> getSellableCatalogEntries(Player player) {
+        var results = new ArrayList<CatalogEntry>();
+        var seenKeys = new java.util.HashSet<String>();
+        for (var entry : catalog.getAll()) {
+            if (shopConfig.isItemInShop(entry) && shopConfig.getItemTradeMode(entry.getKey()).allowsSell()) {
+                if (seenKeys.add(entry.getKey())) {
+                    results.add(entry);
+                }
+            }
+        }
+        results.sort(java.util.Comparator.comparing(e -> plugin.getLocaleService().getDisplayName(player, e.getTemplate().getType())));
+        return results;
+    }
+
     public PriceQuote getSellToSystemQuote(ItemStack item) {
         var tradeItem = tradeItem(item);
         if (!shopConfig.canPlayerSell(tradeItem, catalog)) {

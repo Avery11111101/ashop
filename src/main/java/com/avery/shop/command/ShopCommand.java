@@ -104,6 +104,22 @@ public final class ShopCommand implements CommandExecutor, TabCompleter {
                 var session = guiListener.getOrCreateSession(player);
                 ShopGui.openSellToSystem(shopManager, player, session);
             }
+            case "sellable", "sell-list", "list-sellable", "可收購" -> {
+                if (!player.hasPermission("shop.sell")) {
+                    player.sendMessage("§c" + locale.msg(player, "msg.sell.no-permission"));
+                    return true;
+                }
+                if (!shopManager.isSellToSystemEnabled()) {
+                    player.sendMessage("§c" + locale.msg(player, "msg.sell.disabled"));
+                    return true;
+                }
+                if (guiListener == null) {
+                    player.sendMessage("§c" + locale.msg(player, "msg.cmd.gui-not-ready"));
+                    return true;
+                }
+                var session = guiListener.getOrCreateSession(player);
+                ShopGui.openSellableCatalog(shopManager, player, session, 0);
+            }
             case "price", "價格" -> {
                 var hand = player.getInventory().getItemInMainHand();
                 if (hand.getType().isAir()) {
@@ -264,7 +280,7 @@ public final class ShopCommand implements CommandExecutor, TabCompleter {
     @Override
     public List<String> onTabComplete(CommandSender sender, Command command, String alias, String[] args) {
         if (args.length == 1) {
-            var options = new ArrayList<>(List.of("help", "search", "sell", "price", "說明", "搜尋", "上架", "賣", "價格"));
+            var options = new ArrayList<>(List.of("help", "search", "sell", "sellable", "price", "說明", "搜尋", "上架", "賣", "可收購", "價格"));
             if (sender.hasPermission("shop.admin")) {
                 options.addAll(List.of("reload", "reset", "resync-prices", "重算價格", "還原", "restore", "重新載入"));
             }
