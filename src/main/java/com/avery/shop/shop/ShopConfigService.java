@@ -97,6 +97,12 @@ public final class ShopConfigService {
         extractTemplateIfAbsent();
 
         var shopFolder = getShopFolder();
+        int[] migratedCount = new int[]{0};
+        migrateConfigsRecursively(shopFolder, migratedCount);
+        if (migratedCount[0] > 0) {
+            plugin.getLogger().info("已自動升級 " + migratedCount[0] + " 個舊版 shop 設定檔至 TradeMode 交易模式格式");
+        }
+
         var loaded = new ArrayList<ShopCategoryData>();
         var topDirs = shopFolder.listFiles(File::isDirectory);
         if (topDirs != null) {
@@ -175,6 +181,61 @@ public final class ShopConfigService {
         }
     }
 
+    private void migrateConfigsRecursively(File dir, int[] counter) {
+        var itemsFile = new File(dir, "items.yml");
+        if (itemsFile.exists() && !dir.getName().equalsIgnoreCase(TEMPLATE_FOLDER)) {
+            try {
+                var yaml = YamlConfiguration.loadConfiguration(itemsFile);
+                boolean fileChanged = false;
+
+                if (!yaml.contains("trade-mode")) {
+                    boolean allowBuy = yaml.getBoolean("allow-buy", true);
+                    yaml.set("trade-mode", allowBuy ? TradeMode.BOTH.name() : TradeMode.SELL_ONLY.name());
+                    fileChanged = true;
+                }
+
+                var currentDisplayName = yaml.getString("display-name");
+                if (currentDisplayName == null || currentDisplayName.isBlank() || !containsChinese(currentDisplayName)) {
+                    var shopFolder = getShopFolder();
+                    String categoryId = shopFolder.toPath().relativize(dir.toPath()).toString().replace('\\', '/');
+                    if (categoryId.isEmpty()) categoryId = dir.getName();
+                    var translated = plugin.getLocaleService().getCategoryName((Player) null, categoryId);
+                    if (!translated.equalsIgnoreCase(categoryId) && containsChinese(translated)) {
+                        yaml.set("display-name", translated);
+                        fileChanged = true;
+                    }
+                }
+
+                var section = yaml.getConfigurationSection("items");
+                if (section != null) {
+                    for (var yamlKey : section.getKeys(false)) {
+                        var itemSection = section.getConfigurationSection(yamlKey);
+                        if (itemSection != null && !itemSection.contains("trade-mode")) {
+                            itemSection.set("trade-mode", TradeMode.BOTH.name());
+                            fileChanged = true;
+                        }
+                    }
+                }
+
+                if (fileChanged) {
+                    saveYaml(itemsFile, yaml);
+                    counter[0]++;
+                }
+            } catch (Exception e) {
+                plugin.getLogger().warning("自動升級商店設定檔 " + itemsFile.getName() + " 失敗：" + e.getMessage());
+            }
+        }
+
+        var children = dir.listFiles(File::isDirectory);
+        if (children == null) return;
+        for (var child : children) {
+            if (child.getName().startsWith(".") || child.getName().equalsIgnoreCase(TEMPLATE_FOLDER)) {
+                continue;
+            }
+            migrateConfigsRecursively(child, counter);
+        }
+    }
+
     private static String parentCategoryId(String categoryId) {
         var idx = categoryId.lastIndexOf('/');
         return idx < 0 ? null : categoryId.substring(0, idx);
@@ -236,35 +297,100 @@ public final class ShopConfigService {
         return data != null && data.getDefinition().isEnabled();
     }
 
+    /** 此分類自身 trade-mode 設定（不含父分類） */
+    public TradeMode getCategoryTradeModeLocal(String categoryId) {
+        var data = categories.get(categoryId);
+        return data != null ? data.getDefinition().getTradeMode() : TradeMode.DISABLED;
+    }
+
+    /**
+     * 取得分類有效交易模式（允許子分類單獨設定覆寫生效）
+     */
+    public TradeMode getCategoryTradeMode(String categoryId) {
+        var data = categories.get(categoryId);
+        if (data == null || !data.getDefinition().isEnabled()) {
+            return TradeMode.DISABLED;
+        }
+        return data.getDefinition().getTradeMode();
+    }
+
+    /**
+     * 取得單一商品有效交易模式（允許單一商品單獨設定覆寫生效）
+     */
+    public TradeMode getItemTradeMode(String catalogKey) {
+        var setting = findItemSetting(catalogKey);
+        if (setting.isEmpty() || !setting.get().isEnabled()) {
+            return TradeMode.DISABLED;
+        }
+        var categoryId = findCategoryIdForKey(catalogKey);
+        if (categoryId == null || !isCategoryVisible(categoryId)) {
+            return TradeMode.DISABLED;
+        }
+        var catMode = getCategoryTradeMode(categoryId);
+        var itemMode = setting.get().getTradeMode();
+
+        // 若商品設定為 BOTH (預設/未獨立特別指定)，完全繼承所屬分類有效模式
+        if (itemMode == TradeMode.BOTH) {
+            return catMode;
+        }
+        return itemMode;
+    }
+
+    /** 檢查分類下是否有子分類或商品設定了與本分類不同的顯式 TradeMode 覆寫 */
+    public boolean hasDifferingChildTradeModes(String categoryId) {
+        var data = categories.get(categoryId);
+        if (data == null) return false;
+        var targetMode = data.getDefinition().getTradeMode();
+
+        for (var itemSetting : data.getItems().values()) {
+            var mode = itemSetting.getTradeMode();
+            if (mode != TradeMode.BOTH && mode != targetMode) {
+                return true;
+            }
+        }
+
+        return hasDifferingChildTradeModesRecursive(categoryId, targetMode);
+    }
+
+    private boolean hasDifferingChildTradeModesRecursive(String categoryId, TradeMode targetMode) {
+        var childIds = childrenByParent.getOrDefault(categoryId, List.of());
+        for (var childId : childIds) {
+            var childData = categories.get(childId);
+            if (childData == null) continue;
+            var childMode = childData.getDefinition().getTradeMode();
+            if (childMode != TradeMode.BOTH && childMode != targetMode) {
+                return true;
+            }
+            for (var itemSetting : childData.getItems().values()) {
+                var mode = itemSetting.getTradeMode();
+                if (mode != TradeMode.BOTH && mode != targetMode) {
+                    return true;
+                }
+            }
+            if (hasDifferingChildTradeModesRecursive(childId, targetMode)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     /** 此分類自身 allow-buy 設定（不含父分類） */
     public boolean isCategoryAllowBuyLocal(String categoryId) {
-        var data = categories.get(categoryId);
-        return data != null && data.getDefinition().isAllowBuy();
+        return getCategoryTradeModeLocal(categoryId).allowsBuy();
     }
 
     /**
      * 分類是否允許玩家購買（含父分類繼承：任一上層關閉則整棵子樹不可購買）
      */
     public boolean isCategoryAllowBuy(String categoryId) {
-        var data = categories.get(categoryId);
-        if (data == null || !data.getDefinition().isEnabled()) {
-            return false;
-        }
-        if (!data.getDefinition().isAllowBuy()) {
-            return false;
-        }
-        var parent = data.getDefinition().getParentId();
-        if (parent != null) {
-            return isCategoryAllowBuy(parent);
-        }
-        return true;
+        return getCategoryTradeMode(categoryId).allowsBuy();
     }
 
     /** 父分類關閉購買時，回傳阻擋繼承的最近上層分類 id */
     public Optional<String> findBuyBlockedByAncestor(String categoryId) {
         var data = categories.get(categoryId);
         if (data == null) return Optional.empty();
-        if (!data.getDefinition().isAllowBuy()) {
+        if (!data.getDefinition().getTradeMode().allowsBuy()) {
             return Optional.of(categoryId);
         }
         var parent = data.getDefinition().getParentId();
@@ -276,13 +402,33 @@ public final class ShopConfigService {
 
     public String getCategoryDisplayName(Player player, String categoryId) {
         var data = categories.get(categoryId);
-        if (data == null) return categoryId;
+        var translated = plugin.getLocaleService().getCategoryName(player, categoryId);
 
-        var yamlName = data.getDefinition().getDisplayName();
-        if (yamlName != null && !yamlName.isBlank()) {
-            return yamlName;
+        if (data != null) {
+            var yamlName = data.getDefinition().getDisplayName();
+            if (yamlName != null && !yamlName.isBlank() && containsChinese(yamlName) && !yamlName.equalsIgnoreCase(categoryId)) {
+                return yamlName;
+            }
         }
-        return plugin.getLocaleService().getCategoryName(player, categoryId);
+
+        if (!translated.equalsIgnoreCase(categoryId)) {
+            return translated;
+        }
+
+        return data != null && data.getDefinition().getDisplayName() != null ? data.getDefinition().getDisplayName() : categoryId;
+    }
+
+    private static boolean containsChinese(String str) {
+        if (str == null) return false;
+        for (char c : str.toCharArray()) {
+            var block = Character.UnicodeBlock.of(c);
+            if (block == Character.UnicodeBlock.CJK_UNIFIED_IDEOGRAPHS
+                    || block == Character.UnicodeBlock.CJK_COMPATIBILITY_IDEOGRAPHS
+                    || block == Character.UnicodeBlock.CJK_UNIFIED_IDEOGRAPHS_EXTENSION_A) {
+                return true;
+            }
+        }
+        return false;
     }
 
     public List<CatalogEntry> getEnabledEntries(String categoryId) {
@@ -389,12 +535,13 @@ public final class ShopConfigService {
         var icon = parseIcon(yaml.getString("icon",
                 ShopSubcategoryResolver.iconFor(relativePath(categoryId)).name()));
         var enabled = yaml.getBoolean("enabled", true);
-        var allowBuy = yaml.getBoolean("allow-buy", true);
+        var tradeMode = TradeMode.parse(yaml.getString("trade-mode"),
+                yaml.getBoolean("allow-buy", true) ? TradeMode.BOTH : TradeMode.SELL_ONLY);
         var defaultSlot = defaultSlotFor(categoryId);
         var slot = yaml.getInt("slot", defaultSlot);
         var defaultPrice = yaml.getDouble("default-price", globalDefaultPrice());
 
-        var definition = new ShopCategoryDefinition(yamlCategoryId, parentId, displayName, icon, enabled, allowBuy, slot);
+        var definition = new ShopCategoryDefinition(yamlCategoryId, parentId, displayName, icon, enabled, tradeMode, slot);
         var data = new ShopCategoryData(definition, defaultPrice);
 
         var section = yaml.getConfigurationSection("items");
@@ -409,12 +556,13 @@ public final class ShopConfigService {
                 var price = resolveItemPrice(itemSection, catalogKey, materialId, catalog, defaultPrice);
                 Double sellRatio = itemSection.contains("sell-ratio")
                         ? itemSection.getDouble("sell-ratio") : null;
+                var itemTradeMode = TradeMode.parse(itemSection.getString("trade-mode"), TradeMode.BOTH);
 
                 var resolved = ShopItemResolver.resolve(catalogKey, materialId, catalog);
                 var resolvedKey = resolved.map(CatalogEntry::getKey).orElse(
                         catalogKey != null && !catalogKey.isBlank() ? catalogKey : yamlKey);
 
-                data.putItem(new ShopItemSetting(resolvedKey, materialId, itemEnabled, price, sellRatio));
+                data.putItem(new ShopItemSetting(resolvedKey, materialId, itemEnabled, price, sellRatio, itemTradeMode));
             }
         }
 
@@ -549,13 +697,13 @@ public final class ShopConfigService {
     }
 
     public boolean isItemSellable(CatalogEntry entry) {
-        return isItemInShop(entry);
+        if (entry == null || !isItemInShop(entry)) return false;
+        return getItemTradeMode(entry.getKey()).allowsSell();
     }
 
     public boolean isItemPurchasable(CatalogEntry entry) {
-        if (!isItemInShop(entry)) return false;
-        var categoryId = findCategoryIdForKey(entry.getKey());
-        return categoryId != null && isCategoryAllowBuy(categoryId);
+        if (entry == null || !isItemInShop(entry)) return false;
+        return getItemTradeMode(entry.getKey()).allowsBuy();
     }
 
     /**
@@ -703,7 +851,8 @@ public final class ShopConfigService {
     }
 
     public boolean canPlayerSell(org.bukkit.inventory.ItemStack stack, ItemCatalog catalog) {
-        return resolvePlayerItem(stack, catalog).isPresent();
+        var resolved = resolvePlayerItem(stack, catalog);
+        return resolved.isPresent() && getItemTradeMode(resolved.get().setting().getCatalogKey()).allowsSell();
     }
 
     public boolean canPlayerBuy(org.bukkit.inventory.ItemStack stack, ItemCatalog catalog) {
@@ -740,7 +889,7 @@ public final class ShopConfigService {
 
         int categoryCount = 0;
         int itemCount = 0;
-        var locale = plugin.getLocaleService().getDefaultLocale();
+        var locale = "zh_tw";
 
         for (var category : ItemCategory.values()) {
             var entries = catalog.getByCategory(category).stream()
@@ -834,6 +983,7 @@ public final class ShopConfigService {
                 ? categoryId : displayName);
         yaml.set("icon", icon.name());
         yaml.set("enabled", true);
+        yaml.set("trade-mode", TradeMode.BOTH.name());
         yaml.set("allow-buy", true);
         yaml.set("slot", slot);
         yaml.set("default-price", globalDefaultPrice());
@@ -856,6 +1006,7 @@ public final class ShopConfigService {
                 ? categoryId : displayName);
         yaml.set("icon", icon.name());
         yaml.set("enabled", true);
+        yaml.set("trade-mode", TradeMode.BOTH.name());
         yaml.set("allow-buy", true);
         yaml.set("slot", slot);
         yaml.set("default-price", globalDefaultPrice());

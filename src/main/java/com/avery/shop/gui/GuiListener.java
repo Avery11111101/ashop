@@ -101,10 +101,10 @@ public final class GuiListener implements Listener {
         }
     }
 
-    /** 管理員 Shift+右鍵編輯（部分客戶端回報為 RIGHT + shift） */
+    /** 管理員 Shift+右鍵 或 滾輪中鍵 編輯 */
     private static boolean isAdminEditClick(InventoryClickEvent event) {
         var click = event.getClick();
-        if (click == ClickType.SHIFT_RIGHT) {
+        if (click == ClickType.SHIFT_RIGHT || click == ClickType.MIDDLE) {
             return true;
         }
         return event.isShiftClick() && click == ClickType.RIGHT;
@@ -489,13 +489,26 @@ public final class GuiListener implements Listener {
             return;
         }
         if (slot == ShopAdminGui.CATEGORY_TOGGLE_BUY_SLOT) {
-            boolean local = shopManager.getShopConfig().isCategoryAllowBuyLocal(categoryId);
-            if (admin.setCategoryAllowBuy(shopManager.getCatalog(), categoryId, !local)) {
-                player.sendMessage("§a" + locale.msg(player, "msg.gui.admin.category.toggle-success"));
+            var currentMode = shopManager.getShopConfig().getCategoryTradeModeLocal(categoryId);
+            var nextMode = currentMode.next();
+            if (admin.setCategoryTradeMode(shopManager.getCatalog(), categoryId, nextMode)) {
+                var playerLocale = locale.getPlayerLocale(player);
+                player.sendMessage("§a分類交易模式已更新為：" + nextMode.getDisplayName(playerLocale));
                 ShopAdminGui.openAdminCategoryEdit(shopManager, player, session, categoryId);
             } else {
                 player.sendMessage("§c" + locale.msg(player, "msg.gui.admin.failed"));
             }
+            return;
+        }
+        if (slot == ShopAdminGui.CATEGORY_REMOVE_SLOT) {
+            if (admin.removeCategory(shopManager.getCatalog(), categoryId)) {
+                player.sendMessage("§a已成功刪除分類 " + categoryId);
+                session.setCategoryId(null);
+                ShopGui.openMain(shopManager, player, session);
+            } else {
+                player.sendMessage("§c刪除分類失敗");
+            }
+            return;
         }
     }
 
@@ -550,8 +563,10 @@ public final class GuiListener implements Listener {
         if (slot == ShopAdminGui.ITEM_TOGGLE_SLOT) {
             var setting = shopManager.getShopConfig().findItemSetting(catalogKey).orElse(null);
             if (setting == null) return;
-            if (admin.setItemEnabled(shopManager.getCatalog(), catalogKey, !setting.isEnabled())) {
-                player.sendMessage("§a" + locale.msg(player, "msg.gui.admin.item.toggle-success"));
+            var nextMode = setting.getTradeMode().next();
+            if (admin.setItemTradeMode(shopManager.getCatalog(), catalogKey, nextMode)) {
+                var playerLocale = locale.getPlayerLocale(player);
+                player.sendMessage("§a商品交易模式已更新為：" + nextMode.getDisplayName(playerLocale));
                 ShopAdminGui.openAdminItemEdit(shopManager, player, session, catalogKey);
             } else {
                 player.sendMessage("§c" + locale.msg(player, "msg.gui.admin.failed"));

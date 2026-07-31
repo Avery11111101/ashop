@@ -6,6 +6,7 @@ import org.bukkit.configuration.file.YamlConfiguration;
 
 import java.io.File;
 import java.io.IOException;
+import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -14,7 +15,7 @@ import java.util.Map;
 import java.util.Optional;
 
 /**
- * 管理員 GUI 編輯 — 商品價格/啟用/移除與 config UI 化
+ * 管理員 GUI 編輯 — 商品價格/啟用/交易模式/移除與 config UI 化
  */
 public final class ShopAdminService {
 
@@ -156,14 +157,83 @@ public final class ShopAdminService {
         });
     }
 
+    public boolean setItemTradeMode(ItemCatalog catalog, String catalogKey, TradeMode tradeMode) {
+        return updateItemYaml(catalog, catalogKey, yamlPath -> {
+            yamlPath.yaml.set(yamlPath.path + ".trade-mode", tradeMode.name());
+        });
+    }
+
     public boolean setCategoryAllowBuy(ItemCatalog catalog, String categoryId, boolean allowBuy) {
-        var file = shopConfig.getCategoryFile(categoryId);
-        if (!file.exists()) return false;
-        var yaml = YamlConfiguration.loadConfiguration(file);
-        yaml.set("allow-buy", allowBuy);
-        saveYaml(file, yaml);
+        return setCategoryTradeMode(catalog, categoryId, allowBuy ? TradeMode.BOTH : TradeMode.SELL_ONLY);
+    }
+
+    public boolean setCategoryTradeMode(ItemCatalog catalog, String categoryId, TradeMode tradeMode) {
+        var categoryDir = new File(shopConfig.getShopFolder(), categoryId.replace('/', File.separatorChar));
+        if (!categoryDir.exists()) return false;
+
+        var itemsFile = new File(categoryDir, "items.yml");
+        if (itemsFile.exists()) {
+            var yaml = YamlConfiguration.loadConfiguration(itemsFile);
+            yaml.set("trade-mode", tradeMode.name());
+            yaml.set("allow-buy", tradeMode.allowsBuy());
+
+            var section = yaml.getConfigurationSection("items");
+            if (section != null) {
+                for (var key : section.getKeys(false)) {
+                    yaml.set("items." + key + ".trade-mode", tradeMode.name());
+                }
+            }
+            saveYaml(itemsFile, yaml);
+        }
+
+        cascadeTradeModeToChildDirectories(categoryDir, tradeMode);
+
         shopConfig.load(catalog);
         return true;
+    }
+
+    private void cascadeTradeModeToChildDirectories(File dir, TradeMode tradeMode) {
+        var children = dir.listFiles(File::isDirectory);
+        if (children == null) return;
+        for (var child : children) {
+            if (child.getName().startsWith(".") || child.getName().equalsIgnoreCase("_template")) {
+                continue;
+            }
+            var itemsFile = new File(child, "items.yml");
+            if (itemsFile.exists()) {
+                var yaml = YamlConfiguration.loadConfiguration(itemsFile);
+                yaml.set("trade-mode", tradeMode.name());
+                yaml.set("allow-buy", tradeMode.allowsBuy());
+                var section = yaml.getConfigurationSection("items");
+                if (section != null) {
+                    for (var key : section.getKeys(false)) {
+                        yaml.set("items." + key + ".trade-mode", tradeMode.name());
+                    }
+                }
+                saveYaml(itemsFile, yaml);
+            }
+            cascadeTradeModeToChildDirectories(child, tradeMode);
+        }
+    }
+
+    public boolean removeCategory(ItemCatalog catalog, String categoryId) {
+        var categoryDir = new File(shopConfig.getShopFolder(), categoryId.replace('/', File.separatorChar));
+        if (!categoryDir.exists()) return false;
+        deleteRecursively(categoryDir);
+        shopConfig.load(catalog);
+        return true;
+    }
+
+    private void deleteRecursively(File file) {
+        if (file.isDirectory()) {
+            var children = file.listFiles();
+            if (children != null) {
+                for (var child : children) {
+                    deleteRecursively(child);
+                }
+            }
+        }
+        file.delete();
     }
 
     public boolean removeItem(ItemCatalog catalog, String catalogKey) {

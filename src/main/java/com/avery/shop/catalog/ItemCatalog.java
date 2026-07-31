@@ -130,9 +130,24 @@ public final class ItemCatalog {
                 || name.contains("POT") || name.contains("PAINTING") || name.contains("ITEM_FRAME")
                 || name.contains("ARMOR_STAND") || name.contains("DECORATED_POT"))
             return ItemCategory.DECORATIONS;
+        if (isMineralOrOre(name, material)) return ItemCategory.BLOCKS;
         if (material.isBlock()) return ItemCategory.BLOCKS;
 
         return ItemCategory.MISC;
+    }
+
+    private static boolean isMineralOrOre(String name, Material material) {
+        if (name.endsWith("_ORE") || name.contains("_ORE_")) return false;
+
+        return name.startsWith("RAW_") || name.contains("RAW_")
+                || name.contains("INGOT") || name.contains("NUGGET")
+                || name.equals("COAL") || name.equals("CHARCOAL")
+                || name.equals("DIAMOND") || name.equals("EMERALD")
+                || name.equals("LAPIS_LAZULI") || name.equals("REDSTONE")
+                || name.equals("QUARTZ") || name.equals("NETHERITE_SCRAP")
+                || name.equals("ANCIENT_DEBRIS") || name.equals("AMETHYST_SHARD")
+                || name.equals("AMETHYST_BLOCK") || name.equals("BUDDING_AMETHYST")
+                || name.equals("FLINT");
     }
 
     public List<CatalogEntry> getByCategory(ItemCategory category) {

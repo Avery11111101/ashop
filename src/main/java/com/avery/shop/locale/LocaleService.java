@@ -259,6 +259,16 @@ public final class LocaleService {
         var key = "category." + categoryId.replace('/', '.');
         var translated = msg(player, key);
         if (translated.equals(key)) {
+            var twMsg = msg("zh_tw", key);
+            if (!twMsg.equals(key)) {
+                return twMsg;
+            }
+            var leaf = categoryId.contains("/") ? categoryId.substring(categoryId.lastIndexOf('/') + 1) : categoryId;
+            var leafKey = "category." + leaf;
+            var leafMsg = msg("zh_tw", leafKey);
+            if (!leafMsg.equals(leafKey)) {
+                return leafMsg;
+            }
             return categoryId;
         }
         return translated;

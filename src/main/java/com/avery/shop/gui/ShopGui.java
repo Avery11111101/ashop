@@ -370,14 +370,20 @@ public final class ShopGui {
             lore.add(Component.text(locale.msg(player, "msg.gui.seller", systemName))
                     .color(NamedTextColor.GRAY).decoration(TextDecoration.ITALIC, false));
             lore.add(Component.empty());
-            boolean purchasable = manager.getShopConfig().isItemPurchasable(entry);
-            if (purchasable) {
+            var effectiveMode = manager.getShopConfig().getItemTradeMode(entry.getKey());
+            if (effectiveMode.allowsBuy()) {
                 lore.add(Component.text(locale.msg(player, "msg.gui.buy-one"))
                         .color(NamedTextColor.GREEN).decoration(TextDecoration.ITALIC, false));
                 lore.add(Component.text(locale.msg(player, "msg.gui.buy-stack"))
                         .color(NamedTextColor.GREEN).decoration(TextDecoration.ITALIC, false));
                 lore.add(Component.text(locale.msg(player, "msg.gui.buy-custom"))
                         .color(NamedTextColor.YELLOW).decoration(TextDecoration.ITALIC, false));
+            } else if (effectiveMode == com.avery.shop.shop.TradeMode.SELL_ONLY) {
+                lore.add(Component.text("§e交易模式：只收不賣 (至 /shop sell 出售)")
+                        .decoration(TextDecoration.ITALIC, false));
+            } else if (effectiveMode == com.avery.shop.shop.TradeMode.DISABLED) {
+                lore.add(Component.text("§c交易模式：暫不開放交易")
+                        .decoration(TextDecoration.ITALIC, false));
             } else {
                 lore.add(Component.text(locale.msg(player, "msg.gui.buy-disabled"))
                         .color(NamedTextColor.RED).decoration(TextDecoration.ITALIC, false));
@@ -512,10 +518,19 @@ public final class ShopGui {
         int count = manager.getCategoryDisplayCount(categoryId);
         lore.add(Component.text(locale.msg(player, "msg.gui.category.count", count))
                 .color(NamedTextColor.GRAY).decoration(TextDecoration.ITALIC, false));
-        if (!manager.getShopConfig().isCategoryAllowBuy(categoryId)) {
-            lore.add(Component.text(locale.msg(player, "msg.gui.category.buy-disabled"))
-                    .color(NamedTextColor.RED).decoration(TextDecoration.ITALIC, false));
+
+        var effectiveMode = manager.getShopConfig().getCategoryTradeMode(categoryId);
+        if (effectiveMode == com.avery.shop.shop.TradeMode.BUY_ONLY) {
+            lore.add(Component.text("§e交易模式：只賣不收 (玩家僅可購買)")
+                    .decoration(TextDecoration.ITALIC, false));
+        } else if (effectiveMode == com.avery.shop.shop.TradeMode.SELL_ONLY) {
+            lore.add(Component.text("§e交易模式：只收不賣 (至 /shop sell 出售)")
+                    .decoration(TextDecoration.ITALIC, false));
+        } else if (effectiveMode == com.avery.shop.shop.TradeMode.DISABLED) {
+            lore.add(Component.text("§c交易模式：暫不開放交易")
+                    .decoration(TextDecoration.ITALIC, false));
         }
+
         lore.add(Component.text(locale.msg(player, "msg.gui.category.click"))
                 .color(NamedTextColor.GREEN).decoration(TextDecoration.ITALIC, false));
         if (player.hasPermission("shop.admin")) {

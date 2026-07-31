@@ -2,6 +2,7 @@ package com.avery.shop.gui;
 
 import com.avery.shop.shop.ShopAdminService;
 import com.avery.shop.shop.ShopManager;
+import com.avery.shop.shop.TradeMode;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import net.kyori.adventure.text.format.TextDecoration;
@@ -22,7 +23,9 @@ public final class ShopAdminGui {
 
     public static final int CATEGORY_DISPLAY_SLOT = 13;
     public static final int CATEGORY_TOGGLE_BUY_SLOT = 22;
+    public static final int CATEGORY_REMOVE_SLOT = 24;
     public static final int CATEGORY_BACK_SLOT = 49;
+
     public static final int ITEM_DISPLAY_SLOT = 13;
     public static final int ITEM_SET_PRICE_SLOT = 20;
     public static final int ITEM_TOGGLE_SLOT = 22;
@@ -45,6 +48,7 @@ public final class ShopAdminGui {
         }
 
         var locale = manager.getPlugin().getLocaleService();
+        var playerLocale = locale.getPlayerLocale(player);
         session.setViewType(GuiSession.ViewType.ADMIN_ITEM_EDIT);
         session.setPendingCatalogKey(catalogKey);
         session.clearSlotMap();
@@ -60,6 +64,8 @@ public final class ShopAdminGui {
         var setting = resolved.setting();
         var basePrice = setting.getPrice();
         var effectivePrice = manager.getShopConfig().applyServerPrice(basePrice);
+        var effectiveTradeMode = manager.getShopConfig().getItemTradeMode(catalogKey);
+
         var display = resolved.entry().getTemplate().clone();
         display.setAmount(1);
         var meta = display.getItemMeta();
@@ -71,9 +77,8 @@ public final class ShopAdminGui {
             lore.add(Component.text(locale.msg(player, "msg.gui.admin.item.effective-price",
                             manager.getEconomy().format(effectivePrice)))
                     .color(NamedTextColor.YELLOW).decoration(TextDecoration.ITALIC, false));
-            lore.add(Component.text(locale.msg(player,
-                            setting.isEnabled() ? "msg.gui.admin.item.enabled" : "msg.gui.admin.item.disabled"))
-                    .color(setting.isEnabled() ? NamedTextColor.GREEN : NamedTextColor.RED)
+            lore.add(Component.text("交易模式: " + effectiveTradeMode.getDisplayName(playerLocale))
+                    .color(tradeModeColor(effectiveTradeMode))
                     .decoration(TextDecoration.ITALIC, false));
             meta.lore(lore);
             display.setItemMeta(meta);
@@ -85,11 +90,11 @@ public final class ShopAdminGui {
                 locale.msg(player, "msg.gui.admin.item.set-price"),
                 locale.msg(player, "msg.gui.admin.item.set-price.lore")));
 
+        var itemMode = setting.getTradeMode();
         inv.setItem(ITEM_TOGGLE_SLOT, ShopGui.button(
-                setting.isEnabled() ? Material.LIME_DYE : Material.GRAY_DYE,
-                locale.msg(player, setting.isEnabled()
-                        ? "msg.gui.admin.item.disable" : "msg.gui.admin.item.enable"),
-                locale.msg(player, "msg.gui.admin.item.toggle.lore")));
+                tradeModeIcon(itemMode),
+                "交易模式：" + itemMode.getDisplayName(playerLocale),
+                "§7點擊切換模式 (買賣皆可 -> 只賣不收 -> 只收不賣 -> 禁用)"));
 
         inv.setItem(ITEM_REMOVE_SLOT, ShopGui.button(
                 Material.BARRIER,
@@ -119,6 +124,7 @@ public final class ShopAdminGui {
         }
 
         var locale = manager.getPlugin().getLocaleService();
+        var playerLocale = locale.getPlayerLocale(player);
         session.setViewType(GuiSession.ViewType.ADMIN_CATEGORY_EDIT);
         session.setCategoryId(categoryId);
         session.clearSlotMap();
@@ -146,12 +152,27 @@ public final class ShopAdminGui {
         }
         inv.setItem(CATEGORY_DISPLAY_SLOT, display);
 
-        boolean localAllow = definition.isAllowBuy();
+        var currentMode = definition.getTradeMode();
+        boolean hasDiffering = config.hasDifferingChildTradeModes(categoryId);
+
+        var toggleLore = new ArrayList<String>();
+        toggleLore.add("§7點擊切換分類交易模式 (買賣皆可 -> 只賣不收 -> 只收不賣 -> 禁用)");
+        if (hasDiffering) {
+            toggleLore.add("§e⚠️ 提示：下轄包含混合/自訂交易模式 (部分子分類或商品已被單獨調整)");
+            toggleLore.add("§c (再次點擊調整父分類時，所有子分類與商品將強制統一為新模式)");
+        } else {
+            toggleLore.add("§7(點擊調整時，將同步將所有子分類與商品設為相同模式)");
+        }
+
         inv.setItem(CATEGORY_TOGGLE_BUY_SLOT, ShopGui.button(
-                localAllow ? Material.LIME_DYE : Material.GRAY_DYE,
-                locale.msg(player, localAllow
-                        ? "msg.gui.admin.category.disable-buy" : "msg.gui.admin.category.enable-buy"),
-                locale.msg(player, "msg.gui.admin.category.toggle-buy.lore")));
+                tradeModeIcon(currentMode),
+                "分類交易模式：" + currentMode.getDisplayName(playerLocale),
+                toggleLore.toArray(String[]::new)));
+
+        inv.setItem(CATEGORY_REMOVE_SLOT, ShopGui.button(
+                Material.BARRIER,
+                "§c刪除此分類",
+                "§7點擊將完全刪除此分類及其設定檔"));
 
         inv.setItem(CATEGORY_BACK_SLOT, ShopGui.button(
                 Material.ARROW,
@@ -165,31 +186,52 @@ public final class ShopAdminGui {
                                       com.avery.shop.locale.LocaleService locale,
                                       List<Component> lore, String categoryId) {
         var config = manager.getShopConfig();
-        boolean local = config.isCategoryAllowBuyLocal(categoryId);
-        boolean effective = config.isCategoryAllowBuy(categoryId);
+        var playerLocale = locale.getPlayerLocale(player);
+        var localMode = config.getCategoryTradeModeLocal(categoryId);
+        var effectiveMode = config.getCategoryTradeMode(categoryId);
 
-        lore.add(Component.text(locale.msg(player, local
-                        ? "msg.gui.admin.category.local-buy-on" : "msg.gui.admin.category.local-buy-off"))
-                .color(local ? NamedTextColor.GREEN : NamedTextColor.RED)
+        lore.add(Component.text("此分類模式: " + localMode.getDisplayName(playerLocale))
+                .color(tradeModeColor(localMode))
                 .decoration(TextDecoration.ITALIC, false));
 
-        if (effective) {
-            lore.add(Component.text(locale.msg(player, "msg.gui.admin.category.effective-buy-on"))
-                    .color(NamedTextColor.GREEN).decoration(TextDecoration.ITALIC, false));
-        } else {
-            lore.add(Component.text(locale.msg(player, "msg.gui.admin.category.effective-buy-off"))
-                    .color(NamedTextColor.RED).decoration(TextDecoration.ITALIC, false));
-            config.findBuyBlockedByAncestor(categoryId).ifPresent(blocker -> {
-                if (!blocker.equals(categoryId)) {
-                    lore.add(Component.text(locale.msg(player, "msg.gui.admin.category.inherited-from",
-                                    config.getCategoryDisplayName(player, blocker)))
-                            .color(NamedTextColor.GRAY).decoration(TextDecoration.ITALIC, false));
-                }
-            });
+        lore.add(Component.text("繼承有效模式: " + effectiveMode.getDisplayName(playerLocale))
+                .color(tradeModeColor(effectiveMode))
+                .decoration(TextDecoration.ITALIC, false));
+
+        if (config.hasDifferingChildTradeModes(categoryId)) {
+            lore.add(Component.text("⚠️ 提示：包含子分類/商品自訂模式設定")
+                    .color(NamedTextColor.YELLOW)
+                    .decoration(TextDecoration.ITALIC, false));
         }
+
+        config.findBuyBlockedByAncestor(categoryId).ifPresent(blocker -> {
+            if (!blocker.equals(categoryId)) {
+                lore.add(Component.text(locale.msg(player, "msg.gui.admin.category.inherited-from",
+                                config.getCategoryDisplayName(player, blocker)))
+                        .color(NamedTextColor.GRAY).decoration(TextDecoration.ITALIC, false));
+            }
+        });
 
         lore.add(Component.text(locale.msg(player, "msg.gui.admin.category.inherit-hint"))
                 .color(NamedTextColor.DARK_GRAY).decoration(TextDecoration.ITALIC, false));
+    }
+
+    private static Material tradeModeIcon(TradeMode mode) {
+        return switch (mode) {
+            case BOTH -> Material.LIME_DYE;
+            case BUY_ONLY -> Material.GOLD_INGOT;
+            case SELL_ONLY -> Material.HOPPER;
+            case DISABLED -> Material.GRAY_DYE;
+        };
+    }
+
+    private static NamedTextColor tradeModeColor(TradeMode mode) {
+        return switch (mode) {
+            case BOTH -> NamedTextColor.GREEN;
+            case BUY_ONLY -> NamedTextColor.GOLD;
+            case SELL_ONLY -> NamedTextColor.AQUA;
+            case DISABLED -> NamedTextColor.RED;
+        };
     }
 
     public static ItemStack adminCategoryButton(ShopManager manager, Player player) {

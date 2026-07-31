@@ -381,8 +381,53 @@ ShopPlugin
    - 購買數量、搜尋、管理員設定的對話流程，全面改為呼叫 `ChatPrompt.start()` 接收輸入。
    - 清理 Session 時 (`onClose` / `getActiveSession`) 透過 `player.isConversing()` 確認玩家是否在對話中，以防 Session 提前被清空。
 
+### 2026-07-31 新增交易模式（TradeMode）與滾輪中鍵編輯 (v1.7.0)
+
+**使用者決策動機 (Avery)**：
+1. 需求單一商品或整筆分類可以調整為「只收購不賣」或「只賣不收」，以及「禁用交易」。
+2. 設定為禁用交易的商品/分類仍需要顯示在商店 GUI 中供玩家瀏覽，僅禁止進行買賣交易。
+3. 原有的管理員 Shift+右鍵編輯，要求同時支援使用「滾輪中鍵 (Middle Click)」觸發開啟編輯面板。
+4. 管理員 GUI 設定面板（分類編輯與商品編輯）必須包含獨立的刪除選項（刪除分類 / 刪除商品）。
+
+**實作與架構變更**：
+1. **TradeMode Enum** (`TradeMode.java`)：
+   - 定義 `BOTH` (買賣皆可), `BUY_ONLY` (只賣不收), `SELL_ONLY` (只收不賣), `DISABLED` (禁用交易)。
+   - 提供 `allowsBuy()`, `allowsSell()`, `next()`（循環切換）等方法。
+2. **多層級與樹狀繼承** (`ShopConfigService.java`)：
+   - 分類檔 `items.yml` 支援 `trade-mode` 屬性（相容舊版 `allow-buy`）。
+   - 商品層級支援獨立 `trade-mode`。
+   - `getCategoryTradeMode(categoryId)` 與 `getItemTradeMode(catalogKey)` 實現樹狀組合權限計算 (`combineTradeModes`)：父分類設為 `BUY_ONLY` 時，子項目自動繼承限制。
+3. **禁用交易仍保留 GUI 顯示**：
+   - `isItemInShop(entry)` 保持有效，`ShopGui` 中正常呈現所有 enabled 商品。
+   - `ShopGui` 根據 `getItemTradeMode` 動態顯示 Lore 提示（「只收不賣 (至 /shop sell 出售)」、「暫不開放交易」）。
+   - `canPlayerBuy` 與 `canPlayerSell` 嚴格檢驗 `allowsBuy()` 與 `allowsSell()`，不符權限時拒絕交易或自動剔除收購箱物品。
+4. **滾輪中鍵編輯** (`GuiListener.java`)：
+   - `isAdminEditClick` 加入 `ClickType.MIDDLE`（滾輪中鍵）判定，管理者中鍵點擊分類或物品圖示即可直接開啟管理選單。
+5. **管理員 GUI 獨立刪除選項** (`ShopAdminGui.java` & `ShopAdminService.java`)：
+   - 商品編輯面板：提供獨立「刪除商品」按鈕 (`removeItem`)。
+   - 分類編輯面板：提供獨立「刪除分類」按鈕 (`removeCategory`)，點擊刪除整筆分類檔案與子目錄並傳回主選單。
+6. **舊版設定檔自動平滑升級** (`ShopConfigService.java`)：
+   - 啟動與載入時透過 `migrateConfigsRecursively` 自動掃描 `shop/` 下現有舊版 `items.yml`。
+   - 若檔案中欠缺 `trade-mode` 屬性，會依據舊版 `allow-buy` 自動升級移轉寫入 `trade-mode`（如 `BOTH` 或 `SELL_ONLY`），無需人工手動修改舊設定。
+7. **分類/商品 TradeMode 獨立調整與父分類重置級聯** (`ShopConfigService.java` & `ShopAdminGui.java`)：
+   - 子分類單獨設定完全生效：修復 `getCategoryTradeMode` 移除舊有父分類強加交集覆蓋限制。當單獨將子分類（如「食物/生食」）調為 `BOTH`（買賣皆可）時，該子分類即刻完全以 `BOTH` 生效，允許買賣。
+   - 父分類混合模式提示：當父分類下有子分類或商品做了單獨調整時，父分類編輯選單會顯式提示（`⚠️ 提示：下轄包含混合/自訂交易模式 (部分子分類或商品已被單獨調整)`）。
+   - 父分類再次切換重置級聯：當管理員再次點擊調整父分類時，系統會觸發級聯（Cascade）機制，將該分類及其下轄所有子分類與商品的 `trade-mode` 強制統一重置為父分類的新模式。
+   - 動態繼承與收購箱阻擋：商品為預設 `BOTH` 時動態繼承分類之 `TradeMode`；若分類設為 `BUY_ONLY`（只賣不收），`/shop sell` 收購箱精準阻擋並退回物品。
+8. **新增獨立專屬分類與單純挖掘掉落物過濾** (`ShopSubcategoryResolver.java`, `ItemCatalog.java` & `zh_tw.properties`)：
+   - 建立 4 個專屬獨立分類歸類解析：
+     - **原木 (`logs`)**：專門歸類原木/原木變種/菌柄，木板、階梯、門板留在木製品。
+     - **礦物(粗礦物) (`ores`)**：修正預設歸類邏輯使非方塊物品（粗鐵/粗金/粗銅、金屬錠與粒、煤炭/木炭/鑽石/綠寶石/青金石/紅石/石英/Netherite 碎屑/紫水晶/燧石）全數納入 `礦物(粗礦物)`，並嚴格過濾需要絲綢觸摸的 `*_ORE` 方塊。
+     - **石頭(變種方塊不要) (`stones`)**：專門歸類純原石/石頭/深片岩/黑石/終界石/地獄石，嚴格排除階梯/半磚/牆/磚塊變種。
+     - **農作物 (`crops`)**：專門歸類小麥/胡蘿蔔/馬鈴薯/甜菜根/甘蔗/南瓜/西瓜/種子等農作物。
+9. **分類名稱全面繁體中文原生顯示與自動修正** (`ShopConfigService.java` & `LocaleService.java`)：
+   - 強制預設 `zh_tw` 產生 default `items.yml` 分類名稱。
+   - 啟動與熱載入時，自動掃描並修復舊 `items.yml` 中殘留的英文目錄路徑 `display-name`（如 `building/logs` -> `原木`）。
+   - GUI 渲染優先呈現語系檔中的標準繁體中文名稱，確保視覺 100% 中文化。
+
 ## 待擴充
 
 - 可匯入完整 Minecraft zh_tw.json 擴充翻譯覆蓋率
 - 可加入更多語言（ja_jp 等）
 - 可加入議價、限購、分頁效能優化（大量上架時）
+

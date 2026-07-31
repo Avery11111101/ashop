@@ -39,8 +39,10 @@ public final class ShopSubcategoryResolver {
         var leaf = parts[parts.length - 1];
         return switch (leaf) {
             case "building" -> Material.BRICKS;
+            case "logs" -> Material.OAK_LOG;
             case "wood" -> Material.OAK_PLANKS;
-            case "stone" -> Material.STONE;
+            case "stones" -> Material.STONE;
+            case "stone" -> Material.STONE_BRICKS;
             case "copper" -> Material.COPPER_BLOCK;
             case "dyed" -> Material.WHITE_WOOL;
             case "wool" -> Material.WHITE_WOOL;
@@ -50,7 +52,8 @@ public final class ShopSubcategoryResolver {
             case "glazed_terracotta" -> Material.WHITE_GLAZED_TERRACOTTA;
             case "glass" -> Material.GLASS;
             case "natural" -> Material.GRASS_BLOCK;
-            case "ores" -> Material.IRON_ORE;
+            case "ores" -> Material.RAW_IRON;
+            case "crops" -> Material.WHEAT;
             case "leaves" -> Material.OAK_LEAVES;
             case "saplings" -> Material.OAK_SAPLING;
             case "flowers" -> Material.POPPY;
@@ -100,9 +103,11 @@ public final class ShopSubcategoryResolver {
         if (relativePath == null) return 999;
         return switch (relativePath) {
             case "building" -> 0;
-            case "building/wood" -> 0;
-            case "building/stone" -> 1;
-            case "building/copper" -> 2;
+            case "building/logs" -> 0;
+            case "building/stones" -> 1;
+            case "building/wood" -> 2;
+            case "building/stone" -> 3;
+            case "building/copper" -> 4;
             case "dyed" -> 1;
             case "dyed/wool" -> 0;
             case "dyed/carpet" -> 1;
@@ -112,10 +117,11 @@ public final class ShopSubcategoryResolver {
             case "dyed/glass" -> 5;
             case "natural" -> 2;
             case "natural/ores" -> 0;
-            case "natural/leaves" -> 1;
-            case "natural/saplings" -> 2;
-            case "natural/flowers" -> 3;
-            case "natural/terrain" -> 4;
+            case "natural/crops" -> 1;
+            case "natural/leaves" -> 2;
+            case "natural/saplings" -> 3;
+            case "natural/flowers" -> 4;
+            case "natural/terrain" -> 5;
             case "functional" -> 3;
             case "nether" -> 4;
             case "end" -> 5;
@@ -133,9 +139,10 @@ public final class ShopSubcategoryResolver {
             case "legs" -> 2;
             case "feet" -> 3;
             case "shield_elytra" -> 4;
-            case "raw" -> 0;
-            case "cooked" -> 1;
-            case "snacks" -> 2;
+            case "crops" -> 0;
+            case "raw" -> 1;
+            case "cooked" -> 2;
+            case "snacks" -> 3;
             case "potion" -> 0;
             case "splash" -> 1;
             case "lingering" -> 2;
@@ -170,14 +177,15 @@ public final class ShopSubcategoryResolver {
             return "building/copper";
         }
 
+        if (isLog(name, material)) return "building/logs";
+        if (isPureStone(name, material)) return "building/stones";
         if (isWoodBuilding(name, material)) return "building/wood";
         if (isStoneBuilding(name, material)) return "building/stone";
 
-        if (name.endsWith("_ORE") || name.equals("ANCIENT_DEBRIS") || name.equals("NETHER_QUARTZ_ORE")) {
-            return "natural/ores";
-        }
+        if (isOreOrRaw(name, material)) return "natural/ores";
         if (name.endsWith("_LEAVES")) return "natural/leaves";
         if (name.endsWith("_SAPLING") || name.equals("MANGROVE_PROPAGULE")) return "natural/saplings";
+        if (isCrop(name, material)) return "natural/crops";
         if (isFlowerOrPlant(name, material)) return "natural/flowers";
         if (isTerrain(name, material)) return "natural/terrain";
 
@@ -186,6 +194,58 @@ public final class ShopSubcategoryResolver {
         if (isEndBlock(name, material)) return "end";
 
         return "other";
+    }
+
+    private static boolean isLog(String name, Material material) {
+        return name.contains("_LOG") || name.contains("_STEM")
+                || (name.endsWith("_WOOD") && !name.contains("PLANKS"))
+                || (name.endsWith("_HYPHAE") && !name.contains("PLANKS"));
+    }
+
+    private static boolean isPureStone(String name, Material material) {
+        if (name.contains("STAIR") || name.contains("SLAB") || name.contains("WALL")
+                || name.contains("BRICK") || name.contains("PILLAR") || name.contains("MOSSY")
+                || name.contains("CHISELED") || name.contains("POLISHED") || name.contains("CUT_")
+                || name.contains("TILE") || name.contains("INFESTED") || name.contains("BUTTON")
+                || name.contains("PRESSURE_PLATE")) {
+            return false;
+        }
+        return name.equals("STONE") || name.equals("COBBLESTONE") || name.equals("SMOOTH_STONE")
+                || name.equals("DEEPSLATE") || name.equals("COBBLED_DEEPSLATE")
+                || name.equals("GRANITE") || name.equals("DIORITE") || name.equals("ANDESITE")
+                || name.equals("BASALT") || name.equals("BLACKSTONE") || name.equals("END_STONE")
+                || name.equals("NETHERRACK") || name.equals("SANDSTONE") || name.equals("RED_SANDSTONE")
+                || name.equals("TUFF") || name.equals("CALCITE") || name.equals("DRIPSTONE_BLOCK")
+                || name.equals("OBSIDIAN") || name.equals("CRYING_OBSIDIAN");
+    }
+
+    private static boolean isOreOrRaw(String name, Material material) {
+        // 排除必須絲綢觸摸才獲得的原礦方塊 (如 DIAMOND_ORE, DEEPSLATE_DIAMOND_ORE 等)
+        if (name.endsWith("_ORE") || name.contains("_ORE_")) {
+            return false;
+        }
+
+        // 單純挖掘（無絲綢觸摸）直接掉落的粗礦物、錠、粒、礦產與寶石
+        return name.startsWith("RAW_") || name.contains("RAW_")
+                || name.contains("INGOT") || name.contains("NUGGET")
+                || name.equals("COAL") || name.equals("CHARCOAL")
+                || name.equals("DIAMOND") || name.equals("EMERALD")
+                || name.equals("LAPIS_LAZULI") || name.equals("REDSTONE")
+                || name.equals("QUARTZ") || name.equals("NETHERITE_SCRAP")
+                || name.equals("ANCIENT_DEBRIS") || name.equals("AMETHYST_SHARD")
+                || name.equals("AMETHYST_BLOCK") || name.equals("BUDDING_AMETHYST")
+                || name.equals("FLINT");
+    }
+
+    private static boolean isCrop(String name, Material material) {
+        return name.equals("WHEAT") || name.equals("CARROT") || name.equals("CARROTS")
+                || name.equals("POTATO") || name.equals("POTATOES") || name.equals("BEETROOT")
+                || name.equals("BEETROOTS") || name.equals("SUGAR_CANE") || name.equals("PUMPKIN")
+                || name.equals("MELON_SLICE") || name.equals("MELON") || name.equals("COCOA_BEANS")
+                || name.equals("NETHER_WART") || name.equals("SWEET_BERRIES") || name.equals("GLOW_BERRIES")
+                || name.equals("CACTUS") || name.equals("BAMBOO") || name.equals("APPLE")
+                || name.equals("GOLDEN_APPLE") || name.equals("CHORUS_FRUIT") || name.contains("SEEDS")
+                || name.equals("PITCHER_POD") || name.equals("BREAD") || name.equals("HAY_BLOCK");
     }
 
     private static boolean isDyedWool(String name) {
@@ -333,14 +393,16 @@ public final class ShopSubcategoryResolver {
 
     private static String resolveFood(Material material) {
         var name = material.name();
+        if (isCrop(name, material)) {
+            return "crops";
+        }
         if (name.startsWith("COOKED_") || name.contains("BAKED") || name.equals("DRIED_KELP")
                 || name.equals("POPPED_CHORUS_FRUIT")) {
             return "cooked";
         }
         if (name.contains("RAW_") || name.equals("BEEF") || name.equals("PORKCHOP")
                 || name.equals("CHICKEN") || name.equals("MUTTON") || name.equals("RABBIT")
-                || name.equals("COD") || name.equals("SALMON") || name.equals("TROPICAL_FISH")
-                || name.equals("POTATO") || name.equals("BEETROOT")) {
+                || name.equals("COD") || name.equals("SALMON") || name.equals("TROPICAL_FISH")) {
             return "raw";
         }
         return "snacks";

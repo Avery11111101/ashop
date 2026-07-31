@@ -5,6 +5,20 @@ ashop 的所有重要變更皆記錄於此。
 
 ---
 
+## [1.7.0] - 2026-07-31
+
+### Added / 新增
+- **Trade Mode Control (交易模式控制)** — Support `BOTH` (買賣皆可), `BUY_ONLY` (只賣不收), `SELL_ONLY` (只收不賣), `DISABLED` (禁用交易) per item & per category with tree inheritance  
+  **商品與分類交易模式** — 支援單一商品與整個分類獨立設定「買賣皆可、只賣不收、只收不賣、禁用交易」，包含層級繼承與收購箱連動
+- **Disabled Item Display (禁用交易顯示)** — Items in `DISABLED` mode remain visible in shop GUI, but purchase and sell actions are blocked with status hint  
+  **禁用交易仍可瀏覽** — 設定為禁用交易之商品依然會顯示於商店 GUI 中供玩家查看，但禁止買賣並提示「暫不開放交易」
+- **Middle Click Admin Edit (滾輪中鍵編輯)** — Admins can use Middle Click (mouse wheel) or Shift+Right Click on items/categories to open Edit GUI  
+  **滾輪中鍵編輯** — 管理員除 Shift+右鍵外，亦可使用「滾輪中鍵」點擊物品或分類直接進入編輯選單
+- **Independent Category Delete (獨立刪除分類選項)** — Added explicit Delete Category button in Category Admin GUI  
+  **獨立刪除分類** — 分類編輯面板提供獨立刪除按鈕，可直接從 GUI 刪除整個分類資料夾
+
+---
+
 ## [1.6.6] - 2026-07-11
 
 ### Added / 新增
