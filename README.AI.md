@@ -534,8 +534,24 @@ ShopPlugin
    - 將 `auto-reversion` 四個設定項（開關、週期、漲幅、跌幅）納入管理員 GUI 設定清單，提供左鍵/右鍵/Shift點擊即時編輯。
    - GUI 變更數值時自動呼叫 `startReversionTask()` 重設排程任務。
 
+### 2026-08-10 針對 Paper 26.2 開發與捨棄 Gradle Wrapper (gradlew)
+
+**使用者決策動機**：
+- Avery 要求針對 Paper 26.2 進行專案開發，並完全捨棄 `gradlew` 包裹器腳本。
+- 專案改為完全使用系統安裝的 `gradle` 進行日常編譯、測試與發布構建，簡化專案檔案結構。
+
+**實作與變更細節：**
+1. **移除 Gradle Wrapper 檔案**：
+   - 刪除根目錄下的 `gradlew` 腳本與 `gradle/` 目錄（包含 `gradle-wrapper.jar` 與 `gradle-wrapper.properties`）。
+2. **更新目標版本與構建說明**：
+   - 更新 `build.gradle.kts` 與 `plugin.yml` 中的標註與建置設定，確保持續針對 Paper 26.2 環境開發。
+   - 更新 `README.md` 與 `README.en.md` 的編譯說明，將 `./gradlew build` 替換為 `gradle build`。
+3. **驗證**：
+   - 使用系統 Gradle（`gradle build`）驗證，專案成功編譯打包出 `build/libs/ashop-1.7.0.jar`。
+
 ## 待擴充
 
 - 可匯入完整 Minecraft zh_tw.json 擴充翻譯覆蓋率
 - 可加入更多語言（ja_jp 等）
 - 可加入議價、限購、分頁效能優化（大量上架時）
+

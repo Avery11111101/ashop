@@ -89,7 +89,7 @@ Market stats: `plugins/ashop/market-data.yml`
 ## Build
 
 ```bash
-./gradlew build
+gradle build
 ```
 
 Requires **Java 25**.

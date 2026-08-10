@@ -127,7 +127,7 @@ languages:
 ## 編譯
 
 ```bash
-./gradlew build
+gradle build
 ```
 
 需要 **Java 21+**。
