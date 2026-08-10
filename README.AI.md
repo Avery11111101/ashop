@@ -501,16 +501,41 @@ ShopPlugin
 8. **實裝全自動附魔書與藥水繁體中文詳細名稱解析 (`LocaleService.java` & `DiscordPanelBuilder.java`)**：
    - 全自動讀取 `ItemStackMeta`（`EnchantmentStorageMeta` 與 `PotionMeta`）以及 `CatalogEntry` 之變體標籤。
    - 將原先一律只顯示「附魔書」或「藥水」的無差異列表，全自動精準解析為繁體中文名稱與羅馬數字等級（例如：`附魔書 (保護 IV)`、`附魔書 (鋒利 V)`、`附魔書 (耐久 III)`、`附魔書 (修復 I)`、`藥水 (迅捷 II)` 等），完全不需手動建立字典檔。
-10. **原生 26.2 / 1.21.x 目標設定與 Mojang 方塊前綴對照修復 (`build.gradle.kts` & `LocaleFileLoader.java`)**：
-   - **指令私人獨立視窗 (Ephemeral Message)**：將斜線指令 `/商店` 與 `/shop` 的回覆改為 `setEphemeral(true)` 私人訊息視窗。面板與按鈕僅開起的玩家個人看得到且唯獨該玩家能操作，徹底防止其他玩家點擊或篡改他人開啟的商店選單。
-   - **Mojang JSON 前綴解析修復 (解決 Discord 沒顯示中文之問題)**：
-     * **原因定位**：Mojang 官方 `zh_tw.json` 中，大量方塊（如 `pearlescent_froglight`、`peony`、`petrified_oak_slab`）的前綴為 `block.minecraft.` 而非 `item.minecraft.`，原先解析器僅保留原始字串，導致 `getDisplayName` 搜尋 `pearlescent_froglight` 時找不到。
-     * **雙向前綴剝離與多重 key 映射**：在 `LocaleFileLoader.parseJson` 中自動識別並自動建立短 Key（`pearlescent_froglight` ➜ `珠紫蛙光體`）、`minecraft:pearlescent_froglight` ➜ `珠紫蛙光體`，並在 `LocaleService.getDisplayName` 加入 `block.minecraft.` 與 `entity.minecraft.` 自動對照。
-     * **結果**：Discord 上所有方塊與物料 100% 呈現為官方繁體中文（如：`珠紫蛙光體`、`牡丹花`、`石化橡木半磚`、`豬布林頭顱` 等）。
+**根因分析**：直接 import `DiscordSRV` 類別導致在缺少該插件時拋出 `NoClassDefFoundError`。
+**修復步驟：**
+1. **移除硬編碼 import**：改用反射動態存取。
+2. **Fat-Jar 打包**：將 JDA 依賴打包進插件中，確保執行環境完整性。
+3. **生命週期隔離**：`onEnable` 與 Discord 服務啟動邏輯加入 `try-catch` 防護。
+4. **Discord 互動修復**：修正選單覆寫、超長 Custom ID 與不可堆疊物品處理問題。
+5. ** Mojang 方塊前綴修正**：自動解析繁體中文映射，確保 Discord 上物品顯示 100% 正確的官方繁體名稱。
+
+### 2026-08-10 商品物價自動回歸基準值機制 (v1.8.0)
+
+**使用者決策動機**：
+- Avery 要求針對商品基準值動態調整機制進行擴充。
+- 功能預設關閉 (`enabled: false`)。若為舊版設定檔無此欄位，系統必須自動相容並自動新增預設值欄位。
+- 每個商品有基準值物價。需要能設定時間週期（如每 1 小時）物價向基準值靠攏的上漲幅與下跌幅（漲幅與跌幅需能獨立設定）。
+- 當物價偏離基準價時（例如 10 塊上漲至 11 塊），依設定之跌幅（如每小時 -1.0%）慢慢回歸基準值，但不會越過基準值；反之低於基準價時依漲幅慢慢回升。
+- 調整時必須於控制台印出 log 記錄變更資訊。
+
+**實作與變更細節：**
+1. **`config.yml` 擴充與向下相容**：
+   - 新增 `dynamic-pricing.auto-reversion`（含 `enabled`, `interval-minutes`, `increase-rate-percent`, `decrease-rate-percent`）。
+   - `DynamicPricingService.checkAndMigrateConfig()` 在啟動時自動檢測舊設定檔並自動寫入補全。
+2. **`MarketData.java` & `MarketStorage.java` 精準度升級**：
+   - 將有效買賣計數 `totalBuys` 與 `totalSells` 升級為 `double` 浮點數，支援時間週期衰減時的小數位精度，YAML 讀寫自動轉接。
+3. **`DynamicPricingService.java` 物價回歸核心演算法與排程任務**：
+   - 實作 `processAutoReversion()`：依偏離方向分別套用 `decrease-rate-percent` 或 `increase-rate-percent` 微調買賣權重，並輸出控制台日誌：
+     `[物價調整] 物品 apple 價格從 $11.00 (偏離 +10.0%) 依跌幅 -1.0% 回歸至 $10.90 (基準價: $10.00)`
+   - 實作 `startReversionTask()` / `stopReversionTask()`：使用 Bukkit Scheduler 根據 `interval-minutes` 進行週期排程，支援 `/shop reload` 動態重設。
+4. **`ShopPlugin.java` 生命週期維護**：
+   - 於 `onDisable()` 中呼叫 `pricingService.stopReversionTask()` 正確釋放任務資源。
+5. **管理員 GUI 設定面板整合 (`ShopAdminService.java`, `ShopAdminGui.java`, 語系檔)**：
+   - 將 `auto-reversion` 四個設定項（開關、週期、漲幅、跌幅）納入管理員 GUI 設定清單，提供左鍵/右鍵/Shift點擊即時編輯。
+   - GUI 變更數值時自動呼叫 `startReversionTask()` 重設排程任務。
 
 ## 待擴充
 
 - 可匯入完整 Minecraft zh_tw.json 擴充翻譯覆蓋率
 - 可加入更多語言（ja_jp 等）
 - 可加入議價、限購、分頁效能優化（大量上架時）
-

@@ -27,10 +27,10 @@ public final class MarketStorage {
         if (section == null) return result;
 
         for (var key : section.getKeys(false)) {
-            var buys = section.getInt(key + ".buys", 0);
-            var sells = section.getInt(key + ".sells", 0);
-            var allBuys = section.getInt(key + ".total-buys", buys);
-            var allSells = section.getInt(key + ".total-sells", sells);
+            var buys = section.getDouble(key + ".buys", 0.0);
+            var sells = section.getDouble(key + ".sells", 0.0);
+            var allBuys = section.getInt(key + ".total-buys", (int) Math.round(buys));
+            var allSells = section.getInt(key + ".total-sells", (int) Math.round(sells));
             result.put(key, new MarketData(buys, sells, allBuys, allSells));
         }
         return result;

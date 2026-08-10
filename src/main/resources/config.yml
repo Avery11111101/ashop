@@ -89,6 +89,13 @@ dynamic-pricing:
   # /shop sell 不帶價格時，自動使用建議動態價
   auto-suggest-price: true
 
+  # 基準值物價自動回歸機制（物價偏離基準價時，按時間週期自動向基準價靠攏）
+  auto-reversion:
+    enabled: false                # 預設關閉（true = 啟用每小時自動回歸基準價）
+    interval-minutes: 60          # 調整週期（分鐘，預設 60 分鐘 = 1 小時）
+    increase-rate-percent: 1.0    # 漲幅：當物價低於基準價時，每小時回調上漲 % 數
+    decrease-rate-percent: 1.0    # 跌幅：當物價高於基準價時，每小時回調下跌 % 數
+
 gui:
   rows: 6
   items-per-page: 45

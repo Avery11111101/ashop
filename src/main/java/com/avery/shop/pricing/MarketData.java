@@ -10,28 +10,36 @@ public final class MarketData {
 
     public static final MarketData EMPTY = new MarketData(0, 0, 0, 0);
 
-    private int totalBuys;
-    private int totalSells;
+    private double totalBuys;
+    private double totalSells;
     private int allBuys;
     private int allSells;
 
-    public MarketData(int totalBuys, int totalSells) {
-        this(totalBuys, totalSells, totalBuys, totalSells);
+    public MarketData(double totalBuys, double totalSells) {
+        this(totalBuys, totalSells, (int) Math.round(totalBuys), (int) Math.round(totalSells));
     }
 
-    public MarketData(int totalBuys, int totalSells, int allBuys, int allSells) {
+    public MarketData(double totalBuys, double totalSells, int allBuys, int allSells) {
         this.totalBuys = totalBuys;
         this.totalSells = totalSells;
         this.allBuys = allBuys;
         this.allSells = allSells;
     }
 
-    public int getTotalBuys() {
+    public double getTotalBuys() {
         return totalBuys;
     }
 
-    public int getTotalSells() {
+    public double getTotalSells() {
         return totalSells;
+    }
+
+    public void setTotalBuys(double totalBuys) {
+        this.totalBuys = Math.max(0.0, totalBuys);
+    }
+
+    public void setTotalSells(double totalSells) {
+        this.totalSells = Math.max(0.0, totalSells);
     }
 
     public int getAllBuys() {
@@ -44,12 +52,12 @@ public final class MarketData {
 
     /** 記錄一筆購買（有效計價） */
     public void recordBuy() {
-        totalBuys++;
+        totalBuys += 1.0;
     }
 
     /** 記錄一筆出售（有效計價） */
     public void recordSell() {
-        totalSells++;
+        totalSells += 1.0;
     }
 
     /** 記錄一筆購買（全部交易，含漲停期間） */

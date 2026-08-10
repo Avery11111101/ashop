@@ -35,6 +35,13 @@ dynamic-pricing:
   reference-stock: 5                 # 稀缺基準
   min-multiplier: 0.2                # 最低 20%
   max-multiplier: 5.0                # 最高 500%
+
+  # 基準值物價自動回歸機制（時間週期自動回調）
+  auto-reversion:
+    enabled: false                   # 預設關閉
+    interval-minutes: 60             # 每 60 分鐘（1小時）執行一次
+    increase-rate-percent: 1.0       # 物價低於基準價時每小時 +1.0% 回歸
+    decrease-rate-percent: 1.0       # 物價高於基準價時每小時 -1.0% 回歸
 ```
 
 漲停後的購買仍記錄於 `total-buys`，但不計入有效 `buys`；恢復原價只需賣出造成漲停的有效數量。

@@ -84,6 +84,9 @@ public final class ShopPlugin extends JavaPlugin {
 
     @Override
     public void onDisable() {
+        if (pricingService != null) {
+            pricingService.stopReversionTask();
+        }
         if (discordService != null) {
             try {
                 discordService.stop();

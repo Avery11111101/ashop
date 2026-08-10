@@ -43,6 +43,10 @@ public final class ShopAdminService {
             new ConfigField("per-sell", "dynamic-pricing.per-sell-decrease", ConfigValueType.PERCENT, 0, 100, 0.5),
             new ConfigField("min-mult", "dynamic-pricing.min-multiplier", ConfigValueType.RATIO, 0.01, 10, 0.05),
             new ConfigField("max-mult", "dynamic-pricing.max-multiplier", ConfigValueType.RATIO, 0.1, 100, 0.5),
+            new ConfigField("reversion-enabled", "dynamic-pricing.auto-reversion.enabled", ConfigValueType.BOOLEAN, 0, 1, 1),
+            new ConfigField("reversion-interval", "dynamic-pricing.auto-reversion.interval-minutes", ConfigValueType.INTEGER, 1, 1440, 5),
+            new ConfigField("reversion-increase", "dynamic-pricing.auto-reversion.increase-rate-percent", ConfigValueType.PERCENT, 0, 100, 0.5),
+            new ConfigField("reversion-decrease", "dynamic-pricing.auto-reversion.decrease-rate-percent", ConfigValueType.PERCENT, 0, 100, 0.5),
             new ConfigField("max-buy", "gui.max-buy-amount", ConfigValueType.INTEGER, 1, 100000, 1)
     );
 
@@ -78,6 +82,7 @@ public final class ShopAdminService {
         var cfg = plugin.getConfig();
         cfg.set(field.configPath(), !cfg.getBoolean(field.configPath()));
         plugin.saveConfig();
+        notifyConfigChange(fieldId);
         return true;
     }
 
@@ -96,6 +101,7 @@ public final class ShopAdminService {
             cfg.set(field.configPath(), next);
         }
         plugin.saveConfig();
+        notifyConfigChange(fieldId);
         return true;
     }
 
@@ -122,9 +128,18 @@ public final class ShopAdminService {
                 }
             }
             plugin.saveConfig();
+            notifyConfigChange(fieldId);
             return true;
         } catch (NumberFormatException e) {
             return false;
+        }
+    }
+
+    private void notifyConfigChange(String fieldId) {
+        if (fieldId.startsWith("reversion-") || fieldId.equals("dynamic-enabled")) {
+            if (plugin.getPricingService() != null) {
+                plugin.getPricingService().startReversionTask();
+            }
         }
     }
 
