@@ -549,6 +549,21 @@ ShopPlugin
 3. **驗證**：
    - 使用系統 Gradle（`gradle build`）驗證，專案成功編譯打包出 `build/libs/ashop-1.7.0.jar`。
 
+### 2026-08-10 原生 Paper 26.2 封裝與遠端 Git 推送
+
+**使用者決策動機**：
+- Avery 要求將目前的變更與編譯完成的 `ashop-1.7.0.jar` 插件檔案提交並推送到遠端 Git 儲存庫。
+- 需要打好預編譯 JAR 檔案的完整 Release 文字敘述與發布說明，便於社群與伺服器管理員了解新版本亮點與安裝方式。
+
+**實作與變更細節：**
+1. **補齊編譯成品 (`ashop-1.7.0.jar`)**：
+   - 將原生 Paper 26.2 環境下編譯出之 `build/libs/ashop-1.7.0.jar` (15.4MB Fat-Jar) 複製至專案根目錄。
+2. **Git Commit & Push**：
+   - 提交包含 `api-version: 26.2` 標註調整與原生 Paper 26.2 建置檔。
+   - 執行 `git push origin main` 將本機 5 個 Commit 安全同步至遠端 GitHub 儲存庫。
+3. **撰寫 Release 描述與說明文件**：
+   - 彙整 v1.7.0 ~ v1.8.0 核心更新亮點（動態定價自動回歸、Discord 線上預覽/購買、一鍵收購箱、Paper 26.2 原生支援、Fat-Jar JDA 打包等），產出完整發布文字說明。
+
 ## 待擴充
 
 - 可匯入完整 Minecraft zh_tw.json 擴充翻譯覆蓋率
