@@ -29,6 +29,15 @@ public record PriceQuote(double price, double multiplier, double changePercent, 
         return "→";
     }
 
+    public String formatTrend() {
+        var trend = trendSymbol() + String.format("%+.0f", changePercent()) + "%";
+        return switch (cap) {
+            case MAX -> trend + " · 已達上限";
+            case MIN -> trend + " · 已達下限";
+            case NONE -> trend;
+        };
+    }
+
     /** 趨勢文字，例如 ↑+20% 或 ↑+400% · 已達上限 */
     public String formatTrend(com.avery.shop.locale.LocaleService locale,
                               org.bukkit.entity.Player player) {

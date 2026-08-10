@@ -451,10 +451,66 @@ ShopPlugin
 4. **多語言支援** (`locales/zh_tw.properties`)：
    - 補齊一鍵放入、查看可收購物品、全收購商品 GUI 標題與說明字串。
 
+### 2026-08-10 Discord 線上商店預覽與購買面板 (v1.8.0)
+
+**使用者決策動機 (Avery)**：
+1. 舊版設定檔必須相容，新增 `discord:` 設定欄位時要能自動補齊，不需要玩家重新設定 `config.yml`。
+2. 伺服器內所有商店與分類都可以在 Discord 進行線上預覽與購買。
+3. 購買時必須透過 DiscordSRV 的繫結 Discord 帳號才可以進行購買。
+4. 購買的物品直接放入玩家遊戲背包，若玩家背包沒有相對應足夠空間，必須有防呆機制防止購買與扣款。
+5. 任何玩家/Discord 成員皆可使用中文斜線指令（`/商店`）進行商店與商品動態價格預覽。
+6. 介面需包含選單下拉選單 (StringSelectMenu)、分頁按鈕與商品細節面板。
+
+**實作與架構變更**：
+1. **設定檔無縫平滑升級 (`ShopPlugin.java` & `config.yml`)**：
+   - 啟動時呼叫 `getConfig().options().copyDefaults(true)` 並 `saveConfig()`。
+   - 自動補充 `discord.enabled` (預設 true)、`discord.bot-token`、`discord.require-discordsrv-link` (預設 true)、`discord.command-name` ("商店") 與 `discord.guild-ids`。
+2. **Discord 服務管理 (`DiscordService.java`)**：
+   - 雙軌相容機制：若設定 `bot-token` 則啟動獨立 JDA Bot；若未設定則自動連接 `DiscordSRV.getPlugin().getJda()`。
+   - 註冊斜線指令 `/商店` 與 `/shop`，並綁定至 `DiscordShopListener`。
+3. **Discord 面板建構器 (`DiscordPanelBuilder.java`)**：
+   - **主選單**：`buildMainMenuMessage` 建構 12 大分類選單，支援下拉選擇。
+   - **分類與商品分頁**：`buildCategoryMessage` 展示分類物品、即時動態價格 (買價/賣價/漲跌幅)，提供下拉選單選擇商品及 `◀️ 上一頁` / `▶️ 下一頁` / `🏠 回主選單` 按鈕。
+   - **單項商品購買面板**：`buildItemPanelMessage` 展示商品資訊、數量選擇按鈕 (`1個` / `1組` / `4組` / `自訂數量`) 及 `🛒 確定購買` 按鈕。
+4. **互動與購買防呆交割 (`DiscordShopListener.java`)**：
+   - 處理斜線指令、下拉選單、按鈕點擊與 Modal 彈窗輸入。
+   - **DiscordSRV 繫結驗證**：呼叫 `DiscordSRV.getPlugin().getAccountLinkManager().getUuid(discordUserId)`，未繫結回傳 Ephemeral 錯誤提示。
+   - **玩家線上狀態檢查**：驗證 `Bukkit.getPlayer(uuid)` 是否線上。
+   - **金錢與背包防呆預檢**：計算交易總價與 deliveries 堆疊，呼叫 `InventorySpaceUtil.canFitStorage(player, deliveries)`。背包空間不足時直接攔截交易。
+   - **主執行緒交割**：主執行緒執行 `ShopManager.buyCatalogEntry` 完成交易並發送物品至背包。
+5. **多語系檔 (`locales/zh_tw.properties`)**：
+   - 補充 Discord 介面標題、按鈕文字、未繫結 / 離線 / 金額不足 / 背包不足防呆訊息與購買成功提示。
+
+### 2026-08-10 修復未安裝 DiscordSRV 時觸發 NoClassDefFoundError 導致插件停用 (v1.7.0)
+
+**使用者回報**：執行 `/ashop` 提示 `Cannot execute command 'ashop' in plugin ashop v1.7.0 - plugin is disabled.`。
+
+**根因分析**：
+`DiscordService` 與 `DiscordShopListener` 在類別頂端直接 import 了 `github.scarsz.discordsrv.DiscordSRV`。當伺服器未安裝 DiscordSRV 時，JVM ClassLoader 載入類別即拋出 `NoClassDefFoundError`。由於 Error 未被一般的 Exception 擷取，導緻 `onEnable()` 中斷，Paper 自動停用 ashop 插件。
+
+**修復步驟**：
+1. **徹底移除硬編碼 import**：移除全專案所有 `import github.scarsz.discordsrv.DiscordSRV;`。
+2. **全動態反射存取 (`DiscordService.java`)**：新增 `fetchDiscordSRVPlugin()`、`fetchDiscordSRVJda()` 與 `fetchDiscordSRVLinkedUuid()` 輔助方法，改用 `Class.forName("github.scarsz.discordsrv.DiscordSRV")` 動態載入，未安裝時安全返回 `null`。
+3. **JDA 依賴打包至 JAR (`build.gradle.kts`)**：將 `net.dv8tion:JDA` 由 `compileOnly` 改為 `implementation`，並配置 `tasks.jar` 進行 Fat-Jar 依賴打包（產出 15MB 完整 JAR），確保任何伺服器執行環境皆內建 `net.dv8tion.jda.api` 所有 Class，徹底消除 `NoClassDefFoundError: ListenerAdapter`。
+4. **onEnable / onDisable 隔離防護 (`ShopPlugin.java`)**：`discordService.start()` 採用 `try-catch (Throwable t)` 包覆，確保即使 Discord 服務初始化失敗，遊戲內商店主體 100% 正常載入運作。
+5. **修復 Discord 多層選單與購買按鈕覆寫 (`DiscordPanelBuilder.java`)**：修復原先連續呼叫 `setActionRow()` 導致前一個下拉選單（子分類選單 / 商品選單）被後方按鈕列覆寫蓋掉的問題。改用 `setComponents` 與 `ActionRow.of(...)` 多層 ActionRow 組合，恢復子分類選單、商品選擇選單、數量切換與 `🛒 確定購買` 按鈕。
+6. **修復 Discord 下拉選單 Option Value 超長引發之 Exception (`DiscordPanelBuilder.java` & `DiscordShopListener.java`)**：針對帶有複雜 NBT Base64 數據之商品（長度達 120+ 字元），新增 `getShortKey()` 與 `resolveFullKey()` 雙向對照表機制。將超長 Key 自動轉為 18 字元短 Key（`k_8a1b2c3d`），並對選單 Label 進行 `clampString(95)` 邊界截斷，徹底消除 Discord API `Value may not be longer than 100 characters!` 限制導致之點擊未響應與內部錯誤。
+7. **修復不可堆疊物品產生重複 custom_id 錯誤與新增全商店搜尋功能 (`DiscordPanelBuilder.java` & `DiscordShopListener.java`)**：
+   - **重複 custom_id 修復**：針對 `maxStack = 1` 之不可堆疊物品（如劍、工具、鞍、鞘翅），原先生成 `1個` 與 `1組 (1個)` 導致 `shop:qty:1:...` 的按鈕 ID 重複並觸發 Discord `COMPONENT_CUSTOM_ID_DUPLICATED` 錯誤。修復後針對不可堆疊物品改為生成 `1個` / `2個` / `5個` 獨一無二的 Custom ID 按鈕。
+   - **全伺服器商店商品即時查詢 (`buildSearchResultsMessage`)**：實裝「`🔍 搜尋商品`」Modal 彈窗與全伺服器跨分類商品查詢結果面板，玩家可在 Discord 輸入中文/英文/物品 ID 即時查詢所有已上架商品價格與趨勢，並可直接選取進行線上購買。
+8. **實裝全自動附魔書與藥水繁體中文詳細名稱解析 (`LocaleService.java` & `DiscordPanelBuilder.java`)**：
+   - 全自動讀取 `ItemStackMeta`（`EnchantmentStorageMeta` 與 `PotionMeta`）以及 `CatalogEntry` 之變體標籤。
+   - 將原先一律只顯示「附魔書」或「藥水」的無差異列表，全自動精準解析為繁體中文名稱與羅馬數字等級（例如：`附魔書 (保護 IV)`、`附魔書 (鋒利 V)`、`附魔書 (耐久 III)`、`附魔書 (修復 I)`、`藥水 (迅捷 II)` 等），完全不需手動建立字典檔。
+10. **原生 26.2 / 1.21.x 目標設定與 Mojang 方塊前綴對照修復 (`build.gradle.kts` & `LocaleFileLoader.java`)**：
+   - **指令私人獨立視窗 (Ephemeral Message)**：將斜線指令 `/商店` 與 `/shop` 的回覆改為 `setEphemeral(true)` 私人訊息視窗。面板與按鈕僅開起的玩家個人看得到且唯獨該玩家能操作，徹底防止其他玩家點擊或篡改他人開啟的商店選單。
+   - **Mojang JSON 前綴解析修復 (解決 Discord 沒顯示中文之問題)**：
+     * **原因定位**：Mojang 官方 `zh_tw.json` 中，大量方塊（如 `pearlescent_froglight`、`peony`、`petrified_oak_slab`）的前綴為 `block.minecraft.` 而非 `item.minecraft.`，原先解析器僅保留原始字串，導致 `getDisplayName` 搜尋 `pearlescent_froglight` 時找不到。
+     * **雙向前綴剝離與多重 key 映射**：在 `LocaleFileLoader.parseJson` 中自動識別並自動建立短 Key（`pearlescent_froglight` ➜ `珠紫蛙光體`）、`minecraft:pearlescent_froglight` ➜ `珠紫蛙光體`，並在 `LocaleService.getDisplayName` 加入 `block.minecraft.` 與 `entity.minecraft.` 自動對照。
+     * **結果**：Discord 上所有方塊與物料 100% 呈現為官方繁體中文（如：`珠紫蛙光體`、`牡丹花`、`石化橡木半磚`、`豬布林頭顱` 等）。
+
 ## 待擴充
 
 - 可匯入完整 Minecraft zh_tw.json 擴充翻譯覆蓋率
 - 可加入更多語言（ja_jp 等）
 - 可加入議價、限購、分頁效能優化（大量上架時）
-
 

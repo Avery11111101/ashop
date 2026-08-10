@@ -3,6 +3,7 @@ package com.avery.shop;
 import com.avery.shop.catalog.ItemCatalog;
 import com.avery.shop.command.LangCommand;
 import com.avery.shop.command.ShopCommand;
+import com.avery.shop.discord.DiscordService;
 import com.avery.shop.economy.EconomyService;
 import com.avery.shop.gui.GuiListener;
 import com.avery.shop.locale.LocaleService;
@@ -24,6 +25,7 @@ public final class ShopPlugin extends JavaPlugin {
     private EconomyService economyService;
     private DynamicPricingService pricingService;
     private DiscordWebhookService discordWebhookService;
+    private DiscordService discordService;
 
     @Override
     public void onEnable() {
@@ -52,6 +54,12 @@ public final class ShopPlugin extends JavaPlugin {
         shopAdminService = new ShopAdminService(this, shopConfigService);
 
         discordWebhookService = new DiscordWebhookService(this);
+        try {
+            discordService = new DiscordService(this);
+            discordService.start();
+        } catch (Throwable t) {
+            getLogger().warning("Discord 線上商店服務啟動跳過或異常: " + t.getMessage());
+        }
 
         shopManager = new ShopManager(this, itemCatalog, economyService, pricingService, shopConfigService);
         var asyncSave = new AsyncSaveService(this, shopManager);
@@ -76,6 +84,11 @@ public final class ShopPlugin extends JavaPlugin {
 
     @Override
     public void onDisable() {
+        if (discordService != null) {
+            try {
+                discordService.stop();
+            } catch (Throwable ignored) {}
+        }
         if (shopManager != null) {
             shopManager.save();
         }
@@ -114,5 +127,9 @@ public final class ShopPlugin extends JavaPlugin {
 
     public DiscordWebhookService getDiscordWebhookService() {
         return discordWebhookService;
+    }
+
+    public com.avery.shop.discord.DiscordService getDiscordService() {
+        return discordService;
     }
 }

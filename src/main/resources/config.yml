@@ -18,15 +18,23 @@ economy:
 # 系統商店（玩家只能跟系統買賣，不能上架）
 system-shop:
   enabled: true
+  player-listings: false    # false = 禁止玩家上架
+  sell-to-system: true      # 允許 /shop sell 賣給系統
+  sell-ratio: 0.667          # 收購價 = 購買價 × 2/3（閃長岩 9→6、重錘 180000→120000）
+  require-listed-item: true # 只能賣 shop/ 設定中已啟用的物品
 
 # Discord 交易紀錄推播
 discord-webhook:
   enabled: false
   url: "YOUR_WEBHOOK_URL_HERE"
-  player-listings: false    # false = 禁止玩家上架
-  sell-to-system: true      # 允許 /shop sell 賣給系統
-  sell-ratio: 0.667          # 收購價 = 購買價 × 2/3（閃長岩 9→6、重錘 180000→120000）
-  require-listed-item: true # 只能賣 shop/ 設定中已啟用的物品
+
+# Discord 線上商店預覽與購買面板 (Discord Online Store & Preview/Purchase)
+discord:
+  enabled: true
+  bot-token: ""                      # 獨立 Bot Token（若留空且安裝 DiscordSRV 則自動使用 DiscordSRV Bot）
+  require-discordsrv-link: true      # 購買時是否強制要求 DiscordSRV 帳號繫結
+  command-name: "商店"               # 斜線指令名稱 (例如: /商店, /shop)
+  guild-ids: []                      # 限制發布的伺服器 Guild ID（留空代表全伺服器通用）
 
 default-prices:
   enabled: true

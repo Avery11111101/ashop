@@ -47,6 +47,7 @@ dynamic-pricing:
 
 - **原版全物品目錄** — 含藥水、附魔書等 NBT 變體
 - **12 大分類瀏覽** — 方塊、工具、武器、護甲等
+- **Discord 線上商店預覽與購買** — 中文斜線指令 `/商店`、動態選單與 DiscordSRV 帳號繫結、背包空間防呆交割
 - **多語搜尋** — 物品 ID + 本地化名稱，支援自訂語系檔
 - **遊戲內語言切換** — `/lang`，可在 config 新增任意語言
 - **NBT 完整支援** — 附魔書、藥水、自訂 NBT 皆可交易
@@ -56,7 +57,7 @@ dynamic-pricing:
 
 ## 安裝
 
-1. 將 `ashop-1.2.6.jar` 放入 `plugins/` 資料夾
+1. 將 `ashop-1.7.0.jar` 放入 `plugins/` 資料夾
 2. 安裝 [Vault](https://www.spigotmc.org/resources/vault.34315/) 及經濟插件（如 EssentialsX）
 3. 重啟伺服器
 
@@ -122,7 +123,7 @@ languages:
 ./gradlew build
 ```
 
-需要 **Java 25**。
+需要 **Java 21+**。
 
 ---
 

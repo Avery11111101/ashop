@@ -92,6 +92,10 @@ public final class LocaleFileLoader {
             }
         }
 
+        if ("zh_tw".equals(localeCode)) {
+            fetchAndCacheOfficialLanguageJson(plugin, data);
+        }
+
         mergeFromResource(plugin, "locales/" + localeCode + ".properties", data);
 
         var userFile = getLocaleFile(plugin, localeCode);
@@ -101,6 +105,59 @@ public final class LocaleFileLoader {
         mergeFromFile(plugin, userFile, data);
 
         return data;
+    }
+
+    public static void fetchAndCacheOfficialLanguageJson(ShopPlugin plugin, Map<String, String> data) {
+        File cacheDir = getLocalesFolder(plugin);
+        File cacheFile = new File(cacheDir, "cache_zh_tw.json");
+
+        if (!cacheFile.exists() || cacheFile.length() < 1000) {
+            plugin.getLogger().info("正在從 Mojang 官方資產庫線上自動下載 1.21 繁體中文 (zh_tw.json) 語言包…");
+            boolean success = downloadOfficialJson(plugin, cacheFile);
+            if (success) {
+                plugin.getLogger().info("官方繁體中文語言包下載並快取成功！");
+            } else {
+                plugin.getLogger().warning("線上自動下載官方語言包失敗，將嘗試使用已存在快取。");
+            }
+        }
+
+        if (cacheFile.exists() && cacheFile.length() > 0) {
+            try (var is = new FileInputStream(cacheFile)) {
+                parseJson(is, data);
+            } catch (IOException e) {
+                plugin.getLogger().warning("無法讀取快取之官方語言包：" + e.getMessage());
+            }
+        }
+    }
+
+    private static boolean downloadOfficialJson(ShopPlugin plugin, File targetFile) {
+        String[] urls = new String[] {
+            "https://raw.githubusercontent.com/InventivetalentDev/minecraft-assets/1.21.1/assets/minecraft/lang/zh_tw.json",
+            "https://raw.githubusercontent.com/misode/misode.github.io/main/assets/1.21/assets/minecraft/lang/zh_tw.json"
+        };
+
+        for (String urlStr : urls) {
+            try {
+                java.net.URL url = java.net.URI.create(urlStr).toURL();
+                java.net.HttpURLConnection conn = (java.net.HttpURLConnection) url.openConnection();
+                conn.setConnectTimeout(5000);
+                conn.setReadTimeout(10000);
+                conn.setRequestProperty("User-Agent", "Mozilla/5.0 (PaperMC Plugin)");
+
+                if (conn.getResponseCode() == 200) {
+                    try (var is = conn.getInputStream();
+                         var os = new FileOutputStream(targetFile)) {
+                        is.transferTo(os);
+                    }
+                    if (targetFile.length() > 1000) {
+                        return true;
+                    }
+                }
+            } catch (Exception e) {
+                plugin.getLogger().warning("下載 " + urlStr + " 失敗: " + e.getMessage());
+            }
+        }
+        return false;
     }
 
     private static void ensureCustomLocaleFile(ShopPlugin plugin, String localeCode,
@@ -147,10 +204,43 @@ public final class LocaleFileLoader {
     private static void mergeFromResource(ShopPlugin plugin, String resource, Map<String, String> data) {
         try (var stream = plugin.getResource(resource)) {
             if (stream == null) return;
-            parseProperties(stream, data, false);
+            if (resource.endsWith(".json")) {
+                parseJson(stream, data);
+            } else {
+                parseProperties(stream, data, false);
+            }
         } catch (IOException e) {
             plugin.getLogger().warning("讀取內建語系 " + resource + " 失敗：" + e.getMessage());
         }
+    }
+
+    private static void parseJson(InputStream stream, Map<String, String> data) {
+        try (var reader = new BufferedReader(new InputStreamReader(stream, StandardCharsets.UTF_8))) {
+            var jsonObject = com.google.gson.JsonParser.parseReader(reader).getAsJsonObject();
+            for (var entry : jsonObject.entrySet()) {
+                var rawKey = entry.getKey().toLowerCase(Locale.ROOT);
+                var value = entry.getValue().getAsString();
+
+                data.putIfAbsent(rawKey, value);
+
+                if (rawKey.startsWith("item.minecraft.")) {
+                    String shortKey = rawKey.substring("item.minecraft.".length());
+                    data.putIfAbsent(shortKey, value);
+                    data.putIfAbsent("minecraft:" + shortKey, value);
+                } else if (rawKey.startsWith("block.minecraft.")) {
+                    String shortKey = rawKey.substring("block.minecraft.".length());
+                    data.putIfAbsent(shortKey, value);
+                    data.putIfAbsent("minecraft:" + shortKey, value);
+                } else if (rawKey.startsWith("enchantment.minecraft.")) {
+                    String shortKey = rawKey.substring("enchantment.minecraft.".length());
+                    data.putIfAbsent("enchantment." + shortKey, value);
+                } else if (rawKey.startsWith("entity.minecraft.")) {
+                    String shortKey = rawKey.substring("entity.minecraft.".length());
+                    data.putIfAbsent(shortKey, value);
+                    data.putIfAbsent("minecraft:" + shortKey, value);
+                }
+            }
+        } catch (Exception ignored) {}
     }
 
     private static void mergeFromFile(ShopPlugin plugin, File file, Map<String, String> data) {

@@ -3,9 +3,15 @@
 All notable changes to ashop are documented here.  
 ashop 的所有重要變更皆記錄於此。
 
----
+## [1.7.0] - 2026-08-10
 
-## [1.7.0] - 2026-07-31
+### Added / 新增
+- **Discord Online Shop Preview & Purchase (Discord 線上商店預覽與購買)** — Chinese slash command `/商店` (`/shop`), StringSelectMenu category & item browser with real-time dynamic pricing, DiscordSRV account binding verification, and inventory space pre-check protection  
+  **Discord 線上商店面板與斜線指令** — 中文斜線指令 `/商店`，支援選單下拉切換 12 大分類與商品、預覽即時動態價格趨勢、DiscordSRV 帳號繫結與遊戲內背包空間防呆預檢直接發貨
+- **Backward Compatible Config Auto-Migration (設定檔平滑無縫升級)** — Automatically populates missing `discord:` config fields on plugin enable without requiring user re-configuration  
+  **舊設定檔向下相容** — 啟動時自動補充新增之 `discord:` 設定區塊，無需重新設定舊有 `config.yml`
+
+---
 
 ### Added / 新增
 - **Trade Mode Control (交易模式控制)** — Support `BOTH` (買賣皆可), `BUY_ONLY` (只賣不收), `SELL_ONLY` (只收不賣), `DISABLED` (禁用交易) per item & per category with tree inheritance  

@@ -593,7 +593,7 @@ public final class ShopManager {
         return BuyResult.SUCCESS;
     }
 
-    private static List<ItemStack> buildDeliveryStacks(ItemStack template, int amount) {
+    public static List<ItemStack> buildDeliveryStacks(ItemStack template, int amount) {
         var stacks = new ArrayList<ItemStack>();
         if (template == null || template.getType().isAir() || amount < 1) {
             return stacks;
@@ -718,11 +718,7 @@ public final class ShopManager {
         var entry = catalog.getByKey(catalogKey);
         String locale = "zh_tw";
         if (entry != null) {
-            String base = plugin.getLocaleService().getDisplayName(locale, entry.getTemplate().getType());
-            if (entry.getDisplayTag() != null) {
-                return base + " " + plugin.getLocaleService().getVariantName(locale, entry.getDisplayTag());
-            }
-            return base;
+            return plugin.getLocaleService().getFullDisplayName(locale, entry);
         }
         return plugin.getLocaleService().getDisplayName(locale, catalogKey);
     }

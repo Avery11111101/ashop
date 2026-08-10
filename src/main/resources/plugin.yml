@@ -1,11 +1,12 @@
 name: ashop
 version: '${version}'
 main: com.avery.shop.ShopPlugin
-api-version: '26.2'
+api-version: '1.21'
 description: ashop - 動態經濟商店：越買越貴、越賣越便宜、物以稀為貴
 author: Avery
 softdepend:
   - Vault
+  - DiscordSRV
 
 commands:
   shop:

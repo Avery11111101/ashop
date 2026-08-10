@@ -49,6 +49,8 @@ public final class LocaleService {
             localeData.put(locale, data);
         }
 
+        autoPopulateFromPaperApi();
+
         loadPlayerLocales();
         plugin.getLogger().info("已載入 " + localeData.size() + " 種語言，預設："
                 + defaultLocale + "，fallback：" + fallbackLocale);
@@ -57,6 +59,62 @@ public final class LocaleService {
                 plugin.getLogger().warning("語言「" + loc + "」未載入任何翻譯，請檢查 locales/" + loc + ".properties");
             }
         }
+    }
+
+    private void autoPopulateFromPaperApi() {
+        var twData = localeData.computeIfAbsent("zh_tw", k -> new HashMap<>());
+        int loadedCount = 0;
+
+        for (Material mat : Material.values()) {
+            if (mat.isAir() || !mat.isItem()) continue;
+            String key = mat.name().toLowerCase(Locale.ROOT);
+
+            if (!twData.containsKey(key)) {
+                String paperName = fetchPaperItemName(mat);
+                if (paperName != null && !paperName.isBlank()) {
+                    twData.put(key, paperName);
+                    twData.put("minecraft:" + key, paperName);
+                    loadedCount++;
+                }
+            }
+        }
+
+        if (loadedCount > 0) {
+            plugin.getLogger().info("已透過 Paper API 動態自動載入 " + loadedCount + " 種 Minecraft 官方物品名稱");
+        }
+    }
+
+    private String fetchPaperItemName(Material mat) {
+        if (mat == null || mat.isAir()) return null;
+
+        try {
+            String transKey = mat.getItemTranslationKey();
+            var comp = net.kyori.adventure.text.Component.translatable(transKey);
+            var rendered = net.kyori.adventure.translation.GlobalTranslator.render(comp, Locale.TAIWAN);
+            String text = net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer.plainText().serialize(rendered);
+
+            if (text != null && !text.isBlank() && !text.equals(transKey)) {
+                return text;
+            }
+        } catch (Throwable ignored) {}
+
+        try {
+            Class<?> langClass = Class.forName("net.minecraft.locale.Language");
+            java.lang.reflect.Method getInstance = langClass.getMethod("getInstance");
+            Object instance = getInstance.invoke(null);
+            java.lang.reflect.Method getOrDefault = langClass.getMethod("getOrDefault", String.class);
+
+            String itemKey = "item.minecraft." + mat.name().toLowerCase(Locale.ROOT);
+            String blockKey = "block.minecraft." + mat.name().toLowerCase(Locale.ROOT);
+
+            String val = (String) getOrDefault.invoke(instance, itemKey);
+            if (val != null && !val.equals(itemKey)) return val;
+
+            val = (String) getOrDefault.invoke(instance, blockKey);
+            if (val != null && !val.equals(blockKey)) return val;
+        } catch (Throwable ignored) {}
+
+        return null;
     }
 
     private void parseLanguageConfig() {
@@ -247,6 +305,9 @@ public final class LocaleService {
         if (data != null) {
             if (data.containsKey(key)) return data.get(key);
             if (data.containsKey("minecraft:" + key)) return data.get("minecraft:" + key);
+            if (data.containsKey("item.minecraft." + key)) return data.get("item.minecraft." + key);
+            if (data.containsKey("block.minecraft." + key)) return data.get("block.minecraft." + key);
+            if (data.containsKey("entity.minecraft." + key)) return data.get("entity.minecraft." + key);
         }
         return formatEnglishName(key);
     }
@@ -256,8 +317,12 @@ public final class LocaleService {
     }
 
     public String getCategoryName(Player player, String categoryId) {
+        return getCategoryDisplayName(getPlayerLocale(player), categoryId);
+    }
+
+    public String getCategoryDisplayName(String locale, String categoryId) {
         var key = "category." + categoryId.replace('/', '.');
-        var translated = msg(player, key);
+        var translated = msg(locale, key);
         if (translated.equals(key)) {
             var twMsg = msg("zh_tw", key);
             if (!twMsg.equals(key)) {
@@ -309,5 +374,103 @@ public final class LocaleService {
 
     public String getVariantDisplay(String locale, Material material, String variantKey) {
         return getDisplayName(locale, material) + " " + getVariantName(locale, variantKey);
+    }
+
+    public String getFullDisplayName(String locale, com.avery.shop.catalog.CatalogEntry entry) {
+        if (entry == null) return "未知物品";
+        org.bukkit.inventory.ItemStack stack = entry.getTemplate();
+        if (stack == null || stack.getType().isAir()) return "未知物品";
+
+        String baseName = getDisplayName(locale, stack.getType());
+
+        if (stack.hasItemMeta()) {
+            var meta = stack.getItemMeta();
+            if (meta.hasDisplayName()) {
+                return meta.getDisplayName();
+            }
+
+            if (meta instanceof org.bukkit.inventory.meta.EnchantmentStorageMeta enchantMeta) {
+                var stored = enchantMeta.getStoredEnchants();
+                if (!stored.isEmpty()) {
+                    List<String> enchantNames = new ArrayList<>();
+                    for (var e : stored.entrySet()) {
+                        enchantNames.add(getEnchantmentName(locale, e.getKey(), e.getValue()));
+                    }
+                    return baseName + " (" + String.join(", ", enchantNames) + ")";
+                }
+            }
+
+            if (meta instanceof org.bukkit.inventory.meta.PotionMeta potionMeta) {
+                var potionType = potionMeta.getBasePotionType();
+                if (potionType != null) {
+                    return baseName + " (" + getPotionTypeName(locale, potionType) + ")";
+                }
+            }
+        }
+
+        if (entry.getDisplayTag() != null && !entry.getDisplayTag().isBlank()) {
+            String variantName = parseDisplayTag(locale, entry.getDisplayTag());
+            return baseName + " (" + variantName + ")";
+        }
+
+        return baseName;
+    }
+
+    public String parseDisplayTag(String locale, String tag) {
+        if (tag.contains(":")) {
+            String[] parts = tag.split(":");
+            String key = parts[0].toLowerCase(Locale.ROOT);
+            String levelStr = parts[1];
+            try {
+                int lvl = Integer.parseInt(levelStr);
+                return getEnchantmentBaseName(locale, key) + " " + toRoman(lvl);
+            } catch (Exception ignored) {}
+        }
+        return getVariantName(locale, tag);
+    }
+
+    public String getEnchantmentName(String locale, org.bukkit.enchantments.Enchantment enchant, int level) {
+        String key = enchant.getKey().getKey().toLowerCase(Locale.ROOT);
+        String name = getEnchantmentBaseName(locale, key);
+        return name + " " + toRoman(level);
+    }
+
+    public String getEnchantmentBaseName(String locale, String key) {
+        var rawKey = "enchantment.minecraft." + key;
+        var name = getRaw(locale, rawKey);
+        if (name.equals(rawKey)) {
+            var rawShortKey = "enchantment." + key;
+            name = getRaw(locale, rawShortKey);
+            if (name.equals(rawShortKey)) {
+                return formatEnglishName(key);
+            }
+        }
+        return name;
+    }
+
+    public String getPotionTypeName(String locale, org.bukkit.potion.PotionType potionType) {
+        String key = potionType.name().toLowerCase(Locale.ROOT);
+        var rawKey = "potion." + key;
+        var name = getRaw(locale, rawKey);
+        if (name.equals(rawKey)) {
+            return formatEnglishName(key);
+        }
+        return name;
+    }
+
+    public static String toRoman(int level) {
+        return switch (level) {
+            case 1 -> "I";
+            case 2 -> "II";
+            case 3 -> "III";
+            case 4 -> "IV";
+            case 5 -> "V";
+            case 6 -> "VI";
+            case 7 -> "VII";
+            case 8 -> "VIII";
+            case 9 -> "IX";
+            case 10 -> "X";
+            default -> String.valueOf(level);
+        };
     }
 }
