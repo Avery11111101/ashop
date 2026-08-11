@@ -3,6 +3,7 @@ package com.avery.shop.discord;
 import com.avery.shop.ShopPlugin;
 import com.avery.shop.catalog.CatalogEntry;
 import com.avery.shop.pricing.PriceQuote;
+import com.avery.shop.report.ReportSummary;
 import com.avery.shop.shop.ShopManager;
 import com.avery.shop.util.InventorySpaceUtil;
 import net.dv8tion.jda.api.events.interaction.ModalInteractionEvent;
@@ -23,17 +24,37 @@ public class DiscordShopListener extends ListenerAdapter {
 
     private final ShopPlugin plugin;
     private final DiscordPanelBuilder panelBuilder;
+    private DiscordReportBuilder reportBuilder;
 
     public DiscordShopListener(ShopPlugin plugin, DiscordPanelBuilder panelBuilder) {
+        this(plugin, panelBuilder, new DiscordReportBuilder(plugin));
+    }
+
+    public DiscordShopListener(ShopPlugin plugin, DiscordPanelBuilder panelBuilder, DiscordReportBuilder reportBuilder) {
         this.plugin = plugin;
         this.panelBuilder = panelBuilder;
+        this.reportBuilder = reportBuilder;
     }
 
     @Override
     public void onSlashCommandInteraction(@NotNull SlashCommandInteractionEvent event) {
         String commandName = plugin.getConfig().getString("discord.command-name", "商店");
-        if (event.getName().equalsIgnoreCase(commandName) || event.getName().equalsIgnoreCase("shop")) {
+        String name = event.getName();
+
+        if (name.equalsIgnoreCase(commandName) || name.equalsIgnoreCase("shop")) {
             event.reply(panelBuilder.buildMainMenuMessage()).setEphemeral(true).queue();
+            return;
+        }
+
+        if (name.equalsIgnoreCase("report") || name.equalsIgnoreCase("報表")) {
+            var option = event.getOption("type");
+            String periodStr = option != null ? option.getAsString() : "daily";
+            ReportSummary.ReportPeriod period = ReportSummary.ReportPeriod.fromString(periodStr);
+
+            ReportSummary summary = plugin.getReportService().generateReport(period);
+            var messageData = reportBuilder.buildReportMessage(summary, "overview");
+            event.reply(messageData).setEphemeral(false).queue();
+            return;
         }
     }
 
@@ -54,6 +75,19 @@ public class DiscordShopListener extends ListenerAdapter {
             String catalogKey = DiscordPanelBuilder.resolveFullKey(event.getValues().get(0));
 
             event.editMessage(panelBuilder.buildItemPanelMessage(catalogKey, categoryId, page, 1)).queue();
+            return;
+        }
+
+        // 報表詳細項目下拉選單事件: report:select_detail:<period>
+        if (customId.startsWith("report:select_detail:")) {
+            String periodStr = customId.substring("report:select_detail:".length());
+            ReportSummary.ReportPeriod period = ReportSummary.ReportPeriod.fromString(periodStr);
+            String selectedView = event.getValues().get(0);
+
+            ReportSummary summary = plugin.getReportService().generateReport(period);
+            var editData = reportBuilder.buildReportEditMessage(summary, selectedView);
+            event.editMessage(editData).queue();
+            return;
         }
     }
 
@@ -61,6 +95,26 @@ public class DiscordShopListener extends ListenerAdapter {
     public void onButtonInteraction(@NotNull ButtonInteractionEvent event) {
         String componentId = event.getComponentId();
 
+        // --- 報表按鈕事件 (report:btn:daily / report:btn:weekly / report:btn:monthly / report:btn:refresh:<period>) ---
+        if (componentId.startsWith("report:btn:")) {
+            String subKey = componentId.substring("report:btn:".length());
+            String viewDetail = "overview";
+            ReportSummary.ReportPeriod period;
+
+            if (subKey.startsWith("refresh:")) {
+                String pStr = subKey.substring("refresh:".length());
+                period = ReportSummary.ReportPeriod.fromString(pStr);
+            } else {
+                period = ReportSummary.ReportPeriod.fromString(subKey);
+            }
+
+            ReportSummary summary = plugin.getReportService().generateReport(period);
+            var editData = reportBuilder.buildReportEditMessage(summary, viewDetail);
+            event.editMessage(editData).queue();
+            return;
+        }
+
+        // --- 商店按鈕事件 ---
         if (componentId.equals("shop:nav:home")) {
             var mainMsg = panelBuilder.buildMainMenuMessage();
             event.editMessage(net.dv8tion.jda.api.utils.messages.MessageEditData.fromCreateData(mainMsg)).queue();
@@ -100,103 +154,55 @@ public class DiscordShopListener extends ListenerAdapter {
 
         if (componentId.startsWith("shop:qty:")) {
             String[] parts = componentId.split(":");
-            int quantity = Integer.parseInt(parts[2]);
-            int page = Integer.parseInt(parts[parts.length - 1]);
-            String categoryId = parts[parts.length - 2];
-            String rawKey = joinParts(parts, 3, parts.length - 3);
-            String catalogKey = DiscordPanelBuilder.resolveFullKey(rawKey);
-
-            event.editMessage(panelBuilder.buildItemPanelMessage(catalogKey, categoryId, page, quantity)).queue();
+            String catalogKey = DiscordPanelBuilder.resolveFullKey(parts[2]);
+            String categoryId = parts[3];
+            int page = Integer.parseInt(parts[4]);
+            int amount = Integer.parseInt(parts[5]);
+            event.editMessage(panelBuilder.buildItemPanelMessage(catalogKey, categoryId, page, amount)).queue();
             return;
         }
 
-        if (componentId.startsWith("shop:qty_custom:")) {
+        if (componentId.startsWith("shop:btn_buy:")) {
             String[] parts = componentId.split(":");
-            int page = Integer.parseInt(parts[parts.length - 1]);
-            String categoryId = parts[parts.length - 2];
-            String rawKey = joinParts(parts, 2, parts.length - 3);
-            String catalogKey = DiscordPanelBuilder.resolveFullKey(rawKey);
-
-            TextInput qtyInput = TextInput.create("qty_input", "購買數量", TextInputStyle.SHORT)
-                    .setPlaceholder("請輸入欲購買的數量 (例如: 16, 64)")
-                    .setRequiredRange(1, 6)
-                    .setRequired(true)
-                    .build();
-
-            Modal modal = Modal.create("shop:modal_qty:" + DiscordPanelBuilder.getShortKey(catalogKey) + ":" + categoryId + ":" + page, "自訂購買數量")
-                    .addActionRow(qtyInput)
-                    .build();
-
-            event.replyModal(modal).queue();
+            String catalogKey = DiscordPanelBuilder.resolveFullKey(parts[2]);
+            int amount = Integer.parseInt(parts[3]);
+            handleDiscordBuy(event.getUser().getId(), catalogKey, amount, (msg, ephemeral) ->
+                    event.reply(msg).setEphemeral(ephemeral).queue());
             return;
-        }
-
-        if (componentId.startsWith("shop:buy:")) {
-            String[] parts = componentId.split(":");
-            int amount = Integer.parseInt(parts[2]);
-            String rawKey = joinParts(parts, 3, parts.length - 1);
-            String catalogKey = DiscordPanelBuilder.resolveFullKey(rawKey);
-
-            handleDiscordPurchase(event.getUser().getId(), catalogKey, amount, (msg, ephemeral) -> {
-                event.reply(msg).setEphemeral(ephemeral).queue();
-            });
         }
     }
 
     @Override
     public void onModalInteraction(@NotNull ModalInteractionEvent event) {
         if (event.getModalId().equals("shop:modal_search")) {
-            String query = event.getValue("search_query") != null ? event.getValue("search_query").getAsString().trim() : "";
-            event.editMessage(panelBuilder.buildSearchResultsMessage(query, 0)).queue();
-            return;
-        }
-
-        if (event.getModalId().startsWith("shop:modal_qty:")) {
-            String[] parts = event.getModalId().split(":");
-            int page = Integer.parseInt(parts[parts.length - 1]);
-            String categoryId = parts[parts.length - 2];
-            String rawKey = joinParts(parts, 2, parts.length - 3);
-            String catalogKey = DiscordPanelBuilder.resolveFullKey(rawKey);
-
-            String input = event.getValue("qty_input") != null ? event.getValue("qty_input").getAsString().trim() : "1";
-            int quantity;
-            try {
-                quantity = Integer.parseInt(input);
-            } catch (NumberFormatException e) {
-                quantity = 1;
-            }
-
-            event.editMessage(panelBuilder.buildItemPanelMessage(catalogKey, categoryId, page, quantity)).queue();
+            String query = event.getValue("search_query").getAsString().trim();
+            var editData = panelBuilder.buildSearchResultsMessage(query, 0);
+            var createData = net.dv8tion.jda.api.utils.messages.MessageCreateData.fromEditData(editData);
+            event.reply(createData).setEphemeral(true).queue();
         }
     }
 
-    private static String joinParts(String[] parts, int start, int end) {
-        if (parts == null || start > end || start < 0 || start >= parts.length) return "";
+    private String joinParts(String[] parts, int start, int end) {
         StringBuilder sb = new StringBuilder();
-        for (int i = start; i <= end && i < parts.length; i++) {
-            if (i > start) sb.append(":");
+        for (int i = start; i <= end; i++) {
+            if (sb.length() > 0) sb.append(":");
             sb.append(parts[i]);
         }
         return sb.toString();
     }
 
     @FunctionalInterface
-    public interface ReplyCallback {
+    interface ReplyCallback {
         void reply(String message, boolean ephemeral);
     }
 
-    private void handleDiscordPurchase(String discordUserId, String catalogKey, int amount, ReplyCallback callback) {
+    private void handleDiscordBuy(String discordUserId, String catalogKey, int amount, ReplyCallback callback) {
         boolean requireLink = plugin.getConfig().getBoolean("discord.require-discordsrv-link", true);
-
         UUID playerUuid = null;
 
         if (requireLink) {
             if (Bukkit.getPluginManager().isPluginEnabled("DiscordSRV")) {
-                try {
-                    playerUuid = DiscordService.fetchDiscordSRVLinkedUuid(discordUserId);
-                } catch (Throwable e) {
-                    plugin.getLogger().warning("查詢 DiscordSRV 繫結帳號失敗: " + e.getMessage());
-                }
+                playerUuid = DiscordService.fetchDiscordSRVLinkedUuid(discordUserId);
             }
 
             if (playerUuid == null) {

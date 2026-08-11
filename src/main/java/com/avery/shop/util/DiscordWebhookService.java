@@ -20,6 +20,29 @@ public class DiscordWebhookService {
         sendPayloadWithFile(jsonPayload, null, null);
     }
 
+    public void sendPayloadWithCustomUrl(String targetUrl, String jsonPayload) {
+        if (targetUrl == null || targetUrl.isEmpty() || targetUrl.equals("YOUR_WEBHOOK_URL_HERE")) return;
+        Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
+            try {
+                URL url = new URL(targetUrl);
+                HttpURLConnection connection = (HttpURLConnection) url.openConnection();
+                connection.setRequestMethod("POST");
+                connection.setRequestProperty("User-Agent", "Java-DiscordWebhook");
+                connection.setRequestProperty("Content-Type", "application/json");
+                connection.setDoOutput(true);
+                try (OutputStream os = connection.getOutputStream()) {
+                    os.write(jsonPayload.getBytes(StandardCharsets.UTF_8));
+                }
+                int responseCode = connection.getResponseCode();
+                if (responseCode < 200 || responseCode >= 300) {
+                    plugin.getLogger().warning("無法發送自訂 Webhook，狀態碼: " + responseCode);
+                }
+            } catch (Exception e) {
+                plugin.getLogger().warning("發送自訂 Webhook 時發生錯誤: " + e.getMessage());
+            }
+        });
+    }
+
     public void sendPayloadWithFile(String jsonPayload, String fileName, String fileContent) {
         boolean enabled = plugin.getConfig().getBoolean("discord-webhook.enabled", false);
         if (!enabled) return;

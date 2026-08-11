@@ -1,8 +1,11 @@
 package com.avery.shop.discord;
 
 import com.avery.shop.ShopPlugin;
+import com.avery.shop.report.ReportSummary;
 import net.dv8tion.jda.api.JDA;
 import net.dv8tion.jda.api.JDABuilder;
+import net.dv8tion.jda.api.entities.channel.concrete.TextChannel;
+import net.dv8tion.jda.api.interactions.commands.OptionType;
 import net.dv8tion.jda.api.interactions.commands.build.Commands;
 import net.dv8tion.jda.api.requests.GatewayIntent;
 import org.bukkit.Bukkit;
@@ -17,6 +20,7 @@ public class DiscordService {
     private JDA standaloneJda;
     private Object discordSrvJda;
     private DiscordShopListener shopListener;
+    private DiscordReportBuilder reportBuilder;
 
     public DiscordService(ShopPlugin plugin) {
         this.plugin = plugin;
@@ -33,7 +37,8 @@ public class DiscordService {
 
         DiscordPanelBuilder panelBuilder = new DiscordPanelBuilder(plugin);
         DiscordPanelBuilder.preloadCatalogKeys(plugin.getItemCatalog());
-        shopListener = new DiscordShopListener(plugin, panelBuilder);
+        reportBuilder = new DiscordReportBuilder(plugin);
+        shopListener = new DiscordShopListener(plugin, panelBuilder, reportBuilder);
 
         if (!token.isEmpty()) {
             try {
@@ -63,8 +68,50 @@ public class DiscordService {
                 plugin.getLogger().warning("連結 DiscordSRV JDA 失敗: " + e.getMessage());
             }
         } else {
-            plugin.getLogger().info("未設定 discord.bot-token 且伺服器未安裝/啟用 DiscordSRV，Discord 線上商店功能暫停。");
+            plugin.getLogger().info("未設定 discord.bot-token 且伺服器未安裝/啟用 DiscordSRV，Discord 線上商店與 Bot 報表功能暫停。");
         }
+    }
+
+    public DiscordReportBuilder getReportBuilder() {
+        return reportBuilder;
+    }
+
+    public boolean sendReportToChannel(String channelId, ReportSummary summary, String viewDetail) {
+        if (reportBuilder == null || summary == null) return false;
+        var messageData = reportBuilder.buildReportMessage(summary, viewDetail);
+
+        if (standaloneJda != null) {
+            TextChannel channel = standaloneJda.getTextChannelById(channelId);
+            if (channel != null) {
+                channel.sendMessage(messageData).queue();
+                return true;
+            }
+        }
+
+        if (discordSrvJda instanceof JDA nativeJda) {
+            TextChannel channel = nativeJda.getTextChannelById(channelId);
+            if (channel != null) {
+                channel.sendMessage(messageData).queue();
+                return true;
+            }
+        } else if (discordSrvJda != null) {
+            try {
+                Method getTextChannelById = discordSrvJda.getClass().getMethod("getTextChannelById", String.class);
+                Object channelObj = getTextChannelById.invoke(discordSrvJda, channelId);
+                if (channelObj != null) {
+                    Method sendMessage = channelObj.getClass().getMethod("sendMessage", net.dv8tion.jda.api.utils.messages.MessageCreateData.class);
+                    Object action = sendMessage.invoke(channelObj, messageData);
+                    if (action != null) {
+                        Method queue = action.getClass().getMethod("queue");
+                        queue.invoke(action);
+                        return true;
+                    }
+                }
+            } catch (Exception e) {
+                plugin.getLogger().warning("透過反射發送報表訊息至 DiscordSRV Channel 失敗: " + e.getMessage());
+            }
+        }
+        return false;
     }
 
     public static Object fetchDiscordSRVPlugin() {
@@ -121,17 +168,21 @@ public class DiscordService {
     private void registerSlashCommands(JDA jda, String commandName) {
         var cmd1 = Commands.slash(commandName, "線上預覽與購買伺服器商店商品");
         var cmd2 = Commands.slash("shop", "Preview and buy items from server shop");
+        var cmdReport = Commands.slash("report", "查詢與生成伺服器商店營運報表 (每日/每週/每月)")
+                .addOption(OptionType.STRING, "type", "報表類型: daily (每日), weekly (每週), monthly (每月)", false);
+        var cmdReportZh = Commands.slash("報表", "查詢與生成伺服器商店營運報表 (每日/每週/每月)")
+                .addOption(OptionType.STRING, "type", "報表類型: daily (每日), weekly (每週), monthly (每月)", false);
 
         List<String> guildIds = plugin.getConfig().getStringList("discord.guild-ids");
         if (!guildIds.isEmpty()) {
             for (String guildId : guildIds) {
                 var guild = jda.getGuildById(guildId);
                 if (guild != null) {
-                    guild.updateCommands().addCommands(cmd1, cmd2).queue();
+                    guild.updateCommands().addCommands(cmd1, cmd2, cmdReport, cmdReportZh).queue();
                 }
             }
         } else {
-            jda.updateCommands().addCommands(cmd1, cmd2).queue();
+            jda.updateCommands().addCommands(cmd1, cmd2, cmdReport, cmdReportZh).queue();
         }
     }
 
@@ -143,12 +194,16 @@ public class DiscordService {
         try {
             var cmd1 = Commands.slash(commandName, "線上預覽與購買伺服器商店商品");
             var cmd2 = Commands.slash("shop", "Preview and buy items from server shop");
+            var cmdReport = Commands.slash("report", "查詢與生成伺服器商店營運報表 (每日/每週/每月)")
+                    .addOption(OptionType.STRING, "type", "報表類型: daily (每日), weekly (每週), monthly (每月)", false);
+            var cmdReportZh = Commands.slash("報表", "查詢與生成伺服器商店營運報表 (每日/每週/每月)")
+                    .addOption(OptionType.STRING, "type", "報表類型: daily (每日), weekly (每週), monthly (每月)", false);
 
             Method updateCommandsMethod = jdaObj.getClass().getMethod("updateCommands");
             Object action = updateCommandsMethod.invoke(jdaObj);
             if (action != null) {
                 Method addCommandsMethod = action.getClass().getMethod("addCommands", Object[].class);
-                Object queued = addCommandsMethod.invoke(action, (Object) new Object[]{ cmd1, cmd2 });
+                Object queued = addCommandsMethod.invoke(action, (Object) new Object[]{ cmd1, cmd2, cmdReport, cmdReportZh });
                 if (queued != null) {
                     try {
                         Method queueMethod = queued.getClass().getMethod("queue");

@@ -3,11 +3,13 @@ package com.avery.shop;
 import com.avery.shop.catalog.ItemCatalog;
 import com.avery.shop.command.LangCommand;
 import com.avery.shop.command.ShopCommand;
+import com.avery.shop.discord.DiscordReportScheduler;
 import com.avery.shop.discord.DiscordService;
 import com.avery.shop.economy.EconomyService;
 import com.avery.shop.gui.GuiListener;
 import com.avery.shop.locale.LocaleService;
 import com.avery.shop.pricing.DynamicPricingService;
+import com.avery.shop.report.ReportService;
 import com.avery.shop.shop.AsyncSaveService;
 import com.avery.shop.shop.ShopAdminService;
 import com.avery.shop.shop.ShopConfigService;
@@ -26,6 +28,8 @@ public final class ShopPlugin extends JavaPlugin {
     private DynamicPricingService pricingService;
     private DiscordWebhookService discordWebhookService;
     private DiscordService discordService;
+    private ReportService reportService;
+    private DiscordReportScheduler reportScheduler;
 
     @Override
     public void onEnable() {
@@ -36,6 +40,9 @@ public final class ShopPlugin extends JavaPlugin {
         localeService = new LocaleService(this);
         localeService.load();
 
+        reportService = new ReportService(this);
+        reportService.load();
+
         itemCatalog = new ItemCatalog(this, localeService);
         itemCatalog.build();
 
@@ -43,6 +50,7 @@ public final class ShopPlugin extends JavaPlugin {
         economyService.setup();
 
         pricingService = new DynamicPricingService(this, itemCatalog);
+        pricingService.load();
 
         shopConfigService = new ShopConfigService(this);
         shopConfigService.load(itemCatalog);
@@ -59,6 +67,11 @@ public final class ShopPlugin extends JavaPlugin {
             discordService.start();
         } catch (Throwable t) {
             getLogger().warning("Discord 線上商店服務啟動跳過或異常: " + t.getMessage());
+        }
+
+        if (discordService != null && discordService.getReportBuilder() != null) {
+            reportScheduler = new DiscordReportScheduler(this, reportService, discordService.getReportBuilder());
+            reportScheduler.start();
         }
 
         shopManager = new ShopManager(this, itemCatalog, economyService, pricingService, shopConfigService);
@@ -79,11 +92,17 @@ public final class ShopPlugin extends JavaPlugin {
         getCommand("lang").setExecutor(langCommand);
         getCommand("lang").setTabCompleter(langCommand);
 
-        getLogger().info("ashop 已啟用，目錄共 " + itemCatalog.size() + " 種物品");
+        getLogger().info("ashop 已啟用，目錄共 " + itemCatalog.size() + " 種物品，營運報表系統已就緒");
     }
 
     @Override
     public void onDisable() {
+        if (reportScheduler != null) {
+            reportScheduler.stop();
+        }
+        if (reportService != null) {
+            reportService.save();
+        }
         if (pricingService != null) {
             pricingService.stopReversionTask();
         }
@@ -134,5 +153,13 @@ public final class ShopPlugin extends JavaPlugin {
 
     public com.avery.shop.discord.DiscordService getDiscordService() {
         return discordService;
+    }
+
+    public ReportService getReportService() {
+        return reportService;
+    }
+
+    public DiscordReportScheduler getReportScheduler() {
+        return reportScheduler;
     }
 }

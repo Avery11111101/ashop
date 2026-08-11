@@ -432,6 +432,11 @@ public final class ShopManager {
             for (int i = 0; i < entry.getValue(); i++) {
                 pricing.recordSell(entry.getKey(), stock);
             }
+            if (plugin.getReportService() != null) {
+                var quote = getCatalogPriceQuote(entry.getKey());
+                double unitSellPrice = quote.price() * getSellRatio();
+                plugin.getReportService().recordTransaction("SELL_SYSTEM", player.getUniqueId().toString(), player.getName(), entry.getKey(), entry.getValue(), unitSellPrice * entry.getValue());
+            }
         }
         if (soldCount > 0) {
             markDirty();
@@ -531,6 +536,9 @@ public final class ShopManager {
         }
 
         pricing.recordSell(key, quoteStock(key));
+        if (plugin.getReportService() != null) {
+            plugin.getReportService().recordTransaction("SELL_SYSTEM", player.getUniqueId().toString(), player.getName(), key, 1, sellPrice);
+        }
         markDirty();
         sendDiscordEmbed(
             "🛒 單件物品販售",
@@ -581,6 +589,9 @@ public final class ShopManager {
         var stock = quoteStock(catalogKey);
         for (int i = 0; i < amount; i++) {
             pricing.recordBuy(catalogKey, stock);
+        }
+        if (plugin.getReportService() != null) {
+            plugin.getReportService().recordTransaction("BUY_SYSTEM", buyer.getUniqueId().toString(), buyer.getName(), catalogKey, amount, totalPrice);
         }
         markDirty();
         sendDiscordEmbed(
@@ -643,6 +654,9 @@ public final class ShopManager {
             markDirty();
             var stock = index.getStock(catalogKey);
             pricing.recordBuy(catalogKey, stock);
+            if (plugin.getReportService() != null) {
+                plugin.getReportService().recordTransaction("BUY_PLAYER", buyer.getUniqueId().toString(), buyer.getName(), catalogKey, listing.getItem().getAmount(), price);
+            }
 
             sendDiscordEmbed(
                 "🏪 玩家商店購買",

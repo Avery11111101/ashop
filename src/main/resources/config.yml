@@ -36,6 +36,29 @@ discord:
   command-name: "商店"               # 斜線指令名稱 (例如: /商店, /shop)
   guild-ids: []                      # 限制發布的伺服器 Guild ID（留空代表全伺服器通用）
 
+# Discord 定期營運報表 (每日/每週/每月)
+# 說明：
+# - 若使用 Bot 發送至頻道 (channel-id)，會附帶「永久按鈕」與「永久下拉選單」供玩家切換詳細數據與排名；
+# - 若使用 Webhook 發送 (webhook-url)，則發送純 Embed 報表訊息。
+# - 時區備註 (timezone)：預設 system (使用伺服器主機系統時區)。若主機位於國外 VPS，可手動設定為 "Asia/Taipei"、"UTC" 或指定時區。
+discord-report:
+  enabled: true
+  timezone: "system"                # 時區設定 (system = 系統預設, 或手動指定 "Asia/Taipei" / "UTC" 等)
+  channel-id: ""                    # 接收報表的 Discord 頻道 ID (若使用 Bot 發送頻道)
+  webhook-url: ""                   # 可選：若填寫，亦可透過指定 Webhook 發送純 Embed 報表
+  scheduled:
+    daily:
+      enabled: true
+      time: "00:00"                 # 每天 00:00 發送每日報表 (依指定時區)
+    weekly:
+      enabled: true
+      day-of-week: "MONDAY"         # 每週一 00:00 發送每週報表 (依指定時區)
+      time: "00:00"
+    monthly:
+      enabled: true
+      day-of-month: 1               # 每月 1 號 00:00 發送每月報表 (依指定時區)
+      time: "00:00"
+
 default-prices:
   enabled: true
   mode: catalog          # catalog=讀 shop/ 分類設定（高效能）| listings=逐項上架（舊模式）

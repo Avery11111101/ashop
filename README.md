@@ -55,6 +55,7 @@ dynamic-pricing:
 - **原版全物品目錄** — 含藥水、附魔書等 NBT 變體
 - **12 大分類瀏覽** — 方塊、工具、武器、護甲等
 - **Discord 線上商店預覽與購買** — 中文斜線指令 `/商店`、動態選單與 DiscordSRV 帳號繫結、背包空間防呆交割
+- **Discord 每日/每週/每月營運報表** — 斜線指令 `/report` 查詢，Bot 頻道附帶永久按鈕與下拉選單（切換熱門商品 Top 10、活躍玩家榜與系統明細），支援定期自動推播與 Webhook
 - **多語搜尋** — 物品 ID + 本地化名稱，支援自訂語系檔
 - **遊戲內語言切換** — `/lang`，可在 config 新增任意語言
 - **NBT 完整支援** — 附魔書、藥水、自訂 NBT 皆可交易
@@ -80,6 +81,7 @@ dynamic-pricing:
 | `/ashop search <關鍵字>` | 搜尋物品 |
 | `/ashop sell` | 開啟收購箱（角落支援一鍵填入與查看可收購商品） |
 | `/ashop sellable` | 查看目前開放系統收購的所有商品清單 |
+| `/ashop report <daily|weekly|monthly>` | 查詢商店營運報表，加上 `send` 可推播至 Discord（管理員） |
 | `/ashop reload` | 重新載入（管理員） |
 | `/ashop reset` | 還原預設全物品商店（管理員） |
 | `/lang <語言>` | 切換介面語言 |

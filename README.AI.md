@@ -587,9 +587,42 @@ ShopPlugin
    - 針對所有按鈕與 Modal 監聽器（`shop:buy:`, `shop:qty:`, `shop:qty_custom:`, `shop:modal_qty:`, `shop:nav:search:`, `shop:nav:cat:`），改以倒數索引（`parts[parts.length - 1]`、`parts[parts.length - 2]`）抓取固定位置之 `page` 與 `categoryId`，並將中間的 `start` 到 `end` 區間無損以 `:` 重新拼接。
    - 此舉不僅確保新生成的無冒號 Key 運作完美，更能完全向下相容目前已存在於 Discord 頻道歷史訊息中、舊版帶有冒號的購買按鈕！
 
+### 2026-08-11 Discord 每日/每週/每月商店營運報表系統與定期自動推播 (v1.8.0)
+
+**使用者決策動機**：
+- Avery 要求新增 Discord 每日報表、每週報表與每月報表功能，支援手動指令查詢以及在設定的頻道定期自動發送。
+- **發送管道差異化需求**：
+  - **Discord Bot (頻道發送)**：需附加**永久互動按鈕** (`[📅 每日]` `[📆 每週]` `[📊 每月]` `[🔄 重新整理]`) 以及**永久下拉選單** (選擇詳細檢視項目：`🔥 熱門商品 Top 10`、`🏆 活躍玩家榜`、`📦 系統收購與售出明細` 等)。
+  - **Discord Webhook (Webhook 發送)**：因 Webhook 無法接收互動 Event，發送純 Embed 報表訊息。
+
+**實作與變更細節**：
+1. **交易紀錄與報表數據服務 (`com.avery.shop.report`)**：
+   - `TransactionRecord`: 封裝時間戳記、交易類型 (`BUY_SYSTEM`/`SELL_SYSTEM`/`BUY_PLAYER`/`SELL_PLAYER`)、玩家 UUID/名稱、CatalogKey、數量與總金額。
+   - `ReportSummary`: 封裝時間區間、總營業額、銷售額、收購支出、總件數、總筆數、活躍玩家數、熱門商品 Top 10 與熱門玩家 Top 10 模型。
+   - `ReportService`: 負責非同步讀寫與 `transactions.yml` 持久化，提供 `generateReport(ReportPeriod)` 統計計算以及 `cleanOldRecords(keepDays)` 過期清理。
+2. **交易觸發掛鉤 (`ShopManager.java`)**：
+   - 在 `buyCatalogEntry` (系統購買)、`sellHandToSystem` (單件販售)、`sellBatch` (整箱收購) 以及 `buyListing` (玩家拍賣) 完成時，同步呼叫 `ReportService.recordTransaction(...)` 寫入交易日誌。
+3. **Discord 報表渲染與互動元件 (`DiscordReportBuilder.java`)**：
+   - 生成配色 Embed (每日藍色、每週金色、每月紫色)。
+   - 提供 `buildReportActionRows` 生成 JDA 永久按鈕列與 4 選項下拉選單。
+   - 提供 `buildWebhookPayload` 產生適用於 Webhook 的純 JSON Payload。
+4. **定期自動推播排程器 (`DiscordReportScheduler.java`)**：
+   - Bukkit 定時任務（每 60 秒檢查）：比對當前本地時間與 `config.yml` 設定（每日 00:00、每週一 00:00、每月 1 號 00:00）。
+   - 透過 JDA 發送至 `discord-report.channel-id` 頻道（帶 Component），或透過 `DiscordWebhookService` 發送至 `discord-report.webhook-url`（純 Embed）。
+5. **Discord 指令與監聽器整合 (`DiscordService.java`, `DiscordShopListener.java`)**：
+   - 註冊斜線指令 `/report` 與 `/報表` (可附帶 `type: daily/weekly/monthly` 參數)。
+   - 監聽按鈕點擊 (`report:btn:*`) 與下拉選單選擇 (`report:select_detail:*`)，即時以 `editMessage` 更新報表與細節內容。
+6. **遊戲內指令與設定檔更新 (`ShopCommand.java`, `config.yml`)**：
+   - 新增 `/shop report <daily|weekly|monthly> [send]` 指令，支援管理員遊戲內/主控台查詢與手動推播測試。
+   - `config.yml` 新增 `discord-report` 完整設定區塊，並加入 `timezone` 設定與備註說明。
+7. **時區解析與標註 (Timezone Annotation & Resolution)**：
+   - `discord-report.timezone`: 預設 `system` (使用伺服器主機系統時區)。若主機位於國外 VPS，可手動設定為 `"Asia/Taipei"`、`"UTC"` 或指定時區。
+   - `DiscordReportBuilder` 與 `DiscordReportScheduler` 動態解析 `ZoneId` 並於 Embed 描述與頁尾標註時區備註 (例如 `Asia/Taipei` 或 `Asia/Taipei (伺服器系統時區)`).
+
 ## 待擴充
 
 - 可匯入完整 Minecraft zh_tw.json 擴充翻譯覆蓋率
 - 可加入更多語言（ja_jp 等）
 - 可加入議價、限購、分頁效能優化（大量上架時）
+
 

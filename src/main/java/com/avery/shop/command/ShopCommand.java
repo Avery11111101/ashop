@@ -54,6 +54,9 @@ public final class ShopCommand implements CommandExecutor, TabCompleter {
             if (sub.equals("resync-prices") || sub.equals("重算價格") || sub.equals("resync")) {
                 return handleResyncPrices(sender);
             }
+            if (sub.equals("report") || sub.equals("報表")) {
+                return handleReport(sender, args);
+            }
         }
 
         if (!(sender instanceof Player player)) {
@@ -247,6 +250,51 @@ public final class ShopCommand implements CommandExecutor, TabCompleter {
         return true;
     }
 
+    private boolean handleReport(CommandSender sender, String[] args) {
+        if (!sender.hasPermission("shop.admin")) {
+            sendError(sender, plugin.getLocaleService(), "msg.cmd.no-admin");
+            return true;
+        }
+
+        String periodStr = args.length >= 2 ? args[1] : "daily";
+        com.avery.shop.report.ReportSummary.ReportPeriod period = com.avery.shop.report.ReportSummary.ReportPeriod.fromString(periodStr);
+
+        boolean sendToDiscord = args.length >= 3 && (args[2].equalsIgnoreCase("send") || args[2].equalsIgnoreCase("discord"));
+
+        var summary = plugin.getReportService().generateReport(period);
+
+        sender.sendMessage("§6§l=== ashop " + period.getDisplayNameZh() + " 統計 ===");
+        sender.sendMessage("§e總營業額: §f$" + String.format("%.2f", summary.getTotalRevenue()));
+        sender.sendMessage("§e系統銷售額: §f$" + String.format("%.2f", summary.getTotalSystemBuyRevenue()));
+        sender.sendMessage("§e系統收購支出: §f$" + String.format("%.2f", summary.getTotalSystemSellPayout()));
+        sender.sendMessage("§e總交易件數: §f" + summary.getTotalItemsTraded() + " 件 (" + summary.getTotalTransactionsCount() + " 筆交易)");
+        sender.sendMessage("§e活躍交易玩家: §f" + summary.getActivePlayersCount() + " 人");
+
+        if (!summary.getTopItems().isEmpty()) {
+            sender.sendMessage("§a熱門商品 Top 3:");
+            int limit = Math.min(3, summary.getTopItems().size());
+            for (int i = 0; i < limit; i++) {
+                var item = summary.getTopItems().get(i);
+                sender.sendMessage(" §7" + (i + 1) + ". §f" + item.displayName() + " §7x" + item.totalQuantity() + " ($" + String.format("%.2f", item.totalAmount()) + ")");
+            }
+        }
+
+        if (sendToDiscord) {
+            sender.sendMessage("§b[Discord] 正在手動發送 " + period.getDisplayNameZh() + " 至 Discord 設定頻道/Webhook...");
+            var scheduler = plugin.getReportScheduler();
+            if (scheduler != null) {
+                scheduler.sendReport(period, "overview");
+                sender.sendMessage("§a[Discord] 報表發送任務已觸發！");
+            } else {
+                sender.sendMessage("§c[Discord] 發送失敗：Discord 服務未啟動。");
+            }
+        } else {
+            sender.sendMessage("§7(提示: 可使用 §f/shop report " + period.name().toLowerCase() + " send §7手動推播至 Discord)");
+        }
+
+        return true;
+    }
+
     private void sendError(CommandSender sender, com.avery.shop.locale.LocaleService locale, String key) {
         if (sender instanceof Player player) {
             sender.sendMessage("§c" + locale.msg(player, key));
@@ -282,9 +330,15 @@ public final class ShopCommand implements CommandExecutor, TabCompleter {
         if (args.length == 1) {
             var options = new ArrayList<>(List.of("help", "search", "sell", "sellable", "price", "說明", "搜尋", "上架", "賣", "可收購", "價格"));
             if (sender.hasPermission("shop.admin")) {
-                options.addAll(List.of("reload", "reset", "resync-prices", "重算價格", "還原", "restore", "重新載入"));
+                options.addAll(List.of("reload", "reset", "resync-prices", "report", "報表", "重算價格", "還原", "restore", "重新載入"));
             }
             return filter(options, args[0]);
+        }
+        if (args.length == 2 && (args[0].equalsIgnoreCase("report") || args[0].equalsIgnoreCase("報表"))) {
+            return filter(List.of("daily", "weekly", "monthly", "每日", "每週", "每月"), args[1]);
+        }
+        if (args.length == 3 && (args[0].equalsIgnoreCase("report") || args[0].equalsIgnoreCase("報表"))) {
+            return filter(List.of("send", "discord"), args[2]);
         }
         if (args.length == 2 && args[0].equalsIgnoreCase("search")) {
             return filter(List.of("diamond", "鑽石", "minecraft:stone"), args[1]);
