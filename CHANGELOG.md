@@ -5,6 +5,10 @@ ashop 的所有重要變更皆記錄於此。
 
 ## [1.7.0] - 2026-08-10
 
+### Fixed / 修復
+- **Discord Item Purchasing with Colons (修復 Discord 購買含冒號標籤商品失敗 Bug)** — Fixed an issue where clicking the purchase or quantity buttons on Discord for items containing colons (`:`) in their `catalogKey` (such as enchanted books `enchanted_book:ench:minecraft:luck_of_the_sea:3` or potions) split the key on colons, causing purchase validation to fail with "該商品目前未開放購買". Catalog keys containing colons are now shortened to clean hash keys (`k_...`), and component ID parsing handles colon-delimited parameters safely.  
+  **修復 Discord 含冒號商品購買失敗** — 修復 Discord 點擊附魔書（如 `海洋的祝福 III`）、藥水等 `catalogKey` 包含冒號（`:`）之商品時，`componentId.split(":")` 會將 key 切碎導致傳入不完整 ID 報錯「該商品目前未開放購買」。現已強化短 Key 雜湊對照表機制並對冒號參數進行安全防呆組合。
+
 ### Added / 新增
 - **Discord Online Shop Preview & Purchase (Discord 線上商店預覽與購買)** — Chinese slash command `/商店` (`/shop`), StringSelectMenu category & item browser with real-time dynamic pricing, DiscordSRV account binding verification, and inventory space pre-check protection  
   **Discord 線上商店面板與斜線指令** — 中文斜線指令 `/商店`，支援選單下拉切換 12 大分類與商品、預覽即時動態價格趨勢、DiscordSRV 帳號繫結與遊戲內背包空間防呆預檢直接發貨

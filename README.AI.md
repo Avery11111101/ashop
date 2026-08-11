@@ -564,6 +564,29 @@ ShopPlugin
 3. **撰寫 Release 描述與說明文件**：
    - 彙整 v1.7.0 ~ v1.8.0 核心更新亮點（動態定價自動回歸、Discord 線上預覽/購買、一鍵收購箱、Paper 26.2 原生支援、Fat-Jar JDA 打包等），產出完整發布文字說明。
 
+### 2026-08-11 修復 Discord 點擊含冒號商品（如附魔書/藥水）誤報「該商品目前未開放購買」 (v1.7.0 Fix)
+
+**使用者回報與問題**：
+- Avery 指出在遊戲內明明可以購買的商品（例如附魔書 `海洋的祝福 III`），但在 Discord 上點擊「`確定購買`」或數量切換按鈕時，卻顯示 `❌ 購買失敗：該商品目前未開放購買。`
+
+**根因分析**：
+1. **CatalogKey 包含冒號（`:`）**：
+   - 附魔書、藥水與特定物品的 `catalogKey` 格式為 `enchanted_book:ench:minecraft:luck_of_the_sea:3`，長度約 46 字元。
+   - 原 `DiscordPanelBuilder.getShortKey(fullKey)` 僅在長度 > 60 時才進行 Hash，因此 46 字元長度的 Key 被原樣輸出到 Discord 按鈕 Custom ID（如 `shop:buy:1:enchanted_book:ench:minecraft:luck_of_the_sea:3`）。
+2. **`componentId.split(":")` 參數分割破壞**：
+   - 當玩家在 Discord 點擊購買按鈕時，`DiscordShopListener` 呼叫 `componentId.split(":")`。
+   - 由於 Key 本身包含 4 個冒號，`split(":")` 將 ID 拆碎，導致 `parts[3]` 只拿到 `"enchanted_book"` 而非完整 Key `"enchanted_book:ench:minecraft:luck_of_the_sea:3"`。
+   - `handleDiscordPurchase` 拿著無效的 `"enchanted_book"` 去查詢 catalog，`isItemPurchasable("enchanted_book")` 判定失敗，進而回傳「該商品目前未開放購買」。
+
+**修復步驟與細節**：
+1. **短 Key 雜湊延伸機制 (`DiscordPanelBuilder.java`)**：
+   - 修改 `getShortKey(fullKey)` 判定邏輯：只要 `fullKey` **包含冒號（`:`）** 或 **長度 > 60**，一律經由 SHA-256 轉為乾淨無冒號之短 Key（如 `k_a3f89b12c4d567e8`），確保所有按鈕 ID 結構絕不含多餘冒號。
+   - 新增 `preloadCatalogKeys(ItemCatalog catalog)` 方法，在 Discord 服務啟動與 Catalog 載入時自動將 Catalog 內所有商品 Key 預先對照登記進 `shortToFullKeyMap` 與 `fullToShortKeyMap`。
+2. **冒號防呆與向下相容組合演算法 (`DiscordShopListener.java`)**：
+   - 新增 `joinParts(parts, start, end)` 工具方法。
+   - 針對所有按鈕與 Modal 監聽器（`shop:buy:`, `shop:qty:`, `shop:qty_custom:`, `shop:modal_qty:`, `shop:nav:search:`, `shop:nav:cat:`），改以倒數索引（`parts[parts.length - 1]`、`parts[parts.length - 2]`）抓取固定位置之 `page` 與 `categoryId`，並將中間的 `start` 到 `end` 區間無損以 `:` 重新拼接。
+   - 此舉不僅確保新生成的無冒號 Key 運作完美，更能完全向下相容目前已存在於 Discord 頻道歷史訊息中、舊版帶有冒號的購買按鈕！
+
 ## 待擴充
 
 - 可匯入完整 Minecraft zh_tw.json 擴充翻譯覆蓋率

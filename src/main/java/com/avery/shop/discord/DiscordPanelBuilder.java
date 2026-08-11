@@ -39,7 +39,7 @@ public class DiscordPanelBuilder {
 
     public static String getShortKey(String fullKey) {
         if (fullKey == null) return "";
-        if (fullKey.length() <= 60) {
+        if (fullKey.length() <= 60 && !fullKey.contains(":")) {
             return fullKey;
         }
         return fullToShortKeyMap.computeIfAbsent(fullKey, k -> {
@@ -59,6 +59,13 @@ public class DiscordPanelBuilder {
                 return shortKey;
             }
         });
+    }
+
+    public static void preloadCatalogKeys(com.avery.shop.catalog.ItemCatalog catalog) {
+        if (catalog == null) return;
+        for (var entry : catalog.getAll()) {
+            getShortKey(entry.getKey());
+        }
     }
 
     public static String resolveFullKey(String key) {

@@ -32,6 +32,7 @@ public class DiscordService {
         String commandName = plugin.getConfig().getString("discord.command-name", "商店").trim();
 
         DiscordPanelBuilder panelBuilder = new DiscordPanelBuilder(plugin);
+        DiscordPanelBuilder.preloadCatalogKeys(plugin.getItemCatalog());
         shopListener = new DiscordShopListener(plugin, panelBuilder);
 
         if (!token.isEmpty()) {

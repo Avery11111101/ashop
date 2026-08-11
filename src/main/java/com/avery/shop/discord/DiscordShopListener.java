@@ -84,16 +84,16 @@ public class DiscordShopListener extends ListenerAdapter {
 
         if (componentId.startsWith("shop:nav:search:")) {
             String[] parts = componentId.split(":");
-            String query = parts[3];
-            int page = Integer.parseInt(parts[4]);
+            int page = Integer.parseInt(parts[parts.length - 1]);
+            String query = joinParts(parts, 3, parts.length - 2);
             event.editMessage(panelBuilder.buildSearchResultsMessage(query, page)).queue();
             return;
         }
 
         if (componentId.startsWith("shop:nav:cat:")) {
             String[] parts = componentId.split(":");
-            String categoryId = parts[3];
-            int page = Integer.parseInt(parts[4]);
+            int page = Integer.parseInt(parts[parts.length - 1]);
+            String categoryId = joinParts(parts, 3, parts.length - 2);
             event.editMessage(panelBuilder.buildCategoryMessage(categoryId, page)).queue();
             return;
         }
@@ -101,9 +101,10 @@ public class DiscordShopListener extends ListenerAdapter {
         if (componentId.startsWith("shop:qty:")) {
             String[] parts = componentId.split(":");
             int quantity = Integer.parseInt(parts[2]);
-            String catalogKey = DiscordPanelBuilder.resolveFullKey(parts[3]);
-            String categoryId = parts[4];
-            int page = Integer.parseInt(parts[5]);
+            int page = Integer.parseInt(parts[parts.length - 1]);
+            String categoryId = parts[parts.length - 2];
+            String rawKey = joinParts(parts, 3, parts.length - 3);
+            String catalogKey = DiscordPanelBuilder.resolveFullKey(rawKey);
 
             event.editMessage(panelBuilder.buildItemPanelMessage(catalogKey, categoryId, page, quantity)).queue();
             return;
@@ -111,9 +112,10 @@ public class DiscordShopListener extends ListenerAdapter {
 
         if (componentId.startsWith("shop:qty_custom:")) {
             String[] parts = componentId.split(":");
-            String catalogKey = DiscordPanelBuilder.resolveFullKey(parts[2]);
-            String categoryId = parts[3];
-            int page = Integer.parseInt(parts[4]);
+            int page = Integer.parseInt(parts[parts.length - 1]);
+            String categoryId = parts[parts.length - 2];
+            String rawKey = joinParts(parts, 2, parts.length - 3);
+            String catalogKey = DiscordPanelBuilder.resolveFullKey(rawKey);
 
             TextInput qtyInput = TextInput.create("qty_input", "購買數量", TextInputStyle.SHORT)
                     .setPlaceholder("請輸入欲購買的數量 (例如: 16, 64)")
@@ -132,7 +134,8 @@ public class DiscordShopListener extends ListenerAdapter {
         if (componentId.startsWith("shop:buy:")) {
             String[] parts = componentId.split(":");
             int amount = Integer.parseInt(parts[2]);
-            String catalogKey = DiscordPanelBuilder.resolveFullKey(parts[3]);
+            String rawKey = joinParts(parts, 3, parts.length - 1);
+            String catalogKey = DiscordPanelBuilder.resolveFullKey(rawKey);
 
             handleDiscordPurchase(event.getUser().getId(), catalogKey, amount, (msg, ephemeral) -> {
                 event.reply(msg).setEphemeral(ephemeral).queue();
@@ -150,9 +153,10 @@ public class DiscordShopListener extends ListenerAdapter {
 
         if (event.getModalId().startsWith("shop:modal_qty:")) {
             String[] parts = event.getModalId().split(":");
-            String catalogKey = DiscordPanelBuilder.resolveFullKey(parts[2]);
-            String categoryId = parts[3];
-            int page = Integer.parseInt(parts[4]);
+            int page = Integer.parseInt(parts[parts.length - 1]);
+            String categoryId = parts[parts.length - 2];
+            String rawKey = joinParts(parts, 2, parts.length - 3);
+            String catalogKey = DiscordPanelBuilder.resolveFullKey(rawKey);
 
             String input = event.getValue("qty_input") != null ? event.getValue("qty_input").getAsString().trim() : "1";
             int quantity;
@@ -164,6 +168,16 @@ public class DiscordShopListener extends ListenerAdapter {
 
             event.editMessage(panelBuilder.buildItemPanelMessage(catalogKey, categoryId, page, quantity)).queue();
         }
+    }
+
+    private static String joinParts(String[] parts, int start, int end) {
+        if (parts == null || start > end || start < 0 || start >= parts.length) return "";
+        StringBuilder sb = new StringBuilder();
+        for (int i = start; i <= end && i < parts.length; i++) {
+            if (i > start) sb.append(":");
+            sb.append(parts[i]);
+        }
+        return sb.toString();
     }
 
     @FunctionalInterface
