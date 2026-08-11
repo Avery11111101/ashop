@@ -263,15 +263,15 @@ public final class ShopCommand implements CommandExecutor, TabCompleter {
 
         var summary = plugin.getReportService().generateReport(period);
 
-        sender.sendMessage("§6§l=== ashop " + period.getDisplayNameZh() + " 統計 ===");
-        sender.sendMessage("§e總營業額: §f$" + String.format("%.2f", summary.getTotalRevenue()));
-        sender.sendMessage("§e系統銷售額: §f$" + String.format("%.2f", summary.getTotalSystemBuyRevenue()));
-        sender.sendMessage("§e系統收購支出: §f$" + String.format("%.2f", summary.getTotalSystemSellPayout()));
-        sender.sendMessage("§e總交易件數: §f" + summary.getTotalItemsTraded() + " 件 (" + summary.getTotalTransactionsCount() + " 筆交易)");
-        sender.sendMessage("§e活躍交易玩家: §f" + summary.getActivePlayersCount() + " 人");
+        sender.sendMessage("§6§l=== ashop " + period.getDisplayNameZh() + " 玩家交易與服務統計 ===");
+        sender.sendMessage("§e總交易流通額: §f$" + String.format("%.2f", summary.getTotalRevenue()));
+        sender.sendMessage("§e玩家購買總額: §f$" + String.format("%.2f", summary.getTotalSystemBuyRevenue()));
+        sender.sendMessage("§e玩家賣出獲得金額: §f$" + String.format("%.2f", summary.getTotalSystemSellPayout()));
+        sender.sendMessage("§e總物資流通量: §f" + summary.getTotalItemsTraded() + " 件 (" + summary.getTotalTransactionsCount() + " 筆交易)");
+        sender.sendMessage("§e活躍服務玩家: §f" + summary.getActivePlayersCount() + " 人");
 
         if (!summary.getTopItems().isEmpty()) {
-            sender.sendMessage("§a熱門商品 Top 3:");
+            sender.sendMessage("§a熱門買賣物資 Top 3:");
             int limit = Math.min(3, summary.getTopItems().size());
             for (int i = 0; i < limit; i++) {
                 var item = summary.getTopItems().get(i);

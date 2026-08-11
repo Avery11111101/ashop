@@ -20,7 +20,7 @@ import java.time.format.DateTimeFormatter;
 import java.util.List;
 
 /**
- * Discord 營運報表 Embed 訊息與元件建構器 (含時區備註支援)
+ * Discord 商店交易與玩家服務統計 Embed 訊息與元件建構器
  */
 public final class DiscordReportBuilder {
 
@@ -54,7 +54,7 @@ public final class DiscordReportBuilder {
         String tzStr = plugin.getConfig().getString("discord-report.timezone", "system").trim();
         ZoneId zoneId = getZoneId();
         if (tzStr.equalsIgnoreCase("system") || tzStr.isEmpty()) {
-            return zoneId.getId() + " (伺服器系統時區)";
+            return zoneId.getId() + " (系統時區)";
         }
         return zoneId.getId();
     }
@@ -98,11 +98,11 @@ public final class DiscordReportBuilder {
 
         switch (viewDetail.toLowerCase()) {
             case "top_items" -> {
-                eb.setTitle("🔥 [" + periodName + "] 熱門商品排行榜 Top 10");
+                eb.setTitle("🔥 [" + periodName + "] 熱門物資交易榜 Top 10");
                 eb.setDescription("統計區間 (" + tzText + "): `" + startDateStr + "` 至 `" + endDateStr + "`");
 
                 if (summary.getTopItems().isEmpty()) {
-                    eb.addField("暫無數據", "在此期間內尚無物品交易紀錄。", false);
+                    eb.addField("暫無數據", "在此期間內尚無玩家交易紀錄。", false);
                 } else {
                     StringBuilder sb = new StringBuilder();
                     int rank = 1;
@@ -114,11 +114,11 @@ public final class DiscordReportBuilder {
                             default -> "`#" + rank + "`";
                         };
                         sb.append(rankEmoji).append(" **").append(item.displayName()).append("**\n")
-                          .append("└ 總量: `").append(INT_FMT.format(item.totalQuantity())).append(" 件` | 總額: `")
-                          .append(currency).append(MONEY_FMT.format(item.totalAmount())).append("` (買 ").append(item.buyCount()).append(" / 賣 ").append(item.sellCount()).append(")\n");
+                          .append("└ 總流通: `").append(INT_FMT.format(item.totalQuantity())).append(" 件` | 金額: `")
+                          .append(currency).append(MONEY_FMT.format(item.totalAmount())).append("` (買 ").append(item.buyCount()).append(" 次 / 賣 ").append(item.sellCount()).append(" 次)\n");
                         rank++;
                     }
-                    eb.addField("📊 熱門銷售/收購排行", sb.toString(), false);
+                    eb.addField("📊 熱門買賣物資清單", sb.toString(), false);
                 }
             }
             case "top_players" -> {
@@ -140,46 +140,46 @@ public final class DiscordReportBuilder {
                         double total = p.totalSpent() + p.totalEarned();
                         sb.append(rankEmoji).append(" **").append(p.playerName()).append("**\n")
                           .append("└ 交易: `").append(p.totalTransactions()).append(" 筆` | 總額: `")
-                          .append(currency).append(MONEY_FMT.format(total)).append("` (消費 ")
-                          .append(currency).append(MONEY_FMT.format(p.totalSpent())).append(" / 賺取 ")
+                          .append(currency).append(MONEY_FMT.format(total)).append("` (購買消費 ")
+                          .append(currency).append(MONEY_FMT.format(p.totalSpent())).append(" / 賣出獲得 ")
                           .append(currency).append(MONEY_FMT.format(p.totalEarned())).append(")\n");
                         rank++;
                     }
-                    eb.addField("👥 玩家交易排行", sb.toString(), false);
+                    eb.addField("👥 玩家服務使用率排行", sb.toString(), false);
                 }
             }
             case "details" -> {
-                eb.setTitle("📦 [" + periodName + "] 系統收購與售出詳細統計");
+                eb.setTitle("📦 [" + periodName + "] 玩家買賣金額與金錢流向明細");
                 eb.setDescription("統計區間 (" + tzText + "): `" + startDateStr + "` 至 `" + endDateStr + "`");
 
-                eb.addField("🛒 系統商品銷售額 (玩家買入)",
+                eb.addField("🛒 玩家向系統購買 (購買消費總額)",
                         "```yaml\n" +
                         "總金額: " + currency + MONEY_FMT.format(summary.getTotalSystemBuyRevenue()) + "\n" +
                         "```", true);
 
-                eb.addField("📥 系統商品收購額 (玩家賣出)",
+                eb.addField("📥 玩家向系統售出 (賣出獲得總額)",
                         "```yaml\n" +
                         "總金額: " + currency + MONEY_FMT.format(summary.getTotalSystemSellPayout()) + "\n" +
                         "```", true);
 
-                double netProfit = summary.getTotalSystemBuyRevenue() - summary.getTotalSystemSellPayout();
-                String netStatus = netProfit >= 0 ? "🟢 淨收益 (盈餘)" : "🔴 淨支出 (虧損)";
+                double netFlow = summary.getTotalSystemBuyRevenue() - summary.getTotalSystemSellPayout();
+                String netStatus = netFlow >= 0 ? "⚖️ 經濟流向: 玩家淨消費 (商店回收金錢)" : "⚖️ 經濟流向: 玩家淨獲利 (商店發放金錢)";
 
                 eb.addField(netStatus,
-                        "```md\n# " + currency + MONEY_FMT.format(Math.abs(netProfit)) + "\n```", false);
+                        "```md\n# " + currency + MONEY_FMT.format(Math.abs(netFlow)) + "\n```", false);
             }
             default -> { // overview
-                eb.setTitle("📊 [" + periodName + "] 商店營運數據總覽");
+                eb.setTitle("📊 [" + periodName + "] 玩家交易與系統商店服務統計");
                 eb.setDescription("統計區間 (" + tzText + "): `" + startDateStr + "` 至 `" + endDateStr + "`");
 
-                eb.addField("💰 總營業額",
+                eb.addField("💰 總交易流通額",
                         "**" + currency + MONEY_FMT.format(summary.getTotalRevenue()) + "**", true);
 
-                eb.addField("📦 總交易量",
-                        "**" + INT_FMT.format(summary.getTotalItemsTraded()) + "** 件物品 (`" + summary.getTotalTransactionsCount() + "` 筆交易)", true);
+                eb.addField("📦 總物資流通量",
+                        "**" + INT_FMT.format(summary.getTotalItemsTraded()) + "** 件 (`" + summary.getTotalTransactionsCount() + "` 筆交易)", true);
 
-                eb.addField("👥 活躍玩家",
-                        "**" + summary.getActivePlayersCount() + "** 位玩家參與交易", true);
+                eb.addField("👥 活躍服務玩家",
+                        "**" + summary.getActivePlayersCount() + "** 位玩家使用商店", true);
 
                 // 熱門商品 Top 3 預覽
                 if (!summary.getTopItems().isEmpty()) {
@@ -190,7 +190,7 @@ public final class DiscordReportBuilder {
                         sb.append(i + 1).append(". **").append(item.displayName()).append("** - ")
                           .append(INT_FMT.format(item.totalQuantity())).append(" 件 (").append(currency).append(MONEY_FMT.format(item.totalAmount())).append(")\n");
                     }
-                    eb.addField("🔥 熱門商品 Top 3", sb.toString(), false);
+                    eb.addField("🔥 熱門買賣物資 Top 3", sb.toString(), false);
                 }
 
                 // 熱門玩家 Top 3 預覽
@@ -203,12 +203,12 @@ public final class DiscordReportBuilder {
                         sb.append(i + 1).append(". **").append(p.playerName()).append("** - ")
                           .append(currency).append(MONEY_FMT.format(total)).append(" (").append(p.totalTransactions()).append(" 筆)\n");
                     }
-                    eb.addField("🏆 交易王 Top 3", sb.toString(), false);
+                    eb.addField("🏆 活躍玩家 Top 3", sb.toString(), false);
                 }
             }
         }
 
-        eb.setFooter("ashop 商店系統 • 時間時區: " + tzText + " • " + formatDate(System.currentTimeMillis()));
+        eb.setFooter("ashop 系統商店服務 • 時區: " + tzText + " • " + formatDate(System.currentTimeMillis()));
         return eb.build();
     }
 
@@ -217,9 +217,9 @@ public final class DiscordReportBuilder {
         if (currentDetail == null) currentDetail = "overview";
 
         // 按鈕列 (永久按鈕)
-        Button btnDaily = Button.primary("report:btn:daily", "📅 每日報表");
-        Button btnWeekly = Button.primary("report:btn:weekly", "📆 每週報表");
-        Button btnMonthly = Button.primary("report:btn:monthly", "📊 每月報表");
+        Button btnDaily = Button.primary("report:btn:daily", "📅 每日統計");
+        Button btnWeekly = Button.primary("report:btn:weekly", "📆 每週統計");
+        Button btnMonthly = Button.primary("report:btn:monthly", "📊 每月統計");
         Button btnRefresh = Button.secondary("report:btn:refresh:" + periodKey, "🔄 重新整理");
 
         switch (period) {
@@ -232,11 +232,11 @@ public final class DiscordReportBuilder {
 
         // 下拉選單列 (永久下拉選單)
         StringSelectMenu selectMenu = StringSelectMenu.create("report:select_detail:" + periodKey)
-                .setPlaceholder("👇 選擇欲檢視的詳細數據項目...")
-                .addOption("📊 營運數據總覽", "overview", "查看整體營業額、交易量與總覽 preview", currentDetail.equals("overview") ? null : null)
-                .addOption("🔥 熱門商品排行榜 Top 10", "top_items", "查看最熱門銷量與收購前 10 名物品", currentDetail.equals("top_items") ? null : null)
-                .addOption("🏆 活躍交易玩家榜 Top 10", "top_players", "查看交易金額與次數最高的前 10 名玩家", currentDetail.equals("top_players") ? null : null)
-                .addOption("📦 系統收購與售出明細", "details", "查看系統銷售收入與收購支出盈虧分析", currentDetail.equals("details") ? null : null)
+                .setPlaceholder("👇 選擇欲檢視的玩家買賣與服務統計項目...")
+                .addOption("📊 玩家交易數據總覽", "overview", "查看整體交易流通額、流通量與玩家參與度", currentDetail.equals("overview") ? null : null)
+                .addOption("🔥 熱門物資交易榜 Top 10", "top_items", "查看玩家買賣最熱門前 10 名物品物資", currentDetail.equals("top_items") ? null : null)
+                .addOption("🏆 活躍交易玩家榜 Top 10", "top_players", "查看使用商店服務交易金額最高的前 10 名玩家", currentDetail.equals("top_players") ? null : null)
+                .addOption("📦 玩家買賣金額與金錢流向明細", "details", "查看玩家購買消費、售出獲得金額與金錢流向分析", currentDetail.equals("details") ? null : null)
                 .build();
 
         ActionRow selectRow = ActionRow.of(selectMenu);
@@ -270,7 +270,7 @@ public final class DiscordReportBuilder {
         String footerText = embed.getFooter() != null ? escapeJson(embed.getFooter().getText()) : "";
 
         return "{"
-                + "\"username\": \"ashop 商店報表\","
+                + "\"username\": \"ashop 商店服務數據\","
                 + "\"embeds\": [{"
                 + "\"title\": \"" + title + "\","
                 + "\"description\": \"" + description + "\","
