@@ -131,3 +131,9 @@ search:
 storage:
   listings-file: listings.yml
   market-file: market-data.yml
+
+# 基岩版 (Bedrock / Geyser / Floodgate) 限制設定
+bedrock:
+  block-gui: false   # false = 預設允許基岩版玩家開啟 GUI 面板（如欲防範觸控問題可改為 true 禁止並引導至 Discord）
+
+

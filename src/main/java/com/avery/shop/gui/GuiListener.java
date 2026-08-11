@@ -11,6 +11,9 @@ import org.bukkit.event.inventory.ClickType;
 import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.event.inventory.InventoryCloseEvent;
 import org.bukkit.event.inventory.InventoryDragEvent;
+import org.bukkit.event.block.BlockPlaceEvent;
+import org.bukkit.event.player.PlayerDropItemEvent;
+import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.inventory.ItemStack;
 
@@ -61,8 +64,31 @@ public final class GuiListener implements Listener {
     public void onInventoryClick(InventoryClickEvent event) {
         if (!(event.getWhoClicked() instanceof Player player)) return;
 
+        // PDC 游標與殘留物品極限清理防呆
+        if (ShopGui.isShopGuiItem(event.getCursor())) {
+            event.setCancelled(true);
+            player.setItemOnCursor(null);
+        }
+        if (ShopGui.isShopGuiItem(event.getCurrentItem()) && event.getClickedInventory() == player.getInventory()) {
+            event.setCancelled(true);
+            event.setCurrentItem(null);
+        }
+
+        if (shopManager.getPlugin().getConfig().getBoolean("bedrock.block-gui", false)
+                && com.avery.shop.util.BedrockUtil.isBedrockPlayer(player)) {
+            if (event.getView().getTopInventory().getHolder() instanceof ShopInventoryHolder || getActiveSession(player) != null) {
+                event.setCancelled(true);
+                player.closeInventory();
+                var locale = shopManager.getPlugin().getLocaleService();
+                player.sendMessage(locale.msg(player, "msg.cmd.bedrock-blocked"));
+                return;
+            }
+        }
+
+
         var session = getActiveSession(player);
         if (session == null) return;
+
 
         if (session.getViewType() == GuiSession.ViewType.SELL_TO_SYSTEM) {
             handleSellPanelClick(event, player, session);
@@ -139,7 +165,17 @@ public final class GuiListener implements Listener {
     public void onInventoryDrag(InventoryDragEvent event) {
         if (!(event.getWhoClicked() instanceof Player player)) return;
 
+        if (shopManager.getPlugin().getConfig().getBoolean("bedrock.block-gui", true)
+                && com.avery.shop.util.BedrockUtil.isBedrockPlayer(player)) {
+            if (event.getView().getTopInventory().getHolder() instanceof ShopInventoryHolder || getActiveSession(player) != null) {
+                event.setCancelled(true);
+                player.closeInventory();
+                return;
+            }
+        }
+
         var session = getActiveSession(player);
+
         if (session == null || session.getViewType() != GuiSession.ViewType.SELL_TO_SYSTEM) return;
 
         int topSize = event.getView().getTopInventory().getSize();
@@ -946,10 +982,35 @@ public final class GuiListener implements Listener {
         });
     }
 
+    public static void purgeGuiItemsFromPlayer(Player player) {
+        if (player == null) return;
+        var inv = player.getInventory();
+        for (int i = 0; i < inv.getSize(); i++) {
+            var item = inv.getItem(i);
+            if (ShopGui.isShopGuiItem(item)) {
+                inv.setItem(i, null);
+            }
+        }
+        if (ShopGui.isShopGuiItem(player.getItemOnCursor())) {
+            player.setItemOnCursor(null);
+        }
+    }
+
     @EventHandler
     public void onQuit(PlayerQuitEvent event) {
         var player = event.getPlayer();
         var session = sessions.remove(player.getUniqueId());
+
+        if (session == null || session.getViewType() != GuiSession.ViewType.SELL_TO_SYSTEM) {
+            if (player.getItemOnCursor() != null && !player.getItemOnCursor().getType().isAir()) {
+                if (ShopGui.isShopGuiItem(player.getItemOnCursor()) || session != null) {
+                    player.setItemOnCursor(null);
+                }
+            }
+        }
+
+        purgeGuiItemsFromPlayer(player);
+
         if (session != null && session.getViewType() == GuiSession.ViewType.SELL_TO_SYSTEM
                 && session.getShopHolder() != null) {
             var inv = session.getShopHolder().getInventory();
@@ -962,6 +1023,16 @@ public final class GuiListener implements Listener {
     @EventHandler
     public void onClose(InventoryCloseEvent event) {
         if (!(event.getPlayer() instanceof Player player)) return;
+
+        if (event.getInventory().getHolder() instanceof ShopInventoryHolder holder) {
+            if (holder.getKind() != ShopInventoryHolder.Kind.SELL) {
+                if (player.getItemOnCursor() != null && !player.getItemOnCursor().getType().isAir()) {
+                    player.setItemOnCursor(null);
+                }
+            }
+        }
+
+        purgeGuiItemsFromPlayer(player);
 
         var session = sessions.get(player.getUniqueId());
         if (session == null) return;
@@ -1001,6 +1072,30 @@ public final class GuiListener implements Listener {
         session.setShopHolder(null);
         if (!player.isConversing()) {
             sessions.remove(player.getUniqueId());
+        }
+    }
+
+    @EventHandler
+    public void onPlayerJoin(PlayerJoinEvent event) {
+        purgeGuiItemsFromPlayer(event.getPlayer());
+    }
+
+    @EventHandler(ignoreCancelled = true)
+    public void onBlockPlace(BlockPlaceEvent event) {
+        var item = event.getItemInHand();
+        if (ShopGui.isShopGuiItem(item)) {
+            event.setCancelled(true);
+            event.getPlayer().getInventory().setItemInMainHand(null);
+            event.getPlayer().getInventory().setItemInOffHand(null);
+        }
+    }
+
+    @EventHandler(ignoreCancelled = true)
+    public void onPlayerDropItem(PlayerDropItemEvent event) {
+        var item = event.getItemDrop().getItemStack();
+        if (ShopGui.isShopGuiItem(item)) {
+            event.setCancelled(true);
+            event.getItemDrop().remove();
         }
     }
 }

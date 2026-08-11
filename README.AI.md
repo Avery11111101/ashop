@@ -626,10 +626,27 @@ ShopPlugin
    - **根因**：舊版在 `DiscordService.stop()` 中呼叫非同步 `standaloneJda.shutdown()` 後立即回傳，PlugManX 隨即關閉舊插件的 ClassLoader（ZipFile）。當背景 JDA WebSocket 清理執行緒運作時，因 JarFile 已被關閉而拋出 `IllegalStateException: zip file closed`。
    - **修復**：改用 `standaloneJda.shutdownNow()` 搭配 `standaloneJda.awaitShutdown(Duration.ofSeconds(3))`，確保 JDA 所有背景執行緒與連線在 ClassLoader 被關閉前同步安全清理釋放。
 
+### 2026-08-11 禁止基岩版 (Bedrock) 玩家使用遊戲內商店 GUI
+
+1. **動機考量**：
+   - 基岩版 (Bedrock / Geyser / Floodgate) 玩家使用手機觸控螢幕操作時，因圖形面板點擊封包與虛擬 UI 互動特性，可能出現抓取/拿取系統商店面板中裝飾物品（方塊）至手上的異常問題。
+   - 由於不針對基岩版觸控 UI 進行個別底層適應，決策為將遊戲內 GUI 完全專屬於 Java 版玩家使用，並引導基岩版玩家至伺服器 Discord 透過 Discord 機器人（/商店 指令與下拉面板）進行物品購買與交易。
+2. **基岩版識別工具 (`BedrockUtil.java`)**：
+   - 建立 `BedrockUtil.isBedrockPlayer(Player)` 靜態檢測方法。
+   - 採用動態反射安全檢測 `FloodgateApi.getInstance().isFloodgatePlayer(...)` 與 `GeyserApi.api().isBedrockPlayer(...)`。
+   - 加入 Floodgate UUID 預設前綴 (`00000000-0000-0000-0009-...`) 與玩家名稱前綴 (`.` / `*`) 備援檢測，避免反射失敗時遺漏。
+3. **指令與 GUI 雙層阻擋 (`ShopCommand.java`, `GuiListener.java`)**：
+   - `ShopCommand`: 在 `/shop` 及開啟 GUI 的子指令 (`search`, `sell`, `sellable`) 中加入 `checkBedrockBlocked(player)` 攔截。
+   - `GuiListener`: 在 `onInventoryClick` 與 `onInventoryDrag` 增加二次防護，若基岩版玩家嘗試點擊或拖曳商店 UI 容器，立即取消事件、關閉介面並發送 `msg.cmd.bedrock-blocked` 訊息。
+4. **設定檔與多語系檔 (`config.yml`, `zh_tw.properties`, `en_us.properties`, `_template.properties`)**：
+   - `config.yml` 新增 `bedrock.block-gui` 設定項（預設 `true`）。
+   - 各語系檔新增 `msg.cmd.bedrock-blocked` 提示文字。
+
 ## 待擴充
 
 - 可匯入完整 Minecraft zh_tw.json 擴充翻譯覆蓋率
 - 可加入更多語言（ja_jp 等）
 - 可加入議價、限購、分頁效能優化（大量上架時）
+
 
 

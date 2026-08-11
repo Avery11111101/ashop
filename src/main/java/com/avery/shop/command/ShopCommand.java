@@ -76,6 +76,7 @@ public final class ShopCommand implements CommandExecutor, TabCompleter {
 
         switch (args[0].toLowerCase()) {
             case "search", "搜尋" -> {
+                if (checkBedrockBlocked(player)) return true;
                 if (args.length < 2) {
                     player.sendMessage("§c" + locale.msg(player, "msg.cmd.usage.search"));
                     player.sendMessage("§e(英文或物品ID比較容易搜尋到，中文查不到不妨用物品ID)");
@@ -92,6 +93,7 @@ public final class ShopCommand implements CommandExecutor, TabCompleter {
                 player.sendMessage("§a" + locale.msg(player, "msg.search.found", query, count));
             }
             case "sell", "上架", "賣" -> {
+                if (checkBedrockBlocked(player)) return true;
                 if (!player.hasPermission("shop.sell")) {
                     player.sendMessage("§c" + locale.msg(player, "msg.sell.no-permission"));
                     return true;
@@ -108,10 +110,12 @@ public final class ShopCommand implements CommandExecutor, TabCompleter {
                 ShopGui.openSellToSystem(shopManager, player, session);
             }
             case "sellable", "sell-list", "list-sellable", "可收購" -> {
+                if (checkBedrockBlocked(player)) return true;
                 if (!player.hasPermission("shop.sell")) {
                     player.sendMessage("§c" + locale.msg(player, "msg.sell.no-permission"));
                     return true;
                 }
+
                 if (!shopManager.isSellToSystemEnabled()) {
                     player.sendMessage("§c" + locale.msg(player, "msg.sell.disabled"));
                     return true;
@@ -320,7 +324,19 @@ public final class ShopCommand implements CommandExecutor, TabCompleter {
         send(sender, locale, key, new Object[0]);
     }
 
+    private boolean checkBedrockBlocked(Player player) {
+        if (plugin.getConfig().getBoolean("bedrock.block-gui", false) && com.avery.shop.util.BedrockUtil.isBedrockPlayer(player)) {
+            var locale = plugin.getLocaleService();
+            player.sendMessage(locale.msg(player, "msg.cmd.bedrock-blocked"));
+            return true;
+        }
+        return false;
+    }
+
     private void openShop(Player player) {
+        if (checkBedrockBlocked(player)) {
+            return;
+        }
         if (guiListener == null) {
             player.sendMessage("§c" + plugin.getLocaleService().msg(player, "msg.cmd.gui-not-ready"));
             return;
@@ -328,6 +344,7 @@ public final class ShopCommand implements CommandExecutor, TabCompleter {
         var session = guiListener.getOrCreateSession(player);
         ShopGui.openMain(shopManager, player, session);
     }
+
 
     @Override
     public List<String> onTabComplete(CommandSender sender, Command command, String alias, String[] args) {

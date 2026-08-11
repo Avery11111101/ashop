@@ -3,7 +3,21 @@
 All notable changes to ashop are documented here.  
 ashop 的所有重要變更皆記錄於此。
 
+## [1.7.1] - 2026-08-11
+
+### Fixed / 修復
+- **Bedrock Touch GUI Item Extraction Prevention (徹底修復觸控版/基岩版玩家拖曳 GUI 方塊離線帶走 Bug)** — Implemented PersistentDataContainer (PDC) item tagging (`ashop:gui_item`) on all shop GUI display items, auto-clearing cursor items on inventory close and player disconnect, and cancelling block placement and drop events if any GUI item ever reaches a player's inventory  
+  **徹底修復觸控版/基岩版玩家拖曳 GUI 方塊離線帶走 Bug** — 為所有商店 GUI 面板顯示圖示注入 `ashop:gui_item` PDC 標籤，並於介面關閉、玩家離線與重新登入時自動抹除游標與背包內殘留的 GUI 物品；同時監聽放置方塊與丟棄物品事件徹底進行防呆攔截。
+
+### Added / 新增
+- **Bedrock Edition GUI Blocking Option (基岩版玩家 GUI 商店限制選項)** — Added `bedrock.block-gui` option in `config.yml` (default `false`), allowing server admins to optionally restrict Bedrock players to Discord bot purchasing if desired  
+  **基岩版玩家 GUI 限制設定** — `config.yml` 新增 `bedrock.block-gui` 開關（預設為 `false`，開放全平台使用；管理員可視需要設為 `true` 限制基岩版僅能用 Discord 機器人購買）
+
+
+---
+
 ## [1.7.0] - 2026-08-10
+
 
 ### Fixed / 修復
 - **Discord Item Purchasing with Colons (修復 Discord 購買含冒號標籤商品失敗 Bug)** — Fixed an issue where clicking the purchase or quantity buttons on Discord for items containing colons (`:`) in their `catalogKey` (such as enchanted books `enchanted_book:ench:minecraft:luck_of_the_sea:3` or potions) split the key on colons, causing purchase validation to fail with "該商品目前未開放購買". Catalog keys containing colons are now shortened to clean hash keys (`k_...`), and component ID parsing handles colon-delimited parameters safely.  

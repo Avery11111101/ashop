@@ -85,7 +85,7 @@ public final class ShopGui {
             int count = manager.getCategoryDisplayCount(category.getId());
             meta.lore(buildSubcategoryLore(manager, player, locale, category.getId()));
             icon.setItemMeta(meta);
-            inv.setItem(slot, icon);
+            inv.setItem(slot, tagShopGuiItem(icon));
             slotIndex++;
         }
 
@@ -517,7 +517,7 @@ public final class ShopGui {
 
             meta.lore(lore);
             display.setItemMeta(meta);
-            inv.setItem(slot, display);
+            inv.setItem(slot, tagShopGuiItem(display));
         }
 
         addNavButtons(manager, player, session, inv, page, totalPages);
@@ -649,11 +649,9 @@ public final class ShopGui {
                         .color(NamedTextColor.LIGHT_PURPLE).decoration(TextDecoration.ITALIC, false));
             }
 
-            if (meta != null) {
-                meta.lore(lore);
-                stack.setItemMeta(meta);
-            }
-            inv.setItem(slot, stack);
+            meta.lore(lore);
+            stack.setItemMeta(meta);
+            inv.setItem(slot, tagShopGuiItem(stack));
         }
 
         if (page > 0) {
@@ -677,6 +675,23 @@ public final class ShopGui {
         player.openInventory(inv);
     }
 
+    public static final org.bukkit.NamespacedKey GUI_ITEM_KEY = new org.bukkit.NamespacedKey("ashop", "gui_item");
+
+    public static ItemStack tagShopGuiItem(ItemStack item) {
+        if (item == null || item.getType().isAir()) return item;
+        var meta = item.getItemMeta();
+        if (meta != null) {
+            meta.getPersistentDataContainer().set(GUI_ITEM_KEY, org.bukkit.persistence.PersistentDataType.BYTE, (byte) 1);
+            item.setItemMeta(meta);
+        }
+        return item;
+    }
+
+    public static boolean isShopGuiItem(ItemStack item) {
+        if (item == null || item.getType().isAir() || !item.hasItemMeta()) return false;
+        return item.getItemMeta().getPersistentDataContainer().has(GUI_ITEM_KEY, org.bukkit.persistence.PersistentDataType.BYTE);
+    }
+
     public static ItemStack button(Material material, String name, String... lore) {
         var item = new ItemStack(material);
         var meta = item.getItemMeta();
@@ -690,6 +705,7 @@ public final class ShopGui {
             }
             meta.lore(loreComponents);
         }
+        meta.getPersistentDataContainer().set(GUI_ITEM_KEY, org.bukkit.persistence.PersistentDataType.BYTE, (byte) 1);
         item.setItemMeta(meta);
         return item;
     }
