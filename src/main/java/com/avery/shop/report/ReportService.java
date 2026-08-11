@@ -175,9 +175,50 @@ public final class ReportService {
                 .limit(10)
                 .collect(Collectors.toList());
 
+        // 計算物品交易熱度與趨勢分析
+        List<ReportSummary.ItemTrendAnalysis> trendAnalyses = itemMap.values().stream()
+                .map(acc -> {
+                    String displayName = getItemDisplayName(acc.key);
+                    int totalBuysSells = acc.buys + acc.sells;
+                    double buyRatio = totalBuysSells > 0 ? (acc.buys * 100.0 / totalBuysSells) : 50.0;
+                    double multiplier = 1.0;
+                    if (plugin.getShopManager() != null) {
+                        try {
+                            multiplier = plugin.getShopManager().getCatalogPriceQuote(acc.key).multiplier();
+                        } catch (Exception ignored) {}
+                    }
+
+                    // 計算熱度分數 (0~100)
+                    int score = Math.min(100, Math.max(10, (int) Math.round((acc.qty * 0.4) + (totalBuysSells * 5) + (acc.amount * 0.1))));
+
+                    String tag;
+                    String insight;
+                    if (buyRatio >= 75.0 && acc.buys >= 2) {
+                        tag = "🔥 搶手爆款物資";
+                        insight = "【" + displayName + "】極受玩家喜愛！玩家購買比例高達 " + String.format("%.0f", buyRatio) + "%，帶動動態物價至 " + String.format("%.2f", multiplier) + "x 倍率。";
+                    } else if (buyRatio <= 25.0 && acc.sells >= 2) {
+                        tag = "📥 玩家大量拋售";
+                        insight = "【" + displayName + "】出現大量拋售！賣出比例高達 " + String.format("%.0f", 100.0 - buyRatio) + "%，物價回調至 " + String.format("%.2f", multiplier) + "x 倍率。";
+                    } else if (buyRatio >= 55.0) {
+                        tag = "📈 需求穩定上升";
+                        insight = "【" + displayName + "】需求平穩增長，買賣次數比為 " + acc.buys + ":" + acc.sells + "，市場買氣良好。";
+                    } else {
+                        tag = "⚖️ 供需穩定平衡";
+                        insight = "【" + displayName + "】供需維持良好平衡，物價穩定在 " + String.format("%.2f", multiplier) + "x 基準區間。";
+                    }
+
+                    return new ReportSummary.ItemTrendAnalysis(
+                            acc.key, displayName, acc.qty, acc.amount, acc.buys, acc.sells,
+                            buyRatio, multiplier, score, tag, insight
+                    );
+                })
+                .sorted((a, b) -> Integer.compare(b.popularityScore(), a.popularityScore()))
+                .limit(10)
+                .collect(Collectors.toList());
+
         return new ReportSummary(
                 period, startTime, endTime, totalRevenue, totalBuyRev, totalSellPayout,
-                totalItems, targetRecords.size(), players.size(), topItems, topPlayers
+                totalItems, targetRecords.size(), players.size(), topItems, topPlayers, trendAnalyses
         );
     }
 

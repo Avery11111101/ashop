@@ -20,7 +20,7 @@ import java.time.format.DateTimeFormatter;
 import java.util.List;
 
 /**
- * Discord 商店交易與玩家服務統計 Embed 訊息與元件建構器
+ * Discord 商店交易與玩家服務統計 Embed 訊息與元件建構器 (含物品趨勢與熱度智慧分析)
  */
 public final class DiscordReportBuilder {
 
@@ -97,6 +97,37 @@ public final class DiscordReportBuilder {
         String currency = plugin.getConfig().getString("economy.currency-symbol", "$");
 
         switch (viewDetail.toLowerCase()) {
+            case "trends" -> {
+                eb.setTitle("📈 [" + periodName + "] 物品交易趨勢與熱度智慧分析報告");
+                eb.setDescription("統計區間 (" + tzText + "): `" + startDateStr + "` 至 `" + endDateStr + "`");
+
+                if (summary.getTrendAnalyses().isEmpty()) {
+                    eb.addField("暫無數據", "在此期間內尚無足夠之交易數據進行趨勢分析。", false);
+                } else {
+                    StringBuilder sbRank = new StringBuilder();
+                    StringBuilder sbInsight = new StringBuilder();
+                    int count = 1;
+
+                    for (var t : summary.getTrendAnalyses()) {
+                        if (count <= 5) {
+                            String scoreBar = "🔥".repeat(Math.min(5, Math.max(1, t.popularityScore() / 20)));
+                            sbRank.append(count).append(". **").append(t.displayName()).append("** [").append(t.trendTag()).append("]\n")
+                                  .append("└ 熱度分數: `").append(t.popularityScore()).append("/100` ").append(scoreBar)
+                                  .append(" | 買賣比: `").append(String.format("%.0f", t.buyRatioPercent())).append("%`")
+                                  .append(" | 物價倍率: `").append(String.format("%.2f", t.priceMultiplier())).append("x`\n");
+                        }
+                        if (count <= 3 && t.insightComment() != null && !t.insightComment().isEmpty()) {
+                            sbInsight.append("• ").append(t.insightComment()).append("\n");
+                        }
+                        count++;
+                    }
+
+                    eb.addField("🔥 玩家最受歡迎物資榜 Top 5", sbRank.toString(), false);
+                    if (sbInsight.length() > 0) {
+                        eb.addField("💡 智慧市場趨勢短評與建議", sbInsight.toString(), false);
+                    }
+                }
+            }
             case "top_items" -> {
                 eb.setTitle("🔥 [" + periodName + "] 熱門物資交易榜 Top 10");
                 eb.setDescription("統計區間 (" + tzText + "): `" + startDateStr + "` 至 `" + endDateStr + "`");
@@ -234,6 +265,7 @@ public final class DiscordReportBuilder {
         StringSelectMenu selectMenu = StringSelectMenu.create("report:select_detail:" + periodKey)
                 .setPlaceholder("👇 選擇欲檢視的玩家買賣與服務統計項目...")
                 .addOption("📊 玩家交易數據總覽", "overview", "查看整體交易流通額、流通量與玩家參與度", currentDetail.equals("overview") ? null : null)
+                .addOption("📈 物品交易趨勢與熱度智慧分析", "trends", "檢視玩家購買偏好熱度、物價漲跌倍率與智慧分析短評", currentDetail.equals("trends") ? null : null)
                 .addOption("🔥 熱門物資交易榜 Top 10", "top_items", "查看玩家買賣最熱門前 10 名物品物資", currentDetail.equals("top_items") ? null : null)
                 .addOption("🏆 活躍交易玩家榜 Top 10", "top_players", "查看使用商店服務交易金額最高的前 10 名玩家", currentDetail.equals("top_players") ? null : null)
                 .addOption("📦 玩家買賣金額與金錢流向明細", "details", "查看玩家購買消費、售出獲得金額與金錢流向分析", currentDetail.equals("details") ? null : null)

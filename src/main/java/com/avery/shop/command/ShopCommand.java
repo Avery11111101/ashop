@@ -270,12 +270,15 @@ public final class ShopCommand implements CommandExecutor, TabCompleter {
         sender.sendMessage("§e總物資流通量: §f" + summary.getTotalItemsTraded() + " 件 (" + summary.getTotalTransactionsCount() + " 筆交易)");
         sender.sendMessage("§e活躍服務玩家: §f" + summary.getActivePlayersCount() + " 人");
 
-        if (!summary.getTopItems().isEmpty()) {
-            sender.sendMessage("§a熱門買賣物資 Top 3:");
-            int limit = Math.min(3, summary.getTopItems().size());
+        if (!summary.getTrendAnalyses().isEmpty()) {
+            sender.sendMessage("§b💡 智慧市場趨勢分析 Top 3:");
+            int limit = Math.min(3, summary.getTrendAnalyses().size());
             for (int i = 0; i < limit; i++) {
-                var item = summary.getTopItems().get(i);
-                sender.sendMessage(" §7" + (i + 1) + ". §f" + item.displayName() + " §7x" + item.totalQuantity() + " ($" + String.format("%.2f", item.totalAmount()) + ")");
+                var t = summary.getTrendAnalyses().get(i);
+                sender.sendMessage(" §e" + (i + 1) + ". §f" + t.displayName() + " §7[" + t.trendTag() + "] §a熱度: " + t.popularityScore() + "/100");
+                if (t.insightComment() != null) {
+                    sender.sendMessage("   §7" + t.insightComment());
+                }
             }
         }
 
@@ -283,7 +286,8 @@ public final class ShopCommand implements CommandExecutor, TabCompleter {
             sender.sendMessage("§b[Discord] 正在手動發送 " + period.getDisplayNameZh() + " 至 Discord 設定頻道/Webhook...");
             var scheduler = plugin.getReportScheduler();
             if (scheduler != null) {
-                scheduler.sendReport(period, "overview");
+                String detail = periodStr.equalsIgnoreCase("trend") || periodStr.equalsIgnoreCase("trends") ? "trends" : "overview";
+                scheduler.sendReport(period, detail);
                 sender.sendMessage("§a[Discord] 報表發送任務已觸發！");
             } else {
                 sender.sendMessage("§c[Discord] 發送失敗：Discord 服務未啟動。");
@@ -335,7 +339,7 @@ public final class ShopCommand implements CommandExecutor, TabCompleter {
             return filter(options, args[0]);
         }
         if (args.length == 2 && (args[0].equalsIgnoreCase("report") || args[0].equalsIgnoreCase("報表"))) {
-            return filter(List.of("daily", "weekly", "monthly", "每日", "每週", "每月"), args[1]);
+            return filter(List.of("daily", "weekly", "monthly", "trend", "daily:send", "weekly:send", "monthly:send", "每日", "每週", "每月", "趨勢"), args[1]);
         }
         if (args.length == 3 && (args[0].equalsIgnoreCase("report") || args[0].equalsIgnoreCase("報表"))) {
             return filter(List.of("send", "discord"), args[2]);

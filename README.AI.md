@@ -618,6 +618,10 @@ ShopPlugin
 7. **時區解析與標註 (Timezone Annotation & Resolution)**：
    - `discord-report.timezone`: 預設 `system` (使用伺服器主機系統時區)。若主機位於國外 VPS，可手動設定為 `"Asia/Taipei"`、`"UTC"` 或指定時區。
    - `DiscordReportBuilder` 與 `DiscordReportScheduler` 動態解析 `ZoneId` 並於 Embed 描述與頁尾標註時區備註 (例如 `Asia/Taipei` 或 `Asia/Taipei (伺服器系統時區)`).
+8. **物品交易趨勢與熱度智慧分析 (Item Trend & Popularity Analytics)**：
+   - `ReportSummary.ItemTrendAnalysis`: 自動計算物品熱度指數 (0~100)、買賣比例與動態物價漲跌倍率。
+   - 自動生成標籤 (`🔥 搶手爆款物資` / `📈 需求持續上升` / `⚖️ 供需穩定平衡` / `📥 玩家大量拋售`) 與智慧分析評語 (如 `"【鑽石】極受玩家喜愛！購買比例達 85%..."`)。
+   - 在 Discord 下拉選單中新增 `📈 物品交易趨勢與熱度智慧分析` 選項，在遊戲內可透過 `/shop report trend` 進行即時查詢。
 
 ## 待擴充
 

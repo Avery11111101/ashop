@@ -3,7 +3,7 @@ package com.avery.shop.report;
 import java.util.List;
 
 /**
- * 報表數據統計結果模型
+ * 報表數據統計結果模型 (包含物品熱度指數與自動趨勢分析短評)
  */
 public final class ReportSummary {
 
@@ -46,6 +46,23 @@ public final class ReportSummary {
     public record ItemStat(String catalogKey, String displayName, int totalQuantity, double totalAmount, int buyCount, int sellCount) {}
     public record PlayerStat(String playerName, int totalTransactions, double totalSpent, double totalEarned) {}
 
+    /**
+     * 物品交易熱度與自動分析短評數據
+     */
+    public record ItemTrendAnalysis(
+            String catalogKey,
+            String displayName,
+            int totalQuantity,
+            double totalAmount,
+            int buyCount,
+            int sellCount,
+            double buyRatioPercent,
+            double priceMultiplier,
+            int popularityScore,
+            String trendTag,
+            String insightComment
+    ) {}
+
     private final ReportPeriod period;
     private final long startTime;
     private final long endTime;
@@ -59,11 +76,21 @@ public final class ReportSummary {
 
     private final List<ItemStat> topItems;
     private final List<PlayerStat> topPlayers;
+    private final List<ItemTrendAnalysis> trendAnalyses;
 
     public ReportSummary(ReportPeriod period, long startTime, long endTime, double totalRevenue,
                          double totalSystemBuyRevenue, double totalSystemSellPayout,
                          int totalItemsTraded, int totalTransactionsCount, int activePlayersCount,
                          List<ItemStat> topItems, List<PlayerStat> topPlayers) {
+        this(period, startTime, endTime, totalRevenue, totalSystemBuyRevenue, totalSystemSellPayout,
+                totalItemsTraded, totalTransactionsCount, activePlayersCount, topItems, topPlayers, List.of());
+    }
+
+    public ReportSummary(ReportPeriod period, long startTime, long endTime, double totalRevenue,
+                         double totalSystemBuyRevenue, double totalSystemSellPayout,
+                         int totalItemsTraded, int totalTransactionsCount, int activePlayersCount,
+                         List<ItemStat> topItems, List<PlayerStat> topPlayers,
+                         List<ItemTrendAnalysis> trendAnalyses) {
         this.period = period;
         this.startTime = startTime;
         this.endTime = endTime;
@@ -75,6 +102,7 @@ public final class ReportSummary {
         this.activePlayersCount = activePlayersCount;
         this.topItems = topItems != null ? topItems : List.of();
         this.topPlayers = topPlayers != null ? topPlayers : List.of();
+        this.trendAnalyses = trendAnalyses != null ? trendAnalyses : List.of();
     }
 
     public ReportPeriod getPeriod() {
@@ -119,5 +147,9 @@ public final class ReportSummary {
 
     public List<PlayerStat> getTopPlayers() {
         return topPlayers;
+    }
+
+    public List<ItemTrendAnalysis> getTrendAnalyses() {
+        return trendAnalyses;
     }
 }
