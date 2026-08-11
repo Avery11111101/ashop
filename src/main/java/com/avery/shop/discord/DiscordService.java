@@ -219,7 +219,12 @@ public class DiscordService {
     public void stop() {
         if (standaloneJda != null) {
             try {
-                standaloneJda.shutdown();
+                standaloneJda.shutdownNow();
+                try {
+                    standaloneJda.awaitShutdown(java.time.Duration.ofSeconds(3));
+                } catch (InterruptedException ignored) {
+                    Thread.currentThread().interrupt();
+                }
                 plugin.getLogger().info("獨立 Discord Bot 已停止。");
             } catch (Exception ignored) {}
             standaloneJda = null;

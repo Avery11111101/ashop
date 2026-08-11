@@ -622,6 +622,9 @@ ShopPlugin
    - `ReportSummary.ItemTrendAnalysis`: 自動計算物品熱度指數 (0~100)、買賣比例與動態物價漲跌倍率。
    - 自動生成標籤 (`🔥 搶手爆款物資` / `📈 需求持續上升` / `⚖️ 供需穩定平衡` / `📥 玩家大量拋售`) 與智慧分析評語 (如 `"【鑽石】極受玩家喜愛！購買比例達 85%..."`)。
    - 在 Discord 下拉選單中新增 `📈 物品交易趨勢與熱度智慧分析` 選項，在遊戲內可透過 `/shop report trend` 進行即時查詢。
+9. **修復 PlugManX 熱重載/重啟時 JDA 拋出 IllegalStateException: zip file closed 錯誤**：
+   - **根因**：舊版在 `DiscordService.stop()` 中呼叫非同步 `standaloneJda.shutdown()` 後立即回傳，PlugManX 隨即關閉舊插件的 ClassLoader（ZipFile）。當背景 JDA WebSocket 清理執行緒運作時，因 JarFile 已被關閉而拋出 `IllegalStateException: zip file closed`。
+   - **修復**：改用 `standaloneJda.shutdownNow()` 搭配 `standaloneJda.awaitShutdown(Duration.ofSeconds(3))`，確保 JDA 所有背景執行緒與連線在 ClassLoader 被關閉前同步安全清理釋放。
 
 ## 待擴充
 
