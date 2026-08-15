@@ -642,11 +642,34 @@ ShopPlugin
    - `config.yml` 新增 `bedrock.block-gui` 設定項（預設 `true`）。
    - 各語系檔新增 `msg.cmd.bedrock-blocked` 提示文字。
 
+### 2026-08-15 修復 Discord 機器人購買物品無回應與「未及時回應」問題 (v1.7.2)
+
+1. **核心痛點與問題現象**：
+   - 使用者反映在 Discord 機器人上點擊「🛒 確認購買」按鈕時，機器人完全沒有回應，最後 Discord 提示「Johnny私人伺服器 未及時回應」。
+   - 點擊商品數量的預設按鈕 (`1個`、`2個`、`5個` 或 `1組`、`4組`) 時，因為 `DiscordPanelBuilder` 與 `DiscordShopListener` 之間的 customId 參數順序不一致（Panel 生成 `shop:qty:<amount>:<shortKey>:<cat>:<page>`，而 Listener 卻以 `parts[2]` 讀取 shortKey、`parts[4]` 讀取 page，導致 `Integer.parseInt(categoryId)` 拋出 `NumberFormatException`），導致數量切換直接崩潰無回應。
+   - 點擊「✏️ 自訂數量」按鈕時，監聽器根本未實作 `shop:qty_custom:` 的按鈕點擊事件與 Modal 彈窗輸入處理，造成點擊後完全無反應並超時。
+   - 點擊「🛒 確認購買」按鈕時，Panel 生成的 customId 為 `shop:buy:<shortKey>:<amount>`，但 Listener 卻檢查 `componentId.startsWith("shop:btn_buy:")`，且未立即透過 `event.deferReply(true)` 進行閘道 ACK，一旦主執行緒排程稍有延遲即觸發 Discord 3 秒超時（顯示「未及時回應」）。
+
+2. **具體修復步驟與架構調整**：
+   - **標準化 Button customId 規範 (`DiscordPanelBuilder.java`)**：
+     - 商品數量切換按鈕統一格式：`shop:qty:<shortKey>:<categoryId>:<page>:<amount>`。
+     - 自訂數量按鈕統一格式：`shop:qty_custom:<shortKey>:<categoryId>:<page>`。
+     - 確認購買按鈕統一格式：`shop:buy:<shortKey>:<amount>`。
+     - 智慧返回按鈕：若來自搜尋（`categoryId` 為 `search@<query>`），返回按鈕指向 `shop:nav:search:<query>:<page>` 並顯示「↩️ 返回搜尋結果」；若來自一般分類，則指向 `shop:nav:cat:<categoryId>:<page>`。
+   - **強健的事件監聽與 Modal 彈窗 (`DiscordShopListener.java`)**：
+     - 修復 `shop:qty:` 解析邏輯，依序正確提取 `shortKey`、`categoryId`、`page` 與 `amount`，並即時更新面板。
+     - 新增 `shop:qty_custom:` 點擊事件：跳出 `shop:modal_qty:...` Modal 彈窗要求玩家輸入自訂數量（1 ~ 2304）。
+     - 新增 `shop:modal_qty:` Modal 提交事件：驗證數量合法性後自動切換至指定數量的商品面板。
+     - **非同步即時 ACK 機制 (`deferReply`)**：在收到購買請求時立即調用 `event.deferReply(true)`，在幾毫秒內向 Discord 閘道完成回應確認（顯示「機器人正在思考...」），隨後交由 Bukkit 主執行緒檢查玩家在線狀態、餘額、背包空間並執行發貨，最後透過 `hook.sendMessage(...)` 回傳購買結果，徹底杜絕「未及時回應」超時錯誤。
+   - **強化防呆與例外捕捉**：
+     - 在 `handleDiscordBuy` 中加入完整的 try-catch 防護，若交易處理發生異常會直接回覆清晰的繁體中文錯誤提示（包含金錢不足、背包空間不足、商品未開放購買等）。
+
 ## 待擴充
 
 - 可匯入完整 Minecraft zh_tw.json 擴充翻譯覆蓋率
 - 可加入更多語言（ja_jp 等）
 - 可加入議價、限購、分頁效能優化（大量上架時）
+
 
 
 

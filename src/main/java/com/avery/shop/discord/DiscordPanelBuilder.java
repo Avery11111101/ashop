@@ -277,7 +277,7 @@ public class DiscordPanelBuilder {
         StringBuilder desc = new StringBuilder();
         desc.append(String.format("找到 **%d** 項商品 (第 **%d / %d** 頁)：\n\n", totalItems, page + 1, totalPages));
 
-        StringSelectMenu.Builder itemSelect = StringSelectMenu.create("shop:select_item:search:" + page)
+        StringSelectMenu.Builder itemSelect = StringSelectMenu.create("shop:select_item:search@" + query + ":" + page)
                 .setPlaceholder("📦 請選擇要查看/購買的商品...");
 
         for (int i = start; i < end; i++) {
@@ -327,6 +327,10 @@ public class DiscordPanelBuilder {
 
         var entry = plugin.getItemCatalog().getByKey(catalogKey);
         if (entry == null) {
+            if (categoryId.startsWith("search@")) {
+                String query = categoryId.substring("search@".length());
+                return buildSearchResultsMessage(query, page);
+            }
             return buildCategoryMessage(categoryId, page);
         }
 
@@ -364,28 +368,34 @@ public class DiscordPanelBuilder {
         if (tradeMode.allowsBuy()) {
             List<ItemComponent> qtyRow = new ArrayList<>();
             if (maxStack > 1) {
-                qtyRow.add(Button.secondary("shop:qty:1:" + shortKey + ":" + categoryId + ":" + page, "1個"));
-                qtyRow.add(Button.secondary("shop:qty:" + maxStack + ":" + shortKey + ":" + categoryId + ":" + page, "1組 (" + maxStack + "個)"));
-                qtyRow.add(Button.secondary("shop:qty:" + (maxStack * 4) + ":" + shortKey + ":" + categoryId + ":" + page, "4組 (" + (maxStack * 4) + "個)"));
+                qtyRow.add(Button.secondary("shop:qty:" + shortKey + ":" + categoryId + ":" + page + ":1", "1個"));
+                qtyRow.add(Button.secondary("shop:qty:" + shortKey + ":" + categoryId + ":" + page + ":" + maxStack, "1組 (" + maxStack + "個)"));
+                qtyRow.add(Button.secondary("shop:qty:" + shortKey + ":" + categoryId + ":" + page + ":" + (maxStack * 4), "4組 (" + (maxStack * 4) + "個)"));
             } else {
-                qtyRow.add(Button.secondary("shop:qty:1:" + shortKey + ":" + categoryId + ":" + page, "1個"));
-                qtyRow.add(Button.secondary("shop:qty:2:" + shortKey + ":" + categoryId + ":" + page, "2個"));
-                qtyRow.add(Button.secondary("shop:qty:5:" + shortKey + ":" + categoryId + ":" + page, "5個"));
+                qtyRow.add(Button.secondary("shop:qty:" + shortKey + ":" + categoryId + ":" + page + ":1", "1個"));
+                qtyRow.add(Button.secondary("shop:qty:" + shortKey + ":" + categoryId + ":" + page + ":2", "2個"));
+                qtyRow.add(Button.secondary("shop:qty:" + shortKey + ":" + categoryId + ":" + page + ":5", "5個"));
             }
             qtyRow.add(Button.secondary("shop:qty_custom:" + shortKey + ":" + categoryId + ":" + page, "✏️ 自訂數量"));
             layoutRows.add(ActionRow.of(qtyRow));
         }
 
-        var rootMenu = buildRootCategorySelectMenu(categoryId);
+        var rootMenu = buildRootCategorySelectMenu(categoryId.startsWith("search@") ? null : categoryId);
         if (rootMenu != null) layoutRows.add(ActionRow.of(rootMenu));
 
         List<ItemComponent> actionRow = new ArrayList<>();
-        Button backBtn = Button.secondary("shop:nav:cat:" + categoryId + ":" + page, "↩️ 返回列表");
+        Button backBtn;
+        if (categoryId.startsWith("search@")) {
+            String query = categoryId.substring("search@".length());
+            backBtn = Button.secondary("shop:nav:search:" + query + ":" + page, "↩️ 返回搜尋結果");
+        } else {
+            backBtn = Button.secondary("shop:nav:cat:" + categoryId + ":" + page, "↩️ 返回列表");
+        }
         actionRow.add(backBtn);
 
         if (tradeMode.allowsBuy()) {
-            Button buyBtn = Button.success("shop:buy:" + quantity + ":" + shortKey,
-                    String.format("🛒 確定購買 (%d個 - $%.1f)", quantity, totalPrice));
+            Button buyBtn = Button.success("shop:buy:" + shortKey + ":" + quantity,
+                    String.format("🛒 確認購買 (%d個 · $%.2f)", quantity, totalPrice));
             actionRow.add(buyBtn);
         }
 

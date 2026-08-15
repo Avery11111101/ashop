@@ -67,7 +67,7 @@ dynamic-pricing:
 
 ## 安裝
 
-1. 將 `ashop-1.7.0.jar` 放入 `plugins/` 資料夾
+1. 將 `ashop-1.7.2.jar` 放入 `plugins/` 資料夾
 2. 安裝 [Vault](https://www.spigotmc.org/resources/vault.34315/) 及經濟插件（如 EssentialsX）
 3. 重啟伺服器
 

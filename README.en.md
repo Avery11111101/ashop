@@ -57,7 +57,7 @@ Use `/shop price` to check **system sell and buyback prices** (with trends).
 
 ## Installation
 
-1. Place `ashop-1.2.2.jar` in the `plugins/` folder
+1. Place `ashop-1.7.2.jar` in the `plugins/` folder
 2. Install [Vault](https://www.spigotmc.org/resources/vault.34315/) and an economy plugin (e.g. EssentialsX)
 3. Restart the server
 
@@ -92,7 +92,7 @@ Market stats: `plugins/ashop/market-data.yml`
 gradle build
 ```
 
-Requires **Java 25**.
+Requires **Java 21+**.
 
 ---
 

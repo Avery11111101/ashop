@@ -3,6 +3,12 @@
 All notable changes to ashop are documented here.  
 ashop 的所有重要變更皆記錄於此。
 
+## [1.7.2] - 2026-08-15
+
+### Fixed / 修復
+- **Discord Shop Button Interaction Timeout & Parameter Inversion (修復 Discord 商店購買與數量按鈕無回應、超時未及時回應 Bug)** — Fixed mismatched parameter order in `shop:qty:` component ID between builder and listener, fixed missing custom quantity modal handler (`shop:qty_custom:`), aligned purchase button prefix (`shop:buy:`), and wrapped purchase processing with JDA `deferReply(true)` to guarantee instant gateway acknowledgment within milliseconds, completely eliminating the "未及時回應" (Interaction Failed) timeout.  
+  **修復 Discord 商店購買與數量按鈕無回應及超時問題** — 修正 `DiscordPanelBuilder` 與 `DiscordShopListener` 在商品數量按鈕上的參數順序不一致問題、補齊自訂數量彈窗 (`shop:qty_custom:`) 互動邏輯、對齊確認購買按鈕 ID 前綴，並在購買交易處理時全面採用 `deferReply(true)` 非同步即時響應機制，徹底解決 Discord 提示「未及時回應」與點擊無效的異常。
+
 ## [1.7.1] - 2026-08-11
 
 ### Fixed / 修復
