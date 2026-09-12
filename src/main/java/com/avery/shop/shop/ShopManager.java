@@ -461,30 +461,107 @@ public final class ShopManager {
         return new SellBatchResult(total, soldCount, rejected);
     }
 
-    public static ItemStack stripSellGuiLore(ItemStack item) {
-        if (item == null || !item.hasItemMeta()) return item;
-        var meta = item.getItemMeta();
-        var lore = meta.lore();
-        if (lore == null || lore.isEmpty()) return item;
+    public static final org.bukkit.NamespacedKey SELL_PREVIEW_KEY =
+            new org.bukkit.NamespacedKey("ashop", "sell_preview");
+    public static final org.bukkit.NamespacedKey SELL_ORIGINAL_LORE_SIZE_KEY =
+            new org.bukkit.NamespacedKey("ashop", "sell_orig_lore_size");
 
-        var cleaned = new ArrayList<net.kyori.adventure.text.Component>();
-        boolean skipping = false;
+    /** 檢測物品是否含有收購箱 GUI 的預覽標籤（PDC 或 Lore 關鍵字） */
+    public static boolean hasSellGuiLore(ItemStack item) {
+        if (item == null || item.getType().isAir() || !item.hasItemMeta()) return false;
+        var meta = item.getItemMeta();
+        if (meta == null) return false;
+        if (meta.getPersistentDataContainer().has(SELL_PREVIEW_KEY, org.bukkit.persistence.PersistentDataType.BYTE)) {
+            return true;
+        }
+        var lore = meta.lore();
+        if (lore == null || lore.isEmpty()) return false;
         for (var line : lore) {
             var plain = net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer
                     .plainText().serialize(line);
-            if (plain.contains("───")) {
-                skipping = true;
-                continue;
+            if (isSellGuiMarker(plain)) {
+                return true;
             }
-            if (skipping) continue;
-            cleaned.add(line);
         }
-        if (cleaned.isEmpty()) {
-            meta.lore(null);
-        } else {
-            meta.lore(cleaned);
+        return false;
+    }
+
+    private static boolean isSellGuiMarker(String plain) {
+        return plain.contains("單價：") || plain.contains("小計：") || plain.contains("系統不收購")
+                || plain.contains("Unit:") || plain.contains("Subtotal:") || plain.contains("Not Accepted");
+    }
+
+    /** 剝除收購箱預覽標籤，完整還原物品原始 Lore 與 PDC */
+    public static ItemStack stripSellGuiLore(ItemStack item) {
+        if (item == null || item.getType().isAir() || !item.hasItemMeta()) return item;
+        var meta = item.getItemMeta();
+        if (meta == null) return item;
+
+        boolean modified = false;
+        var pdc = meta.getPersistentDataContainer();
+        boolean hasPdc = pdc.has(SELL_PREVIEW_KEY, org.bukkit.persistence.PersistentDataType.BYTE);
+        Integer origSize = pdc.get(SELL_ORIGINAL_LORE_SIZE_KEY, org.bukkit.persistence.PersistentDataType.INTEGER);
+
+        if (hasPdc) {
+            pdc.remove(SELL_PREVIEW_KEY);
+            modified = true;
         }
-        item.setItemMeta(meta);
+        if (origSize != null) {
+            pdc.remove(SELL_ORIGINAL_LORE_SIZE_KEY);
+            modified = true;
+        }
+
+        var lore = meta.lore();
+        if (lore != null && !lore.isEmpty()) {
+            if (hasPdc && origSize != null && origSize >= 0 && origSize <= lore.size()) {
+                if (origSize == 0) {
+                    meta.lore(null);
+                } else {
+                    meta.lore(new ArrayList<>(lore.subList(0, origSize)));
+                }
+                modified = true;
+            } else {
+                // 備援機制：針對無 PDC 的舊版殘留物品或異常狀況進行安全過濾
+                int cutIndex = -1;
+                for (int i = 0; i < lore.size(); i++) {
+                    var plain = net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer
+                            .plainText().serialize(lore.get(i));
+                    if (isSellGuiMarker(plain)) {
+                        cutIndex = i;
+                        if (cutIndex > 0) {
+                            var prevPlain = net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer
+                                    .plainText().serialize(lore.get(cutIndex - 1));
+                            if (prevPlain.contains("───") || prevPlain.contains("─────────")) {
+                                cutIndex--;
+                            }
+                        }
+                        break;
+                    } else if (plain.contains("───") || plain.contains("─────────")) {
+                        if (i + 1 < lore.size()) {
+                            var nextPlain = net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer
+                                    .plainText().serialize(lore.get(i + 1));
+                            if (isSellGuiMarker(nextPlain)) {
+                                cutIndex = i;
+                                break;
+                            }
+                        }
+                    }
+                }
+
+                if (cutIndex >= 0) {
+                    if (cutIndex == 0) {
+                        meta.lore(null);
+                    } else {
+                        meta.lore(new ArrayList<>(lore.subList(0, cutIndex)));
+                    }
+                    modified = true;
+                }
+            }
+        }
+
+        if (modified) {
+            item.setItemMeta(meta);
+        }
         return item;
     }
 

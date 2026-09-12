@@ -3,6 +3,12 @@
 All notable changes to ashop are documented here.  
 ashop 的所有重要變更皆記錄於此。
 
+## [1.7.4] - 2026-09-12
+
+### Fixed / 修復
+- **Sell Chest Item Lore Extraction Prevention (修復物品放進收購箱拿出來標籤殘留問題)** — Implemented PersistentDataContainer (PDC) tracking for sell preview lore, preserving original item lore without overwrite, and intercepting manual item takeout, cursor drags, inventory close, and hotbar swaps to ensure items returned to players are completely clean vanilla items.  
+  **修復物品放進收購箱拿出來標籤殘留問題** — 採用 PDC 精確追蹤收購箱價格預覽 Lore 行數，完整保留原物品原有的自訂 Lore，並於點擊拿取、Shift 快速移動、快捷鍵交換、游標拖曳與介面關閉等所有途徑即時還原純淨原物，徹底杜絕單價/小計/───────── 標籤殘留於玩家物品上的問題。
+
 ## [1.7.3] - 2026-09-12
 
 ### Fixed / 修復

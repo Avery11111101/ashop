@@ -164,48 +164,59 @@ public final class ShopGui {
             if (stack == null || stack.getType().isAir()) continue;
             stackCount++;
 
-            var display = stack.clone();
-            var meta = display.getItemMeta();
+            // 先剝離可能存在的舊預覽標籤，取得純淨的原始物品
+            var cleanItem = ShopManager.stripSellGuiLore(stack.clone());
+            var meta = cleanItem.getItemMeta();
             if (meta == null) {
-                meta = Bukkit.getItemFactory().getItemMeta(display.getType());
+                meta = Bukkit.getItemFactory().getItemMeta(cleanItem.getType());
                 if (meta == null) continue;
             }
 
-            var lore = new ArrayList<Component>();
-            lore.add(Component.text("─────────")
+            var origLore = meta.lore();
+            int origLoreSize = (origLore != null) ? origLore.size() : 0;
+            var displayLore = new ArrayList<Component>();
+            if (origLore != null && !origLore.isEmpty()) {
+                displayLore.addAll(origLore);
+            }
+
+            displayLore.add(Component.text("─────────")
                     .color(NamedTextColor.DARK_GRAY).decoration(TextDecoration.ITALIC, false));
 
-            if (manager.canSellToSystem(display)) {
-                var sellQuote = manager.getSellToSystemQuote(display);
+            if (manager.canSellToSystem(cleanItem)) {
+                var sellQuote = manager.getSellToSystemQuote(cleanItem);
                 if (sellQuote.available()) {
                     var unit = sellQuote.price();
-                    var subtotal = unit * display.getAmount();
+                    var subtotal = unit * cleanItem.getAmount();
                     total += subtotal;
                     if (manager.getPricing().isEnabled()) {
-                        lore.add(Component.text(locale.msg(player, "msg.gui.sell.unit-price-dynamic",
+                        displayLore.add(Component.text(locale.msg(player, "msg.gui.sell.unit-price-dynamic",
                                         manager.getEconomy().format(unit),
                                         sellQuote.formatTrend(locale, player)))
                                 .color(NamedTextColor.GOLD).decoration(TextDecoration.ITALIC, false));
                     } else {
-                        lore.add(Component.text(locale.msg(player, "msg.gui.sell.unit-price",
+                        displayLore.add(Component.text(locale.msg(player, "msg.gui.sell.unit-price",
                                         manager.getEconomy().format(unit)))
                                 .color(NamedTextColor.GOLD).decoration(TextDecoration.ITALIC, false));
                     }
-                    lore.add(Component.text(locale.msg(player, "msg.gui.sell.subtotal",
+                    displayLore.add(Component.text(locale.msg(player, "msg.gui.sell.subtotal",
                                     manager.getEconomy().format(subtotal)))
                             .color(NamedTextColor.YELLOW).decoration(TextDecoration.ITALIC, false));
                 } else {
-                    lore.add(Component.text(locale.msg(player, "msg.gui.sell.rejected"))
+                    displayLore.add(Component.text(locale.msg(player, "msg.gui.sell.rejected"))
                             .color(NamedTextColor.RED).decoration(TextDecoration.ITALIC, false));
                 }
             } else {
-                lore.add(Component.text(locale.msg(player, "msg.gui.sell.rejected"))
+                displayLore.add(Component.text(locale.msg(player, "msg.gui.sell.rejected"))
                         .color(NamedTextColor.RED).decoration(TextDecoration.ITALIC, false));
             }
 
-            meta.lore(lore);
-            display.setItemMeta(meta);
-            inv.setItem(slot, display);
+            meta.lore(displayLore);
+            meta.getPersistentDataContainer().set(ShopManager.SELL_PREVIEW_KEY,
+                    org.bukkit.persistence.PersistentDataType.BYTE, (byte) 1);
+            meta.getPersistentDataContainer().set(ShopManager.SELL_ORIGINAL_LORE_SIZE_KEY,
+                    org.bukkit.persistence.PersistentDataType.INTEGER, origLoreSize);
+            cleanItem.setItemMeta(meta);
+            inv.setItem(slot, cleanItem);
         }
 
         var totalItem = new ItemStack(Material.GOLD_INGOT);

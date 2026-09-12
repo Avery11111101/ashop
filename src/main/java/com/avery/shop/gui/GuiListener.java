@@ -73,6 +73,11 @@ public final class GuiListener implements Listener {
             event.setCancelled(true);
             event.setCurrentItem(null);
         }
+        if (ShopManager.hasSellGuiLore(event.getCurrentItem()) && event.getClickedInventory() == player.getInventory()) {
+            var cleaned = ShopManager.stripSellGuiLore(event.getCurrentItem());
+            event.setCurrentItem(cleaned);
+            event.getClickedInventory().setItem(event.getSlot(), cleaned);
+        }
 
         if (shopManager.getPlugin().getConfig().getBoolean("bedrock.block-gui", false)
                 && com.avery.shop.util.BedrockUtil.isBedrockPlayer(player)) {
@@ -186,6 +191,11 @@ public final class GuiListener implements Listener {
             }
         }
 
+        // 若拖曳游標帶有殘留預覽標籤，先進行剝離清理
+        if (player.getItemOnCursor() != null && ShopManager.hasSellGuiLore(player.getItemOnCursor())) {
+            player.setItemOnCursor(ShopManager.stripSellGuiLore(player.getItemOnCursor()));
+        }
+
         scheduleSellPanelRefresh(player);
     }
 
@@ -244,6 +254,22 @@ public final class GuiListener implements Listener {
         int rawSlot = event.getRawSlot();
         int topSize = event.getView().getTopInventory().getSize();
 
+        // 雙擊收集時，先將頂部所有投放區物品還原為純淨原樣，避免收集到含預覽標籤的物品
+        if (event.getClick() == ClickType.DOUBLE_CLICK) {
+            var top = event.getView().getTopInventory();
+            for (int s = 0; s < ShopGui.SELL_DEPOSIT_SIZE; s++) {
+                var it = top.getItem(s);
+                if (it != null && !it.getType().isAir() && ShopManager.hasSellGuiLore(it)) {
+                    top.setItem(s, ShopManager.stripSellGuiLore(it));
+                }
+            }
+        }
+
+        // 若游標帶有殘留預覽標籤，先進行剝離清理
+        if (event.getCursor() != null && ShopManager.hasSellGuiLore(event.getCursor())) {
+            player.setItemOnCursor(ShopManager.stripSellGuiLore(event.getCursor()));
+        }
+
         if (rawSlot >= 0 && rawSlot < topSize) {
             if (rawSlot == ShopGui.SELL_CANCEL_SLOT) {
                 event.setCancelled(true);
@@ -273,12 +299,29 @@ public final class GuiListener implements Listener {
                 event.setCancelled(true);
                 return;
             }
-            // 投放區 0-44：允許放入/取出（價格由 MONITOR 事件刷新）
+
+            // 投放區 0-44：在物品被拿取、移動、快捷鍵交換或丟出前，先將當前格子還原為純淨原物
+            var topInv = event.getView().getTopInventory();
+            var current = topInv.getItem(rawSlot);
+            if (current != null && !current.getType().isAir() && ShopManager.hasSellGuiLore(current)) {
+                var cleaned = ShopManager.stripSellGuiLore(current);
+                topInv.setItem(rawSlot, cleaned);
+                event.setCurrentItem(cleaned);
+            }
+            scheduleSellPanelRefresh(player);
             return;
         }
 
-        // 從玩家背包 shift+點擊放入
-        if (event.getClick() == ClickType.SHIFT_LEFT || event.getClick() == ClickType.SHIFT_RIGHT) {
+        // 玩家背包區域 (rawSlot >= topSize)：若物品有殘留標籤先清理
+        if (rawSlot >= topSize) {
+            var pItem = event.getCurrentItem();
+            if (pItem != null && !pItem.getType().isAir() && ShopManager.hasSellGuiLore(pItem)) {
+                var cleaned = ShopManager.stripSellGuiLore(pItem);
+                event.setCurrentItem(cleaned);
+                if (event.getClickedInventory() != null) {
+                    event.getClickedInventory().setItem(event.getSlot(), cleaned);
+                }
+            }
             scheduleSellPanelRefresh(player);
         }
     }
@@ -342,7 +385,8 @@ public final class GuiListener implements Listener {
             if (current == null || current.getType().isAir()) {
                 return slot;
             }
-            if (current.isSimilar(item) && current.getAmount() < current.getMaxStackSize()) {
+            var cleanCurrent = ShopManager.stripSellGuiLore(current.clone());
+            if (cleanCurrent.isSimilar(item) && current.getAmount() < current.getMaxStackSize()) {
                 return slot;
             }
         }
@@ -989,10 +1033,24 @@ public final class GuiListener implements Listener {
             var item = inv.getItem(i);
             if (ShopGui.isShopGuiItem(item)) {
                 inv.setItem(i, null);
+            } else if (item != null && !item.getType().isAir() && ShopManager.hasSellGuiLore(item)) {
+                inv.setItem(i, ShopManager.stripSellGuiLore(item));
             }
         }
         if (ShopGui.isShopGuiItem(player.getItemOnCursor())) {
             player.setItemOnCursor(null);
+        } else if (player.getItemOnCursor() != null && ShopManager.hasSellGuiLore(player.getItemOnCursor())) {
+            player.setItemOnCursor(ShopManager.stripSellGuiLore(player.getItemOnCursor()));
+        }
+    }
+
+    public static void purgeSellGuiLoreFromInventory(org.bukkit.inventory.Inventory inv) {
+        if (inv == null) return;
+        for (int i = 0; i < inv.getSize(); i++) {
+            var item = inv.getItem(i);
+            if (item != null && !item.getType().isAir() && ShopManager.hasSellGuiLore(item)) {
+                inv.setItem(i, ShopManager.stripSellGuiLore(item));
+            }
         }
     }
 
@@ -1001,6 +1059,11 @@ public final class GuiListener implements Listener {
         var player = event.getPlayer();
         var session = sessions.remove(player.getUniqueId());
 
+        if (session != null && session.getViewType() == GuiSession.ViewType.SELL_TO_SYSTEM) {
+            if (player.getItemOnCursor() != null && !player.getItemOnCursor().getType().isAir()) {
+                player.setItemOnCursor(ShopManager.stripSellGuiLore(player.getItemOnCursor()));
+            }
+        }
         if (session == null || session.getViewType() != GuiSession.ViewType.SELL_TO_SYSTEM) {
             if (player.getItemOnCursor() != null && !player.getItemOnCursor().getType().isAir()) {
                 if (ShopGui.isShopGuiItem(player.getItemOnCursor()) || session != null) {
@@ -1029,6 +1092,10 @@ public final class GuiListener implements Listener {
                 if (player.getItemOnCursor() != null && !player.getItemOnCursor().getType().isAir()) {
                     player.setItemOnCursor(null);
                 }
+            } else {
+                if (player.getItemOnCursor() != null && !player.getItemOnCursor().getType().isAir()) {
+                    player.setItemOnCursor(ShopManager.stripSellGuiLore(player.getItemOnCursor()));
+                }
             }
         }
 
@@ -1049,6 +1116,7 @@ public final class GuiListener implements Listener {
             if (!session.isSellConfirming()) {
                 returnDepositItems(player, event.getInventory());
             }
+            purgeSellGuiLoreFromInventory(player.getInventory());
             session.setShopHolder(null);
             if (!player.isConversing()) {
                 sessions.remove(player.getUniqueId());
@@ -1087,6 +1155,9 @@ public final class GuiListener implements Listener {
             event.setCancelled(true);
             event.getPlayer().getInventory().setItemInMainHand(null);
             event.getPlayer().getInventory().setItemInOffHand(null);
+        } else if (ShopManager.hasSellGuiLore(item)) {
+            var cleaned = ShopManager.stripSellGuiLore(item.clone());
+            event.getPlayer().getInventory().setItemInMainHand(cleaned);
         }
     }
 
@@ -1096,6 +1167,8 @@ public final class GuiListener implements Listener {
         if (ShopGui.isShopGuiItem(item)) {
             event.setCancelled(true);
             event.getItemDrop().remove();
+        } else if (ShopManager.hasSellGuiLore(item)) {
+            event.getItemDrop().setItemStack(ShopManager.stripSellGuiLore(item));
         }
     }
 }
