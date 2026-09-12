@@ -406,6 +406,10 @@ public final class SurvivalPriceModel {
 
     return switch (category) {
       case MINERALS -> 10.0;
+      case LOGS -> 4.0;
+      case STONES -> 2.0;
+      case CROPS -> 4.0;
+      case RAW_MEAT -> 6.0;
       case FOOD -> 4.0;
       case BLOCKS -> 3.0;
       case DECORATIONS -> 5.0;

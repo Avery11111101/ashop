@@ -17,6 +17,10 @@ public final class ShopSubcategoryResolver {
         var material = entry.getTemplate().getType();
         return switch (topCategory) {
             case MINERALS -> resolveMineral(material);
+            case LOGS -> "all";
+            case STONES -> "all";
+            case CROPS -> "all";
+            case RAW_MEAT -> "all";
             case BLOCKS -> resolveBlock(material);
             case TOOLS -> resolveTool(material);
             case WEAPONS -> resolveWeapon(material);
@@ -108,11 +112,9 @@ public final class ShopSubcategoryResolver {
             case "silk_touch" -> 0;
             case "non_silk_touch" -> 1;
             case "building" -> 0;
-            case "building/logs" -> 0;
-            case "building/stones" -> 1;
-            case "building/wood" -> 2;
-            case "building/stone" -> 3;
-            case "building/copper" -> 4;
+            case "building/wood" -> 0;
+            case "building/stone" -> 1;
+            case "building/copper" -> 2;
             case "dyed" -> 1;
             case "dyed/wool" -> 0;
             case "dyed/carpet" -> 1;
@@ -121,11 +123,10 @@ public final class ShopSubcategoryResolver {
             case "dyed/glazed_terracotta" -> 4;
             case "dyed/glass" -> 5;
             case "natural" -> 2;
-            case "natural/crops" -> 0;
-            case "natural/leaves" -> 1;
-            case "natural/saplings" -> 2;
-            case "natural/flowers" -> 3;
-            case "natural/terrain" -> 4;
+            case "natural/leaves" -> 0;
+            case "natural/saplings" -> 1;
+            case "natural/flowers" -> 2;
+            case "natural/terrain" -> 3;
             case "functional" -> 3;
             case "nether" -> 4;
             case "end" -> 5;
@@ -143,10 +144,8 @@ public final class ShopSubcategoryResolver {
             case "legs" -> 2;
             case "feet" -> 3;
             case "shield_elytra" -> 4;
-            case "crops" -> 0;
-            case "raw" -> 1;
-            case "cooked" -> 2;
-            case "snacks" -> 3;
+            case "cooked" -> 0;
+            case "snacks" -> 1;
             case "potion" -> 0;
             case "splash" -> 1;
             case "lingering" -> 2;
@@ -191,14 +190,11 @@ public final class ShopSubcategoryResolver {
             return "building/copper";
         }
 
-        if (isLog(name, material)) return "building/logs";
-        if (isPureStone(name, material)) return "building/stones";
         if (isWoodBuilding(name, material)) return "building/wood";
         if (isStoneBuilding(name, material)) return "building/stone";
 
         if (name.endsWith("_LEAVES")) return "natural/leaves";
         if (name.endsWith("_SAPLING") || name.equals("MANGROVE_PROPAGULE")) return "natural/saplings";
-        if (isCrop(name, material)) return "natural/crops";
         if (isFlowerOrPlant(name, material)) return "natural/flowers";
         if (isTerrain(name, material)) return "natural/terrain";
 
@@ -406,17 +402,9 @@ public final class ShopSubcategoryResolver {
 
     private static String resolveFood(Material material) {
         var name = material.name();
-        if (isCrop(name, material)) {
-            return "crops";
-        }
         if (name.startsWith("COOKED_") || name.contains("BAKED") || name.equals("DRIED_KELP")
-                || name.equals("POPPED_CHORUS_FRUIT")) {
+                || name.equals("POPPED_CHORUS_FRUIT") || name.equals("BREAD")) {
             return "cooked";
-        }
-        if (name.contains("RAW_") || name.equals("BEEF") || name.equals("PORKCHOP")
-                || name.equals("CHICKEN") || name.equals("MUTTON") || name.equals("RABBIT")
-                || name.equals("COD") || name.equals("SALMON") || name.equals("TROPICAL_FISH")) {
-            return "raw";
         }
         return "snacks";
     }

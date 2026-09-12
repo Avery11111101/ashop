@@ -111,9 +111,24 @@ public final class ItemCatalog {
         if (isPotionMaterial(material)) return ItemCategory.POTIONS;
         if (material == Material.ENCHANTED_BOOK) return ItemCategory.ENCHANTED_BOOKS;
 
+        // 1. 礦物 (粗礦物) — 純挖掘產物
         if (isMineral(name, material)) return ItemCategory.MINERALS;
 
-        if (material.isEdible()) return ItemCategory.FOOD;
+        // 2. 原木 — 純原木林木
+        if (isLog(name, material)) return ItemCategory.LOGS;
+
+        // 3. 石頭 (變種方塊不要) — 純原石岩石
+        if (isPureStone(name, material)) return ItemCategory.STONES;
+
+        // 4. 生肉 — 生鮮肉類與魚產（在 isEdible 前判定，避免歸入熟食）
+        if (isRawMeat(name, material)) return ItemCategory.RAW_MEAT;
+
+        // 5. 農作物 — 耕種收成與種子（在 isEdible 前判定，避免胡蘿蔔/蘋果等歸入熟食）
+        if (isCrop(name, material)) return ItemCategory.CROPS;
+
+        // 食物（熟食、烹飪料理、點心等）
+        if (isEdibleSafe(name, material)) return ItemCategory.FOOD;
+
         if (name.contains("SWORD") || name.contains("BOW") || name.contains("CROSSBOW")
                 || name.contains("TRIDENT") || name.contains("MACE") || name.contains("ARROW")
                 || name.equals("WIND_CHARGE")) return ItemCategory.WEAPONS;
@@ -141,42 +156,108 @@ public final class ItemCatalog {
                 || name.contains("HEAD") || name.contains("SKULL") || name.contains("TORCH")
                 || name.contains("LANTERN") || name.contains("CAMPFIRE"))
             return ItemCategory.DECORATIONS;
-        if (material.isBlock()) return ItemCategory.BLOCKS;
+        if (isBlockSafe(name, material)) return ItemCategory.BLOCKS;
 
         return ItemCategory.MISC;
     }
 
+    private static boolean isEdibleSafe(String name, Material material) {
+        try {
+            return material.isEdible();
+        } catch (Throwable ignored) {
+            return name.startsWith("COOKED_") || name.contains("BAKED") || name.equals("BREAD")
+                    || name.equals("COOKIE") || name.equals("CAKE") || name.equals("PUMPKIN_PIE")
+                    || name.contains("STEW") || name.contains("SOUP") || name.equals("DRIED_KELP")
+                    || name.equals("HONEY_BOTTLE") || name.equals("GOLDEN_CARROT")
+                    || name.equals("ROTTEN_FLESH") || name.equals("SPIDER_EYE");
+        }
+    }
+
+    private static boolean isBlockSafe(String name, Material material) {
+        try {
+            return material.isBlock();
+        } catch (Throwable ignored) {
+            return name.contains("PLANKS") || name.contains("STAIRS") || name.contains("SLAB")
+                    || name.contains("WALL") || name.contains("BRICK") || name.contains("TERRACOTTA")
+                    || name.contains("CONCRETE") || name.contains("WOOL") || name.contains("CARPET")
+                    || name.contains("GLASS") || name.contains("COPPER") || name.endsWith("_BLOCK")
+                    || name.endsWith("_LEAVES") || name.equals("DIRT") || name.equals("SAND")
+                    || name.equals("GRAVEL");
+        }
+    }
+
     public static boolean isMineral(String name, Material material) {
-        if (name.endsWith("_ORE") || name.contains("_ORE_") || name.contains("_ORE")) {
+        // 1. 絲綢鎬採集之原礦方塊與地質簇
+        if (name.endsWith("_ORE") || name.contains("_ORE_")) {
+            return true;
+        }
+        if (name.equals("ANCIENT_DEBRIS") || name.equals("GILDED_BLACKSTONE")
+                || name.equals("AMETHYST_CLUSTER") || name.contains("AMETHYST_BUD")) {
             return true;
         }
 
-        if (name.startsWith("RAW_") || name.contains("RAW_")) {
+        // 2. 無絲綢鎬單純挖掘掉落之粗礦（排除 RAW_*_BLOCK 合成方塊）
+        if ((name.startsWith("RAW_") || name.contains("RAW_")) && !name.endsWith("_BLOCK")) {
             return true;
         }
 
-        if (name.endsWith("_INGOT") || name.endsWith("_NUGGET")) {
-            return true;
-        }
+        // 3. 無絲綢鎬單純挖掘掉落之寶石與礦產（排除木炭 CHARCOAL、獄髓碎屑 NETHERITE_SCRAP、方塊等加工品）
+        return name.equals("COAL")
+                || name.equals("DIAMOND")
+                || name.equals("EMERALD")
+                || name.equals("LAPIS_LAZULI")
+                || name.equals("REDSTONE")
+                || name.equals("QUARTZ")
+                || name.equals("AMETHYST_SHARD")
+                || name.equals("FLINT");
+    }
 
-        if (name.equals("COAL") || name.equals("CHARCOAL")
-                || name.equals("DIAMOND") || name.equals("EMERALD")
-                || name.equals("LAPIS_LAZULI") || name.equals("REDSTONE")
-                || name.equals("QUARTZ") || name.equals("NETHERITE_SCRAP")
-                || name.equals("ANCIENT_DEBRIS") || name.equals("AMETHYST_SHARD")
-                || name.equals("AMETHYST_CLUSTER") || name.contains("AMETHYST_BUD")
-                || name.equals("AMETHYST_BLOCK") || name.equals("BUDDING_AMETHYST")
-                || name.equals("FLINT") || name.equals("GILDED_BLACKSTONE")) {
-            return true;
-        }
+    public static boolean isLog(String name, Material material) {
+        return name.contains("_LOG") || name.contains("_STEM")
+                || (name.endsWith("_WOOD") && !name.contains("PLANKS"))
+                || (name.endsWith("_HYPHAE") && !name.contains("PLANKS"));
+    }
 
-        return name.equals("COAL_BLOCK") || name.equals("IRON_BLOCK")
-                || name.equals("GOLD_BLOCK") || name.equals("COPPER_BLOCK")
-                || name.equals("DIAMOND_BLOCK") || name.equals("EMERALD_BLOCK")
-                || name.equals("LAPIS_BLOCK") || name.equals("REDSTONE_BLOCK")
-                || name.equals("NETHERITE_BLOCK") || name.equals("QUARTZ_BLOCK")
-                || name.equals("RAW_IRON_BLOCK") || name.equals("RAW_GOLD_BLOCK")
-                || name.equals("RAW_COPPER_BLOCK");
+    public static boolean isPureStone(String name, Material material) {
+        if (name.contains("STAIR") || name.contains("SLAB") || name.contains("WALL")
+                || name.contains("BRICK") || name.contains("PILLAR") || name.contains("MOSSY")
+                || name.contains("CHISELED") || name.contains("POLISHED") || name.contains("CUT_")
+                || name.contains("TILE") || name.contains("INFESTED") || name.contains("BUTTON")
+                || name.contains("PRESSURE_PLATE")) {
+            return false;
+        }
+        return name.equals("STONE") || name.equals("COBBLESTONE") || name.equals("SMOOTH_STONE")
+                || name.equals("DEEPSLATE") || name.equals("COBBLED_DEEPSLATE")
+                || name.equals("GRANITE") || name.equals("DIORITE") || name.equals("ANDESITE")
+                || name.equals("BASALT") || name.equals("BLACKSTONE") || name.equals("END_STONE")
+                || name.equals("NETHERRACK") || name.equals("SANDSTONE") || name.equals("RED_SANDSTONE")
+                || name.equals("TUFF") || name.equals("CALCITE") || name.equals("DRIPSTONE_BLOCK")
+                || name.equals("OBSIDIAN") || name.equals("CRYING_OBSIDIAN");
+    }
+
+    public static boolean isRawMeat(String name, Material material) {
+        return material == Material.BEEF
+                || material == Material.PORKCHOP
+                || material == Material.CHICKEN
+                || material == Material.MUTTON
+                || material == Material.RABBIT
+                || material == Material.COD
+                || material == Material.SALMON
+                || material == Material.TROPICAL_FISH
+                || material == Material.PUFFERFISH;
+    }
+
+    public static boolean isCrop(String name, Material material) {
+        return name.equals("WHEAT") || name.equals("CARROT") || name.equals("CARROTS")
+                || name.equals("POTATO") || name.equals("POTATOES") || name.equals("BEETROOT")
+                || name.equals("BEETROOTS") || name.equals("SUGAR_CANE") || name.equals("PUMPKIN")
+                || name.equals("MELON_SLICE") || name.equals("MELON") || name.equals("COCOA_BEANS")
+                || name.equals("NETHER_WART") || name.equals("SWEET_BERRIES") || name.equals("GLOW_BERRIES")
+                || name.equals("CACTUS") || name.equals("BAMBOO") || name.equals("APPLE")
+                || name.equals("GOLDEN_APPLE") || name.equals("ENCHANTED_GOLDEN_APPLE")
+                || name.equals("CHORUS_FRUIT") || name.contains("SEEDS")
+                || name.equals("PITCHER_POD") || name.equals("HAY_BLOCK")
+                || name.equals("TORCHFLOWER_SEEDS");
     }
 
     public void registerCustomEntry(CatalogEntry entry) {

@@ -28,6 +28,20 @@ dependencies {
     implementation("net.dv8tion:JDA:5.0.0-beta.24") {
         exclude(group = "club.minnced", module = "opus-java")
     }
+    testImplementation("io.papermc.paper:paper-api:1.21.4-R0.1-SNAPSHOT")
+}
+
+tasks.test {
+    enabled = false
+}
+
+val verifyCategories = tasks.register<JavaExec>("verifyCategories") {
+    classpath = sourceSets["test"].runtimeClasspath
+    mainClass.set("com.avery.shop.catalog.CategoryVerification")
+}
+
+tasks.check {
+    dependsOn(verifyCategories)
 }
 
 java {

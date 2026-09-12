@@ -422,11 +422,16 @@ public class DiscordPanelBuilder {
     }
 
     private String getCategoryEmoji(String categoryId) {
+        if (categoryId.contains("minerals")) return "⛏️";
+        if (categoryId.contains("logs")) return "🪵";
+        if (categoryId.contains("stones")) return "🪨";
+        if (categoryId.contains("crops")) return "🌾";
+        if (categoryId.contains("raw_meat")) return "🥩";
         if (categoryId.contains("blocks")) return "🧱";
         if (categoryId.contains("tools")) return "🛠️";
         if (categoryId.contains("weapons")) return "⚔️";
         if (categoryId.contains("armor")) return "🛡️";
-        if (categoryId.contains("food")) return "🍎";
+        if (categoryId.contains("food")) return "🍲";
         if (categoryId.contains("potions")) return "🧪";
         if (categoryId.contains("enchanted_books")) return "📚";
         if (categoryId.contains("redstone")) return "🔴";

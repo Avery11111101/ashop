@@ -3,6 +3,7 @@ category: example
 display-name: 範例分類
 icon: CHEST
 enabled: false
+trade-mode: BOTH
 allow-buy: true
 slot: 999
 default-price: 10.0

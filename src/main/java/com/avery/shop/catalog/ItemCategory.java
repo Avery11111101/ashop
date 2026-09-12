@@ -7,6 +7,10 @@ import org.bukkit.Material;
  */
 public enum ItemCategory {
     MINERALS("minerals", Material.RAW_IRON),
+    LOGS("logs", Material.OAK_LOG),
+    STONES("stones", Material.STONE),
+    CROPS("crops", Material.WHEAT),
+    RAW_MEAT("raw_meat", Material.BEEF),
     BLOCKS("blocks", Material.GRASS_BLOCK),
     TOOLS("tools", Material.IRON_PICKAXE),
     WEAPONS("weapons", Material.IRON_SWORD),

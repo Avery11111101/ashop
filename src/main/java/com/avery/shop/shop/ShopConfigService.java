@@ -982,10 +982,19 @@ public final class ShopConfigService {
         return new ShopRestoreResult(categoryCount, itemCount, removed);
     }
 
+    public static TradeMode defaultTradeModeForCategory(ItemCategory category) {
+        if (category == null) return TradeMode.BUY_ONLY;
+        return switch (category) {
+            case MINERALS, LOGS, STONES, CROPS, RAW_MEAT -> TradeMode.BOTH;
+            default -> TradeMode.BUY_ONLY;
+        };
+    }
+
     private int writeDefaultCategoryTree(ItemCategory topCategory,
                                          Map<String, List<CatalogEntry>> bySubPath,
                                          String localeCode) {
         var topId = topCategory.getId();
+        var tradeMode = defaultTradeModeForCategory(topCategory);
         boolean needsNesting = bySubPath.size() > 1
                 || bySubPath.keySet().stream().anyMatch(path -> path.contains("/"));
 
@@ -994,14 +1003,14 @@ public final class ShopConfigService {
             var file = getCategoryFile(topId);
             file.getParentFile().mkdirs();
             writeLeafCategoryFile(topId, null, topCategory.getIcon(), topCategory.ordinal(),
-                    bySubPath.get("all"), file, localeCode, topId);
+                    bySubPath.get("all"), file, localeCode, topId, tradeMode);
             return 1;
         }
 
         var rootFile = getCategoryFile(topId);
         rootFile.getParentFile().mkdirs();
         writeContainerCategoryFile(topId, null, topCategory.getIcon(), topCategory.ordinal(),
-                rootFile, localeCode, topId);
+                rootFile, localeCode, topId, tradeMode);
         nodes++;
 
         var containerPaths = new java.util.TreeSet<String>();
@@ -1019,7 +1028,7 @@ public final class ShopConfigService {
             writeContainerCategoryFile(fullId, parentCategoryId(fullId),
                     ShopSubcategoryResolver.iconFor(containerPath),
                     ShopSubcategoryResolver.slotOrder(containerPath),
-                    file, localeCode, fullId);
+                    file, localeCode, fullId, tradeMode);
             nodes++;
         }
 
@@ -1030,7 +1039,7 @@ public final class ShopConfigService {
             writeLeafCategoryFile(fullId, parentCategoryId(fullId),
                     ShopSubcategoryResolver.iconFor(entry.getKey()),
                     ShopSubcategoryResolver.slotOrder(entry.getKey()),
-                    entry.getValue(), file, localeCode, fullId);
+                    entry.getValue(), file, localeCode, fullId, tradeMode);
             nodes++;
         }
 
@@ -1039,7 +1048,7 @@ public final class ShopConfigService {
 
     private void writeContainerCategoryFile(String categoryId, String parentId, Material icon,
                                             int slot, File file, String localeCode,
-                                            String localeKey) {
+                                            String localeKey, TradeMode tradeMode) {
         var yaml = new YamlConfiguration();
         var displayName = plugin.getLocaleService().msg(localeCode, "category."
                 + ShopSubcategoryResolver.toLocaleSuffix(localeKey));
@@ -1049,8 +1058,8 @@ public final class ShopConfigService {
                 ? categoryId : displayName);
         yaml.set("icon", icon.name());
         yaml.set("enabled", true);
-        yaml.set("trade-mode", TradeMode.BOTH.name());
-        yaml.set("allow-buy", true);
+        yaml.set("trade-mode", tradeMode.name());
+        yaml.set("allow-buy", tradeMode.allowsBuy());
         yaml.set("slot", slot);
         yaml.set("default-price", globalDefaultPrice());
         yaml.options().header("""
@@ -1062,7 +1071,7 @@ public final class ShopConfigService {
 
     private void writeLeafCategoryFile(String categoryId, String parentId, Material icon,
                                        int slot, List<CatalogEntry> entries, File file,
-                                       String localeCode, String localeKey) {
+                                       String localeCode, String localeKey, TradeMode tradeMode) {
         var yaml = new YamlConfiguration();
         var displayName = plugin.getLocaleService().msg(localeCode, "category."
                 + ShopSubcategoryResolver.toLocaleSuffix(localeKey));
@@ -1072,8 +1081,8 @@ public final class ShopConfigService {
                 ? categoryId : displayName);
         yaml.set("icon", icon.name());
         yaml.set("enabled", true);
-        yaml.set("trade-mode", TradeMode.BOTH.name());
-        yaml.set("allow-buy", true);
+        yaml.set("trade-mode", tradeMode.name());
+        yaml.set("allow-buy", tradeMode.allowsBuy());
         yaml.set("slot", slot);
         yaml.set("default-price", globalDefaultPrice());
         yaml.options().header("""
@@ -1099,7 +1108,7 @@ public final class ShopConfigService {
     private void writeDefaultCategoryFile(ItemCategory category, List<CatalogEntry> entries,
                                           File file, String localeCode) {
         writeLeafCategoryFile(category.getId(), null, category.getIcon(), category.ordinal(),
-                entries, file, localeCode, category.getId());
+                entries, file, localeCode, category.getId(), defaultTradeModeForCategory(category));
     }
 
     private static String sanitizeYamlKey(CatalogEntry entry) {
