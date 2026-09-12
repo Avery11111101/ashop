@@ -23,7 +23,7 @@ public final class GuiSession {
 
     public enum ViewType {
         MAIN, CATEGORY, SEARCH, LISTINGS, SELL_TO_SYSTEM, SELLABLE_ITEMS, BUY_QUANTITY,
-        ADMIN_ITEM_EDIT, ADMIN_CATEGORY_EDIT, ADMIN_SETTINGS
+        ADMIN_ITEM_EDIT, ADMIN_CATEGORY_EDIT, ADMIN_SETTINGS, ADMIN_ADD_ITEM
     }
 
     private final Player player;
@@ -160,6 +160,25 @@ public final class GuiSession {
 
     public void setReturnViewType(ViewType returnViewType) {
         this.returnViewType = returnViewType;
+    }
+
+    private double adminAddPrice = 10.0;
+    private com.avery.shop.shop.TradeMode adminAddTradeMode = com.avery.shop.shop.TradeMode.BOTH;
+
+    public double getAdminAddPrice() {
+        return adminAddPrice;
+    }
+
+    public void setAdminAddPrice(double adminAddPrice) {
+        this.adminAddPrice = Math.max(0.01, adminAddPrice);
+    }
+
+    public com.avery.shop.shop.TradeMode getAdminAddTradeMode() {
+        return adminAddTradeMode;
+    }
+
+    public void setAdminAddTradeMode(com.avery.shop.shop.TradeMode adminAddTradeMode) {
+        this.adminAddTradeMode = adminAddTradeMode != null ? adminAddTradeMode : com.avery.shop.shop.TradeMode.BOTH;
     }
 
     public boolean isInShopGui() {

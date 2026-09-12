@@ -552,13 +552,31 @@ public final class ShopConfigService {
 
                 var materialId = itemSection.getString("material", yamlKey);
                 var catalogKey = itemSection.getString("catalog-key", "");
+                var itemData = itemSection.getString("item-data", null);
                 var itemEnabled = itemSection.getBoolean("enabled", true);
                 var price = resolveItemPrice(itemSection, catalogKey, materialId, catalog, defaultPrice);
                 Double sellRatio = itemSection.contains("sell-ratio")
                         ? itemSection.getDouble("sell-ratio") : null;
                 var itemTradeMode = TradeMode.parse(itemSection.getString("trade-mode"), TradeMode.BOTH);
 
-                var resolved = ShopItemResolver.resolve(catalogKey, materialId, catalog);
+                CatalogEntry customEntry = null;
+                if (itemData != null && !itemData.isBlank()) {
+                    var customStack = com.avery.shop.catalog.ItemStackUtil.deserialize(itemData);
+                    if (customStack != null) {
+                        var customKey = com.avery.shop.catalog.ItemMatcher.fingerprint(customStack);
+                        var meta = customStack.getItemMeta();
+                        String tag = null;
+                        if (meta != null && meta.hasDisplayName()) {
+                            tag = net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer.plainText().serialize(meta.displayName());
+                        }
+                        var cat = ItemCategory.fromId(definition.getId().split("/")[0]);
+                        if (cat == null) cat = ItemCategory.MISC;
+                        customEntry = new CatalogEntry(customKey, customStack, cat, customStack.getType().name().toLowerCase(Locale.ROOT), tag);
+                        catalog.registerCustomEntry(customEntry);
+                    }
+                }
+
+                var resolved = customEntry != null ? Optional.of(customEntry) : ShopItemResolver.resolve(catalogKey, materialId, catalog);
                 var resolvedKey = resolved.map(CatalogEntry::getKey).orElse(
                         catalogKey != null && !catalogKey.isBlank() ? catalogKey : yamlKey);
 
@@ -568,6 +586,54 @@ public final class ShopConfigService {
 
         data.rebuildEnabledEntries(catalog);
         return data;
+    }
+
+    public boolean addCustomItem(String categoryId, org.bukkit.inventory.ItemStack stack,
+                                 double price, TradeMode tradeMode, ItemCatalog catalog) {
+        if (stack == null || stack.getType().isAir()) return false;
+        var file = getCategoryFile(categoryId);
+        if (!file.exists()) {
+            file.getParentFile().mkdirs();
+            var newYaml = new YamlConfiguration();
+            newYaml.set("category", categoryId);
+            newYaml.set("display-name", categoryId);
+            newYaml.set("icon", stack.getType().name());
+            newYaml.set("enabled", true);
+            newYaml.set("trade-mode", TradeMode.BOTH.name());
+            newYaml.set("allow-buy", true);
+            newYaml.set("slot", defaultSlotFor(categoryId));
+            newYaml.set("default-price", globalDefaultPrice());
+            saveYaml(file, newYaml);
+        }
+
+        var yaml = YamlConfiguration.loadConfiguration(file);
+        var baseKey = stack.getType().name().toLowerCase(Locale.ROOT);
+        var usedKeys = new java.util.HashSet<String>();
+        var section = yaml.getConfigurationSection("items");
+        if (section != null) {
+            usedKeys.addAll(section.getKeys(false));
+        }
+
+        String itemKey = baseKey;
+        int index = 1;
+        while (usedKeys.contains(itemKey)) {
+            itemKey = baseKey + "_" + (index++);
+        }
+
+        var path = "items." + itemKey;
+        var itemData = com.avery.shop.catalog.ItemStackUtil.serialize(stack);
+        var fingerprint = com.avery.shop.catalog.ItemMatcher.fingerprint(stack);
+
+        yaml.set(path + ".material", stack.getType().name());
+        yaml.set(path + ".catalog-key", fingerprint);
+        yaml.set(path + ".item-data", itemData);
+        yaml.set(path + ".price", price);
+        yaml.set(path + ".trade-mode", tradeMode.name());
+        yaml.set(path + ".enabled", true);
+
+        saveYaml(file, yaml);
+        load(catalog);
+        return true;
     }
 
     private double resolveItemPrice(org.bukkit.configuration.ConfigurationSection section,

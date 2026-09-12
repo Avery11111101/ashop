@@ -9,7 +9,7 @@ import org.bukkit.inventory.InventoryHolder;
 public final class ShopInventoryHolder implements InventoryHolder {
 
     public enum Kind {
-        MAIN, CATEGORY, SEARCH, LISTINGS, SELL, BUY_QUANTITY, ADMIN_ITEM, ADMIN_CATEGORY, ADMIN_SETTINGS
+        MAIN, CATEGORY, SEARCH, LISTINGS, SELL, BUY_QUANTITY, ADMIN_ITEM, ADMIN_CATEGORY, ADMIN_SETTINGS, ADMIN_ADD_ITEM
     }
 
     private final Kind kind;

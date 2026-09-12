@@ -16,6 +16,7 @@ public final class ShopSubcategoryResolver {
     public static String resolve(ItemCategory topCategory, CatalogEntry entry) {
         var material = entry.getTemplate().getType();
         return switch (topCategory) {
+            case MINERALS -> resolveMineral(material);
             case BLOCKS -> resolveBlock(material);
             case TOOLS -> resolveTool(material);
             case WEAPONS -> resolveWeapon(material);
@@ -38,6 +39,8 @@ public final class ShopSubcategoryResolver {
         var parts = relativePath.split("/");
         var leaf = parts[parts.length - 1];
         return switch (leaf) {
+            case "silk_touch" -> Material.DEEPSLATE_DIAMOND_ORE;
+            case "non_silk_touch" -> Material.RAW_GOLD;
             case "building" -> Material.BRICKS;
             case "logs" -> Material.OAK_LOG;
             case "wood" -> Material.OAK_PLANKS;
@@ -102,6 +105,8 @@ public final class ShopSubcategoryResolver {
     public static int slotOrder(String relativePath) {
         if (relativePath == null) return 999;
         return switch (relativePath) {
+            case "silk_touch" -> 0;
+            case "non_silk_touch" -> 1;
             case "building" -> 0;
             case "building/logs" -> 0;
             case "building/stones" -> 1;
@@ -116,12 +121,11 @@ public final class ShopSubcategoryResolver {
             case "dyed/glazed_terracotta" -> 4;
             case "dyed/glass" -> 5;
             case "natural" -> 2;
-            case "natural/ores" -> 0;
-            case "natural/crops" -> 1;
-            case "natural/leaves" -> 2;
-            case "natural/saplings" -> 3;
-            case "natural/flowers" -> 4;
-            case "natural/terrain" -> 5;
+            case "natural/crops" -> 0;
+            case "natural/leaves" -> 1;
+            case "natural/saplings" -> 2;
+            case "natural/flowers" -> 3;
+            case "natural/terrain" -> 4;
             case "functional" -> 3;
             case "nether" -> 4;
             case "end" -> 5;
@@ -163,6 +167,16 @@ public final class ShopSubcategoryResolver {
         };
     }
 
+    private static String resolveMineral(Material material) {
+        var name = material.name();
+        if (name.endsWith("_ORE") || name.contains("_ORE_")
+                || material == Material.ANCIENT_DEBRIS || material == Material.GILDED_BLACKSTONE
+                || material == Material.AMETHYST_CLUSTER || name.contains("AMETHYST_BUD")) {
+            return "silk_touch";
+        }
+        return "non_silk_touch";
+    }
+
     private static String resolveBlock(Material material) {
         var name = material.name();
 
@@ -173,7 +187,7 @@ public final class ShopSubcategoryResolver {
         if (name.contains("GLAZED_TERRACOTTA")) return "dyed/glazed_terracotta";
         if (name.contains("GLASS")) return "dyed/glass";
 
-        if (name.contains("COPPER") || name.equals("LIGHTNING_ROD") || name.equals("RAW_COPPER_BLOCK")) {
+        if (name.contains("COPPER") || name.equals("LIGHTNING_ROD")) {
             return "building/copper";
         }
 
@@ -182,7 +196,6 @@ public final class ShopSubcategoryResolver {
         if (isWoodBuilding(name, material)) return "building/wood";
         if (isStoneBuilding(name, material)) return "building/stone";
 
-        if (isOreOrRaw(name, material)) return "natural/ores";
         if (name.endsWith("_LEAVES")) return "natural/leaves";
         if (name.endsWith("_SAPLING") || name.equals("MANGROVE_PROPAGULE")) return "natural/saplings";
         if (isCrop(name, material)) return "natural/crops";

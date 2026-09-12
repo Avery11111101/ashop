@@ -6,6 +6,7 @@ import org.bukkit.Material;
  * 物品分類列舉（顯示名稱由語系檔 category.* 提供）
  */
 public enum ItemCategory {
+    MINERALS("minerals", Material.RAW_IRON),
     BLOCKS("blocks", Material.GRASS_BLOCK),
     TOOLS("tools", Material.IRON_PICKAXE),
     WEAPONS("weapons", Material.IRON_SWORD),

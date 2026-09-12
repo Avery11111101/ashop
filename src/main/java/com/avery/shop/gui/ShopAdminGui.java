@@ -20,6 +20,18 @@ public final class ShopAdminGui {
 
     public static final int ADMIN_SETTINGS_SLOT = 52;
     public static final int ADMIN_CATEGORY_SLOT = 48;
+    public static final int ADMIN_ADD_ITEM_SLOT = 47;
+
+    public static final int ADD_ITEM_INFO_SLOT = 4;
+    public static final int ADD_ITEM_INPUT_SLOT = 13;
+    public static final int ADD_ITEM_PRICE_MINUS_100_SLOT = 20;
+    public static final int ADD_ITEM_PRICE_MINUS_10_SLOT = 21;
+    public static final int ADD_ITEM_PRICE_DISPLAY_SLOT = 22;
+    public static final int ADD_ITEM_PRICE_PLUS_10_SLOT = 23;
+    public static final int ADD_ITEM_PRICE_PLUS_100_SLOT = 24;
+    public static final int ADD_ITEM_TRADE_MODE_SLOT = 31;
+    public static final int ADD_ITEM_BACK_SLOT = 49;
+    public static final int ADD_ITEM_CONFIRM_SLOT = 53;
 
     public static final int CATEGORY_DISPLAY_SLOT = 13;
     public static final int CATEGORY_TOGGLE_BUY_SLOT = 22;
@@ -239,6 +251,90 @@ public final class ShopAdminGui {
                 Material.COMPARATOR,
                 manager.getPlugin().getLocaleService().msg(player, "msg.gui.admin.category.button"),
                 manager.getPlugin().getLocaleService().msg(player, "msg.gui.admin.category.button.lore"));
+    }
+
+    public static ItemStack adminAddItemButton(ShopManager manager, Player player) {
+        return ShopGui.button(
+                Material.EMERALD,
+                "§a§l[+ 上架新物品 / 自訂物品]",
+                "§7點擊開啟管理員上架工作台",
+                "§7可放入自訂名稱/Lore/附魔的自訂物品進行販售！");
+    }
+
+    public static void openAdminAddItem(ShopManager manager, Player player, GuiSession session, String categoryId) {
+        session.setViewType(GuiSession.ViewType.ADMIN_ADD_ITEM);
+        session.setCategoryId(categoryId);
+        session.clearSlotMap();
+
+        var holder = new ShopInventoryHolder(ShopInventoryHolder.Kind.ADMIN_ADD_ITEM);
+        var inv = ShopGui.createShopInventory(holder, ROWS * 9,
+                Component.text("管理員上架 — 自訂物品販售")
+                        .color(NamedTextColor.DARK_AQUA).decorate(TextDecoration.BOLD),
+                session);
+
+        fillGray(inv, " ");
+        inv.setItem(ADD_ITEM_INPUT_SLOT, null);
+
+        inv.setItem(ADD_ITEM_INFO_SLOT, ShopGui.button(
+                Material.BOOK,
+                "§e§l自訂物品上架說明",
+                "§71. 將要販售的物品放至中央第 13 格（輸入槽）",
+                "§72. 支援任何原版物品或帶有 NBT/自訂名/Lore/附魔的神裝",
+                "§73. 使用下方按鈕設定基礎售價與交易模式",
+                "§74. 設定完畢後點擊右下角綠色確認按鈕完成上架"));
+
+        refreshAdminAddControls(manager, player, session, inv);
+
+        inv.setItem(ADD_ITEM_BACK_SLOT, ShopGui.button(
+                Material.ARROW,
+                manager.getPlugin().getLocaleService().msg(player, "msg.gui.back"),
+                "§7返回商品分類列表"));
+
+        inv.setItem(ADD_ITEM_CONFIRM_SLOT, ShopGui.button(
+                Material.EMERALD_BLOCK,
+                "§a§l✔ 確認上架商品",
+                "§7點擊將中央物品加入目前分類販售！"));
+
+        player.openInventory(inv);
+    }
+
+    public static void refreshAdminAddControls(ShopManager manager, Player player, GuiSession session,
+                                              org.bukkit.inventory.Inventory inv) {
+        var locale = manager.getPlugin().getLocaleService();
+        var playerLocale = locale.getPlayerLocale(player);
+        var price = session.getAdminAddPrice();
+        var mode = session.getAdminAddTradeMode();
+
+        inv.setItem(ADD_ITEM_PRICE_MINUS_100_SLOT, ShopGui.button(
+                Material.RED_CONCRETE,
+                "§c價格 -100",
+                "§7目前價格: §f$" + manager.getEconomy().format(price)));
+
+        inv.setItem(ADD_ITEM_PRICE_MINUS_10_SLOT, ShopGui.button(
+                Material.RED_STAINED_GLASS_PANE,
+                "§c價格 -10",
+                "§7目前價格: §f$" + manager.getEconomy().format(price)));
+
+        inv.setItem(ADD_ITEM_PRICE_DISPLAY_SLOT, ShopGui.button(
+                Material.GOLD_INGOT,
+                "§e目前設定售價：§f$" + manager.getEconomy().format(price),
+                "§7點擊此處可在聊天欄手動輸入精準價格",
+                "§7(Shift + 點擊可重設為預設 $10.0)"));
+
+        inv.setItem(ADD_ITEM_PRICE_PLUS_10_SLOT, ShopGui.button(
+                Material.LIME_STAINED_GLASS_PANE,
+                "§a價格 +10",
+                "§7目前價格: §f$" + manager.getEconomy().format(price)));
+
+        inv.setItem(ADD_ITEM_PRICE_PLUS_100_SLOT, ShopGui.button(
+                Material.LIME_CONCRETE,
+                "§a價格 +100",
+                "§7目前價格: §f$" + manager.getEconomy().format(price)));
+
+        inv.setItem(ADD_ITEM_TRADE_MODE_SLOT, ShopGui.button(
+                tradeModeIcon(mode),
+                "交易模式：" + mode.getDisplayName(playerLocale),
+                "§7點擊切換模式 (買賣皆可 -> 只賣不收 -> 只收不賣 -> 禁用)"));
     }
 
     public static void openAdminSettings(ShopManager manager, Player player, GuiSession session) {

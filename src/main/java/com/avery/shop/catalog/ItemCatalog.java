@@ -111,43 +111,78 @@ public final class ItemCatalog {
         if (isPotionMaterial(material)) return ItemCategory.POTIONS;
         if (material == Material.ENCHANTED_BOOK) return ItemCategory.ENCHANTED_BOOKS;
 
+        if (isMineral(name, material)) return ItemCategory.MINERALS;
+
         if (material.isEdible()) return ItemCategory.FOOD;
         if (name.contains("SWORD") || name.contains("BOW") || name.contains("CROSSBOW")
-                || name.contains("TRIDENT") || name.contains("MACE")) return ItemCategory.WEAPONS;
+                || name.contains("TRIDENT") || name.contains("MACE") || name.contains("ARROW")
+                || name.equals("WIND_CHARGE")) return ItemCategory.WEAPONS;
         if (name.contains("HELMET") || name.contains("CHESTPLATE")
                 || name.contains("LEGGINGS") || name.contains("BOOTS")
-                || name.contains("SHIELD") || name.contains("ELYTRA")) return ItemCategory.ARMOR;
+                || name.contains("SHIELD") || name.contains("ELYTRA")
+                || name.contains("HORSE_ARMOR") || name.equals("WOLF_ARMOR")) return ItemCategory.ARMOR;
         if (name.contains("PICKAXE") || name.contains("AXE") || name.contains("SHOVEL")
                 || name.contains("HOE") || name.contains("SHEARS")
-                || name.contains("FISHING_ROD") || name.contains("FLINT_AND_STEEL")) return ItemCategory.TOOLS;
+                || name.contains("FISHING_ROD") || name.contains("FLINT_AND_STEEL")
+                || name.equals("BRUSH") || name.equals("SPYGLASS") || name.equals("COMPASS")
+                || name.equals("RECOVERY_COMPASS") || name.equals("CLOCK") || name.equals("LEAD")) return ItemCategory.TOOLS;
         if (name.contains("RAIL") || name.contains("MINECART") || name.contains("BOAT")
-                || name.contains("CHEST_BOAT") || material == Material.SADDLE) return ItemCategory.TRANSPORT;
+                || name.contains("CHEST_BOAT") || name.contains("RAFT") || material == Material.SADDLE) return ItemCategory.TRANSPORT;
         if (name.contains("REDSTONE") || name.contains("REPEATER") || name.contains("COMPARATOR")
                 || name.contains("PISTON") || name.contains("OBSERVER")
-                || name.contains("HOPPER") || name.contains("DROPPER") || name.contains("DISPENSER"))
+                || name.contains("HOPPER") || name.contains("DROPPER") || name.contains("DISPENSER")
+                || name.contains("LEVER") || name.contains("DAYLIGHT_DETECTOR") || name.contains("TRIPWIRE_HOOK")
+                || name.contains("TARGET") || name.contains("LIGHTNING_ROD") || name.equals("CRAFTER")
+                || name.contains("SCULK_SENSOR"))
             return ItemCategory.REDSTONE;
         if (name.contains("BANNER") || name.contains("CANDLE") || name.contains("FLOWER")
                 || name.contains("POT") || name.contains("PAINTING") || name.contains("ITEM_FRAME")
-                || name.contains("ARMOR_STAND") || name.contains("DECORATED_POT"))
+                || name.contains("ARMOR_STAND") || name.contains("DECORATED_POT")
+                || name.contains("HEAD") || name.contains("SKULL") || name.contains("TORCH")
+                || name.contains("LANTERN") || name.contains("CAMPFIRE"))
             return ItemCategory.DECORATIONS;
-        if (isMineralOrOre(name, material)) return ItemCategory.BLOCKS;
         if (material.isBlock()) return ItemCategory.BLOCKS;
 
         return ItemCategory.MISC;
     }
 
-    private static boolean isMineralOrOre(String name, Material material) {
-        if (name.endsWith("_ORE") || name.contains("_ORE_")) return false;
+    public static boolean isMineral(String name, Material material) {
+        if (name.endsWith("_ORE") || name.contains("_ORE_") || name.contains("_ORE")) {
+            return true;
+        }
 
-        return name.startsWith("RAW_") || name.contains("RAW_")
-                || name.contains("INGOT") || name.contains("NUGGET")
-                || name.equals("COAL") || name.equals("CHARCOAL")
+        if (name.startsWith("RAW_") || name.contains("RAW_")) {
+            return true;
+        }
+
+        if (name.endsWith("_INGOT") || name.endsWith("_NUGGET")) {
+            return true;
+        }
+
+        if (name.equals("COAL") || name.equals("CHARCOAL")
                 || name.equals("DIAMOND") || name.equals("EMERALD")
                 || name.equals("LAPIS_LAZULI") || name.equals("REDSTONE")
                 || name.equals("QUARTZ") || name.equals("NETHERITE_SCRAP")
                 || name.equals("ANCIENT_DEBRIS") || name.equals("AMETHYST_SHARD")
+                || name.equals("AMETHYST_CLUSTER") || name.contains("AMETHYST_BUD")
                 || name.equals("AMETHYST_BLOCK") || name.equals("BUDDING_AMETHYST")
-                || name.equals("FLINT");
+                || name.equals("FLINT") || name.equals("GILDED_BLACKSTONE")) {
+            return true;
+        }
+
+        return name.equals("COAL_BLOCK") || name.equals("IRON_BLOCK")
+                || name.equals("GOLD_BLOCK") || name.equals("COPPER_BLOCK")
+                || name.equals("DIAMOND_BLOCK") || name.equals("EMERALD_BLOCK")
+                || name.equals("LAPIS_BLOCK") || name.equals("REDSTONE_BLOCK")
+                || name.equals("NETHERITE_BLOCK") || name.equals("QUARTZ_BLOCK")
+                || name.equals("RAW_IRON_BLOCK") || name.equals("RAW_GOLD_BLOCK")
+                || name.equals("RAW_COPPER_BLOCK");
+    }
+
+    public void registerCustomEntry(CatalogEntry entry) {
+        if (entry == null) return;
+        entries.put(entry.getKey(), entry);
+        byCategory.computeIfAbsent(entry.getCategory(), k -> new ArrayList<>()).add(entry);
     }
 
     public List<CatalogEntry> getByCategory(ItemCategory category) {

@@ -37,10 +37,7 @@ public final class SurvivalPriceModel {
       Material.ELYTRA, 9_500.0 / 130_000.0
   );
 
-  /** 基礎資源單價（購買價） */
   private static final Map<Material, Double> BASE_RESOURCES = new EnumMap<>(Material.class);
-
-  /** 結構戰利品 / 稀有掉落（無法以配方拆解者） */
   private static final Map<Material, Double> LOOT_PRICES = new EnumMap<>(Material.class);
 
   static {
@@ -76,9 +73,9 @@ public final class SurvivalPriceModel {
     putBase(Material.CHARCOAL, 5.0);
     putBase(Material.RAW_IRON, 12.0);
     putBase(Material.IRON_INGOT, 18.0);
-    putBase(Material.RAW_COPPER, 5.0);
-    putBase(Material.COPPER_INGOT, 8.0);
-    putBase(Material.RAW_GOLD, 22.0);
+    putBase(Material.RAW_COPPER, 4.0);
+    putBase(Material.COPPER_INGOT, 6.5);
+    putBase(Material.RAW_GOLD, 20.0);
     putBase(Material.GOLD_INGOT, 30.0);
     putBase(Material.DIAMOND, 333.0);
     putBase(Material.EMERALD, 45.0);
@@ -125,8 +122,8 @@ public final class SurvivalPriceModel {
     putBase(Material.POLISHED_ANDESITE, 11.0);
 
     putBase(Material.ANCIENT_DEBRIS, 8_000.0);
-    putBase(Material.NETHERITE_SCRAP, 10_000.0);
-    putBase(Material.NETHERITE_INGOT, 45_000.0);
+    putBase(Material.NETHERITE_SCRAP, 9_500.0);
+    putBase(Material.NETHERITE_INGOT, 42_000.0);
 
     putLoot(Material.NAUTILUS_SHELL, 8_000.0);
     putLoot(Material.HEART_OF_THE_SEA, 30_000.0);
@@ -137,7 +134,7 @@ public final class SurvivalPriceModel {
     putLoot(Material.TRIDENT, 50_000.0);
     putLoot(Material.BREEZE_ROD, 90_000.0);
     putLoot(Material.HEAVY_CORE, 90_000.0);
-    putLoot(Material.NETHERITE_UPGRADE_SMITHING_TEMPLATE, 30_000.0);
+    putLoot(Material.NETHERITE_UPGRADE_SMITHING_TEMPLATE, 25_000.0);
     putLoot(Material.ECHO_SHARD, 12_000.0);
     putLoot(Material.DISC_FRAGMENT_5, 15_000.0);
   }
@@ -172,7 +169,44 @@ public final class SurvivalPriceModel {
   }
 
   public static Optional<Double> sellRatioOverride(Material material) {
+    if (material == Material.ELYTRA) {
+      return Optional.of(9_500.0 / 130_000.0);
+    }
+    if (isOreBlock(material)) {
+      return Optional.of(oreSellRatio(material));
+    }
     return Optional.ofNullable(SELL_RATIO_OVERRIDES.get(material));
+  }
+
+  public static boolean isOreBlock(Material material) {
+    var name = material.name();
+    return name.endsWith("_ORE") || name.contains("_ORE_") || material == Material.ANCIENT_DEBRIS;
+  }
+
+  private static double oreSellRatio(Material material) {
+    var name = material.name();
+    return switch (name) {
+      case "DEEPSLATE_EMERALD_ORE" -> 15_000.0 / 35_000.0;
+      case "DEEPSLATE_COAL_ORE" -> 80.0 / 180.0;
+      case "COAL_ORE" -> 5.0 / 12.0;
+      case "DEEPSLATE_DIAMOND_ORE" -> 300.0 / 620.0;
+      case "DIAMOND_ORE" -> 320.0 / 680.0;
+      case "DEEPSLATE_COPPER_ORE" -> 40.0 / 90.0;
+      case "COPPER_ORE" -> 12.0 / 28.0;
+      case "DEEPSLATE_IRON_ORE" -> 16.0 / 38.0;
+      case "IRON_ORE" -> 12.0 / 28.0;
+      case "DEEPSLATE_GOLD_ORE" -> 25.0 / 58.0;
+      case "GOLD_ORE" -> 20.0 / 48.0;
+      case "NETHER_GOLD_ORE" -> 10.0 / 25.0;
+      case "DEEPSLATE_LAPIS_ORE" -> 45.0 / 120.0;
+      case "LAPIS_ORE" -> 35.0 / 95.0;
+      case "DEEPSLATE_REDSTONE_ORE" -> 11.0 / 32.0;
+      case "REDSTONE_ORE" -> 8.0 / 24.0;
+      case "NETHER_QUARTZ_ORE" -> 4.0 / 10.0;
+      case "EMERALD_ORE" -> 50.0 / 120.0;
+      case "ANCIENT_DEBRIS" -> 5_300.0 / 8_000.0;
+      default -> 0.42;
+    };
   }
 
   public static double defaultSellRatio() {
@@ -238,10 +272,17 @@ public final class SurvivalPriceModel {
   }
 
   private static double toolOrArmorPrice(Material material) {
+    var name = material.name();
+    if (name.startsWith("NETHERITE_")) {
+      var diamondName = name.replace("NETHERITE_", "DIAMOND_");
+      var diamondMat = Material.matchMaterial(diamondName);
+      double diamondCost = diamondMat != null ? toolOrArmorPrice(diamondMat) : 1000.0;
+      return diamondCost + res(Material.NETHERITE_INGOT) + res(Material.NETHERITE_UPGRADE_SMITHING_TEMPLATE);
+    }
+
     var tier = toolTier(material);
     if (tier == null) return 0;
 
-    var name = material.name();
     int units;
     double stickCost = 0;
 
@@ -281,11 +322,11 @@ public final class SurvivalPriceModel {
   private enum ToolTier {
     WOOD(2.0),
     STONE(3.0),
-    COPPER(8.0),
+    COPPER(6.5),
     IRON(18.0),
     GOLD(30.0),
     DIAMOND(333.0),
-    NETHERITE(45_000.0);
+    NETHERITE(42_000.0);
 
     final double ingotPrice;
 
@@ -315,18 +356,34 @@ public final class SurvivalPriceModel {
   private static double patternPrice(Material material, ItemCategory category) {
     var name = material.name();
 
-    if (name.endsWith("_ORE") || name.startsWith("DEEPSLATE_") && name.endsWith("_ORE")) {
-      if (name.contains("DIAMOND")) return 280.0;
-      if (name.contains("EMERALD")) return 40.0;
-      if (name.contains("ANCIENT_DEBRIS")) return 7_500.0;
-      if (name.contains("GOLD")) return 20.0;
-      if (name.contains("IRON")) return 10.0;
-      if (name.contains("COPPER")) return 4.0;
-      if (name.contains("LAPIS")) return 5.0;
-      if (name.contains("REDSTONE")) return 3.0;
-      if (name.contains("COAL")) return 4.0;
-      return 6.0;
+    if (name.endsWith("_ORE") || name.startsWith("DEEPSLATE_") && name.endsWith("_ORE") || name.contains("_ORE")) {
+      if (name.equals("DEEPSLATE_EMERALD_ORE")) return 35_000.0;
+      if (name.equals("EMERALD_ORE")) return 120.0;
+      if (name.equals("DEEPSLATE_COAL_ORE")) return 180.0;
+      if (name.equals("COAL_ORE")) return 12.0;
+      if (name.equals("DEEPSLATE_DIAMOND_ORE")) return 620.0;
+      if (name.equals("DIAMOND_ORE")) return 680.0;
+      if (name.equals("DEEPSLATE_COPPER_ORE")) return 90.0;
+      if (name.equals("COPPER_ORE")) return 28.0;
+      if (name.equals("DEEPSLATE_IRON_ORE")) return 38.0;
+      if (name.equals("IRON_ORE")) return 28.0;
+      if (name.equals("DEEPSLATE_GOLD_ORE")) return 58.0;
+      if (name.equals("GOLD_ORE")) return 48.0;
+      if (name.equals("NETHER_GOLD_ORE")) return 25.0;
+      if (name.equals("DEEPSLATE_LAPIS_ORE")) return 120.0;
+      if (name.equals("LAPIS_ORE")) return 95.0;
+      if (name.equals("DEEPSLATE_REDSTONE_ORE")) return 32.0;
+      if (name.equals("REDSTONE_ORE")) return 24.0;
+      if (name.equals("NETHER_QUARTZ_ORE")) return 10.0;
+      return 25.0;
     }
+
+    if (name.equals("ANCIENT_DEBRIS")) return 8_000.0;
+    if (name.equals("GILDED_BLACKSTONE")) return 45.0;
+    if (name.equals("AMETHYST_CLUSTER")) return 35.0;
+    if (name.equals("LARGE_AMETHYST_BUD")) return 25.0;
+    if (name.equals("MEDIUM_AMETHYST_BUD")) return 18.0;
+    if (name.equals("SMALL_AMETHYST_BUD")) return 12.0;
 
     if (name.startsWith("RAW_")) return 8.0;
     if (name.contains("SHULKER_BOX")) return 30_000.0;
@@ -348,6 +405,7 @@ public final class SurvivalPriceModel {
     if (material.isEdible()) return 5.0;
 
     return switch (category) {
+      case MINERALS -> 10.0;
       case FOOD -> 4.0;
       case BLOCKS -> 3.0;
       case DECORATIONS -> 5.0;

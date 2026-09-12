@@ -163,6 +163,76 @@ public final class ShopCommand implements CommandExecutor, TabCompleter {
                     }
                 }
             }
+            case "add", "additem", "新增商品" -> {
+                if (!player.hasPermission("shop.admin")) {
+                    player.sendMessage("§c" + locale.msg(player, "msg.cmd.no-permission"));
+                    return true;
+                }
+                var hand = player.getInventory().getItemInMainHand();
+                if (hand.getType().isAir()) {
+                    player.sendMessage("§c請手持要上架的物品！");
+                    return true;
+                }
+
+                if (args.length < 2) {
+                    var session = guiListener != null ? guiListener.getOrCreateSession(player) : null;
+                    if (session != null) {
+                        var cat = catalog.categorize(hand.getType());
+                        String catId = cat != null ? cat.getId() : "minerals";
+                        com.avery.shop.gui.ShopAdminGui.openAdminAddItem(shopManager, player, session, catId);
+                        return true;
+                    }
+                    player.sendMessage("§c用法: /shop add <價格> [分類] [模式]");
+                    player.sendMessage("§7模式可選: BOTH, BUY_ONLY, SELL_ONLY, DISABLED");
+                    return true;
+                }
+
+                double price;
+                try {
+                    price = Double.parseDouble(args[1]);
+                } catch (NumberFormatException e) {
+                    player.sendMessage("§c價格必須為有效的數字！");
+                    return true;
+                }
+
+                if (price <= 0) {
+                    player.sendMessage("§c價格必須大於 0！");
+                    return true;
+                }
+
+                String categoryId;
+                if (args.length >= 3) {
+                    categoryId = args[2].toLowerCase();
+                } else {
+                    var cat = catalog.categorize(hand.getType());
+                    categoryId = cat != null ? cat.getId() : "minerals";
+                }
+
+                var mode = com.avery.shop.shop.TradeMode.BOTH;
+                if (args.length >= 4) {
+                    try {
+                        mode = com.avery.shop.shop.TradeMode.valueOf(args[3].toUpperCase());
+                    } catch (IllegalArgumentException e) {
+                        player.sendMessage("§c無效的交易模式: " + args[3] + "，請使用 BOTH, BUY_ONLY, SELL_ONLY, 或 DISABLED。");
+                        return true;
+                    }
+                }
+
+                boolean ok = shopManager.getAdminService().addCustomItem(
+                        categoryId,
+                        hand,
+                        price,
+                        mode,
+                        catalog
+                );
+
+                if (ok) {
+                    player.sendMessage("§a[商店] 成功上架手持自訂物品！分類: [" + categoryId + "]，價格: $"
+                            + shopManager.getEconomy().format(price) + "，模式: " + mode.name());
+                } else {
+                    player.sendMessage("§c[商店] 上架失敗，請檢查分類是否存在或後台日誌！");
+                }
+            }
             default -> sendHelp(sender);
         }
         return true;
@@ -196,6 +266,7 @@ public final class ShopCommand implements CommandExecutor, TabCompleter {
             sender.sendMessage("§f" + locale.msg(loc, "msg.cmd.help.reset"));
             sender.sendMessage("§f" + locale.msg(loc, "msg.cmd.help.resync-prices"));
             sender.sendMessage("§7" + locale.msg(loc, "msg.cmd.help.reset.warn"));
+            sender.sendMessage("§f" + locale.msg(loc, "msg.cmd.help.add"));
             sender.sendMessage("§f" + locale.msg(loc, "msg.cmd.help.admin-gui"));
             sender.sendMessage("");
 
@@ -351,9 +422,25 @@ public final class ShopCommand implements CommandExecutor, TabCompleter {
         if (args.length == 1) {
             var options = new ArrayList<>(List.of("help", "search", "sell", "sellable", "price", "說明", "搜尋", "上架", "賣", "可收購", "價格"));
             if (sender.hasPermission("shop.admin")) {
-                options.addAll(List.of("reload", "reset", "resync-prices", "report", "報表", "重算價格", "還原", "restore", "重新載入"));
+                options.addAll(List.of("add", "additem", "reload", "reset", "resync-prices", "report", "報表", "重算價格", "還原", "restore", "重新載入"));
             }
             return filter(options, args[0]);
+        }
+        if (args.length == 2 && sender.hasPermission("shop.admin")
+                && (args[0].equalsIgnoreCase("add") || args[0].equalsIgnoreCase("additem") || args[0].equalsIgnoreCase("新增商品"))) {
+            return filter(List.of("10", "50", "100", "500", "1000", "10000"), args[1]);
+        }
+        if (args.length == 3 && sender.hasPermission("shop.admin")
+                && (args[0].equalsIgnoreCase("add") || args[0].equalsIgnoreCase("additem") || args[0].equalsIgnoreCase("新增商品"))) {
+            var categories = new ArrayList<String>();
+            for (var c : com.avery.shop.catalog.ItemCategory.values()) {
+                categories.add(c.getId());
+            }
+            return filter(categories, args[2]);
+        }
+        if (args.length == 4 && sender.hasPermission("shop.admin")
+                && (args[0].equalsIgnoreCase("add") || args[0].equalsIgnoreCase("additem") || args[0].equalsIgnoreCase("新增商品"))) {
+            return filter(List.of("BOTH", "BUY_ONLY", "SELL_ONLY", "DISABLED"), args[3]);
         }
         if (args.length == 2 && (args[0].equalsIgnoreCase("report") || args[0].equalsIgnoreCase("報表"))) {
             return filter(List.of("daily", "weekly", "monthly", "trend", "daily:send", "weekly:send", "monthly:send", "每日", "每週", "每月", "趨勢"), args[1]);

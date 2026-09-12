@@ -284,6 +284,11 @@ public final class ShopAdminService {
         void apply(YamlPath yamlPath);
     }
 
+    public boolean addCustomItem(String categoryId, org.bukkit.inventory.ItemStack stack,
+                                 double price, TradeMode tradeMode, ItemCatalog catalog) {
+        return shopConfig.addCustomItem(categoryId, stack, price, tradeMode, catalog);
+    }
+
     private String findYamlItemPath(YamlConfiguration yaml, String catalogKey, ItemCatalog catalog) {
         var section = yaml.getConfigurationSection("items");
         if (section == null) return null;
@@ -291,6 +296,16 @@ public final class ShopAdminService {
             var itemSection = section.getConfigurationSection(yamlKey);
             if (itemSection == null) continue;
             var key = itemSection.getString("catalog-key", "");
+            if (catalogKey.equals(key)) {
+                return "items." + yamlKey;
+            }
+            var itemData = itemSection.getString("item-data", null);
+            if (itemData != null && !itemData.isBlank()) {
+                var customStack = com.avery.shop.catalog.ItemStackUtil.deserialize(itemData);
+                if (customStack != null && catalogKey.equals(com.avery.shop.catalog.ItemMatcher.fingerprint(customStack))) {
+                    return "items." + yamlKey;
+                }
+            }
             var materialId = itemSection.getString("material", yamlKey);
             var resolved = ShopItemResolver.resolve(key, materialId, catalog).orElse(null);
             var resolvedKey = resolved != null ? resolved.getKey()

@@ -120,6 +120,11 @@ public final class GuiListener implements Listener {
             return;
         }
 
+        if (session.getViewType() == GuiSession.ViewType.ADMIN_ADD_ITEM) {
+            handleAdminAddItemClick(event, player, session);
+            return;
+        }
+
         event.setCancelled(true);
 
         int slot = event.getRawSlot();
@@ -180,8 +185,20 @@ public final class GuiListener implements Listener {
         }
 
         var session = getActiveSession(player);
+        if (session == null) return;
 
-        if (session == null || session.getViewType() != GuiSession.ViewType.SELL_TO_SYSTEM) return;
+        if (session.getViewType() == GuiSession.ViewType.ADMIN_ADD_ITEM) {
+            int topSize = event.getView().getTopInventory().getSize();
+            for (int rawSlot : event.getRawSlots()) {
+                if (rawSlot < topSize && rawSlot != ShopAdminGui.ADD_ITEM_INPUT_SLOT) {
+                    event.setCancelled(true);
+                    return;
+                }
+            }
+            return;
+        }
+
+        if (session.getViewType() != GuiSession.ViewType.SELL_TO_SYSTEM) return;
 
         int topSize = event.getView().getTopInventory().getSize();
         for (int rawSlot : event.getRawSlots()) {
@@ -542,6 +559,12 @@ public final class GuiListener implements Listener {
             ShopAdminGui.openAdminCategoryEdit(shopManager, player, session, session.getCategoryId());
             return;
         }
+        if (slot == ShopAdminGui.ADMIN_ADD_ITEM_SLOT && player.hasPermission("shop.admin")
+                && session.getCategoryId() != null) {
+            session.setReturnViewType(session.getViewType());
+            ShopAdminGui.openAdminAddItem(shopManager, player, session, session.getCategoryId());
+            return;
+        }
         if (slot == ShopGui.getPrevSlot()) {
             session.setPage(Math.max(0, session.getPage() - 1));
             refreshListingView(player, session);
@@ -795,6 +818,146 @@ public final class GuiListener implements Listener {
         }
     }
 
+    private void handleAdminAddItemClick(InventoryClickEvent event, Player player, GuiSession session) {
+        if (!player.hasPermission("shop.admin")) {
+            event.setCancelled(true);
+            player.closeInventory();
+            return;
+        }
+
+        int rawSlot = event.getRawSlot();
+        var topInv = event.getView().getTopInventory();
+        int topSize = topInv.getSize();
+
+        // 玩家點擊自身背包
+        if (rawSlot >= topSize) {
+            if (event.isShiftClick()) {
+                event.setCancelled(true);
+                var current = event.getCurrentItem();
+                if (current != null && !current.getType().isAir()) {
+                    var inSlot = topInv.getItem(ShopAdminGui.ADD_ITEM_INPUT_SLOT);
+                    if (inSlot == null || inSlot.getType().isAir()) {
+                        topInv.setItem(ShopAdminGui.ADD_ITEM_INPUT_SLOT, current.clone());
+                        event.setCurrentItem(null);
+                    } else if (inSlot.isSimilar(current)) {
+                        int max = inSlot.getMaxStackSize();
+                        int canAdd = Math.min(current.getAmount(), max - inSlot.getAmount());
+                        if (canAdd > 0) {
+                            inSlot.setAmount(inSlot.getAmount() + canAdd);
+                            current.setAmount(current.getAmount() - canAdd);
+                            event.setCurrentItem(current.getAmount() > 0 ? current : null);
+                        }
+                    }
+                }
+            }
+            return;
+        }
+
+        // 點擊中央第 13 格（輸入槽）
+        if (rawSlot == ShopAdminGui.ADD_ITEM_INPUT_SLOT) {
+            return; // 允許拿起或放入物品
+        }
+
+        // 其餘按鈕皆攔截取消
+        event.setCancelled(true);
+        var locale = shopManager.getPlugin().getLocaleService();
+
+        if (rawSlot == ShopAdminGui.ADD_ITEM_BACK_SLOT) {
+            var inputItem = topInv.getItem(ShopAdminGui.ADD_ITEM_INPUT_SLOT);
+            if (inputItem != null && !inputItem.getType().isAir()) {
+                var leftovers = player.getInventory().addItem(inputItem);
+                for (var drop : leftovers.values()) {
+                    player.getWorld().dropItemNaturally(player.getLocation(), drop);
+                }
+                topInv.setItem(ShopAdminGui.ADD_ITEM_INPUT_SLOT, null);
+            }
+            ShopGui.openCategory(shopManager, player, session);
+            return;
+        }
+
+        if (rawSlot == ShopAdminGui.ADD_ITEM_PRICE_MINUS_100_SLOT) {
+            session.setAdminAddPrice(Math.max(0.1, session.getAdminAddPrice() - 100));
+            ShopAdminGui.refreshAdminAddControls(shopManager, player, session, topInv);
+            return;
+        }
+
+        if (rawSlot == ShopAdminGui.ADD_ITEM_PRICE_MINUS_10_SLOT) {
+            session.setAdminAddPrice(Math.max(0.1, session.getAdminAddPrice() - 10));
+            ShopAdminGui.refreshAdminAddControls(shopManager, player, session, topInv);
+            return;
+        }
+
+        if (rawSlot == ShopAdminGui.ADD_ITEM_PRICE_PLUS_10_SLOT) {
+            session.setAdminAddPrice(session.getAdminAddPrice() + 10);
+            ShopAdminGui.refreshAdminAddControls(shopManager, player, session, topInv);
+            return;
+        }
+
+        if (rawSlot == ShopAdminGui.ADD_ITEM_PRICE_PLUS_100_SLOT) {
+            session.setAdminAddPrice(session.getAdminAddPrice() + 100);
+            ShopAdminGui.refreshAdminAddControls(shopManager, player, session, topInv);
+            return;
+        }
+
+        if (rawSlot == ShopAdminGui.ADD_ITEM_PRICE_DISPLAY_SLOT) {
+            if (event.isShiftClick()) {
+                session.setAdminAddPrice(10.0);
+                ShopAdminGui.refreshAdminAddControls(shopManager, player, session, topInv);
+            } else {
+                session.setShopHolder(null);
+                player.closeInventory();
+                String promptText = "§e請在聊天欄輸入商品基礎售價：";
+                ChatPrompt.start(shopManager.getPlugin(), player, promptText, (input) -> {
+                    handleAdminChat(player, locale, input, "ADMIN_ADD_PRICE", null, null);
+                }, () -> {
+                    var activeSession = getOrCreateSession(player);
+                    ShopAdminGui.openAdminAddItem(shopManager, player, activeSession, activeSession.getCategoryId());
+                });
+            }
+            return;
+        }
+
+        if (rawSlot == ShopAdminGui.ADD_ITEM_TRADE_MODE_SLOT) {
+            var currentMode = session.getAdminAddTradeMode();
+            var nextMode = currentMode.next();
+            session.setAdminAddTradeMode(nextMode);
+            ShopAdminGui.refreshAdminAddControls(shopManager, player, session, topInv);
+            return;
+        }
+
+        if (rawSlot == ShopAdminGui.ADD_ITEM_CONFIRM_SLOT) {
+            var inputItem = topInv.getItem(ShopAdminGui.ADD_ITEM_INPUT_SLOT);
+            if (inputItem == null || inputItem.getType().isAir()) {
+                player.sendMessage("§c請先在中央第 13 格槽位放入要上架販售的物品！");
+                return;
+            }
+
+            double price = session.getAdminAddPrice();
+            var mode = session.getAdminAddTradeMode();
+            String categoryId = session.getCategoryId();
+            if (categoryId == null) {
+                categoryId = "minerals";
+            }
+
+            boolean ok = shopManager.getAdminService().addCustomItem(
+                    categoryId,
+                    inputItem,
+                    price,
+                    mode,
+                    shopManager.getCatalog()
+            );
+
+            if (ok) {
+                player.sendMessage("§a[商店] 成功將自訂物品上架至分類 [" + categoryId + "]！售價: §f$" + shopManager.getEconomy().format(price));
+                topInv.setItem(ShopAdminGui.ADD_ITEM_INPUT_SLOT, null);
+                session.setCategoryId(categoryId);
+                ShopGui.openCategory(shopManager, player, session);
+            } else {
+                player.sendMessage("§c[商店] 上架自訂物品失敗，請檢查後台日誌！");
+            }
+        }
+    }
+
     private void returnFromAdmin(Player player, GuiSession session) {
         session.setPendingCatalogKey(null);
         var returnTo = session.getReturnViewType();
@@ -1022,6 +1185,27 @@ public final class GuiListener implements Listener {
                     player.sendMessage("§c" + locale.msg(player, "msg.gui.admin.config.invalid"));
                     ShopAdminGui.openAdminSettings(shopManager, player, session);
                 }
+                return;
+            }
+
+            if ("ADMIN_ADD_PRICE".equals(type)) {
+                double price;
+                try {
+                    price = Double.parseDouble(input.trim());
+                } catch (NumberFormatException e) {
+                    player.sendMessage("§c請輸入有效的數字價格！");
+                    ShopAdminGui.openAdminAddItem(shopManager, player, session, session.getCategoryId());
+                    return;
+                }
+                if (price <= 0) {
+                    player.sendMessage("§c價格必須大於 0！");
+                    ShopAdminGui.openAdminAddItem(shopManager, player, session, session.getCategoryId());
+                    return;
+                }
+                session.setAdminAddPrice(price);
+                player.sendMessage("§a自訂上架售價已設定為：$" + shopManager.getEconomy().format(price));
+                ShopAdminGui.openAdminAddItem(shopManager, player, session, session.getCategoryId());
+                return;
             }
         });
     }
@@ -1081,6 +1265,20 @@ public final class GuiListener implements Listener {
                 returnDepositItems(player, inv);
             }
         }
+        if (session != null && session.getViewType() == GuiSession.ViewType.ADMIN_ADD_ITEM
+                && session.getShopHolder() != null) {
+            var inv = session.getShopHolder().getInventory();
+            if (inv != null) {
+                var inputItem = inv.getItem(ShopAdminGui.ADD_ITEM_INPUT_SLOT);
+                if (inputItem != null && !inputItem.getType().isAir()) {
+                    var leftovers = player.getInventory().addItem(inputItem);
+                    for (var drop : leftovers.values()) {
+                        player.getWorld().dropItemNaturally(player.getLocation(), drop);
+                    }
+                    inv.setItem(ShopAdminGui.ADD_ITEM_INPUT_SLOT, null);
+                }
+            }
+        }
     }
 
     @EventHandler
@@ -1088,11 +1286,11 @@ public final class GuiListener implements Listener {
         if (!(event.getPlayer() instanceof Player player)) return;
 
         if (event.getInventory().getHolder() instanceof ShopInventoryHolder holder) {
-            if (holder.getKind() != ShopInventoryHolder.Kind.SELL) {
+            if (holder.getKind() != ShopInventoryHolder.Kind.SELL && holder.getKind() != ShopInventoryHolder.Kind.ADMIN_ADD_ITEM) {
                 if (player.getItemOnCursor() != null && !player.getItemOnCursor().getType().isAir()) {
                     player.setItemOnCursor(null);
                 }
-            } else {
+            } else if (holder.getKind() == ShopInventoryHolder.Kind.SELL) {
                 if (player.getItemOnCursor() != null && !player.getItemOnCursor().getType().isAir()) {
                     player.setItemOnCursor(ShopManager.stripSellGuiLore(player.getItemOnCursor()));
                 }
@@ -1117,6 +1315,22 @@ public final class GuiListener implements Listener {
                 returnDepositItems(player, event.getInventory());
             }
             purgeSellGuiLoreFromInventory(player.getInventory());
+            session.setShopHolder(null);
+            if (!player.isConversing()) {
+                sessions.remove(player.getUniqueId());
+            }
+            return;
+        }
+
+        if (session.getViewType() == GuiSession.ViewType.ADMIN_ADD_ITEM) {
+            var inputItem = event.getInventory().getItem(ShopAdminGui.ADD_ITEM_INPUT_SLOT);
+            if (inputItem != null && !inputItem.getType().isAir()) {
+                var leftovers = player.getInventory().addItem(inputItem);
+                for (var drop : leftovers.values()) {
+                    player.getWorld().dropItemNaturally(player.getLocation(), drop);
+                }
+                event.getInventory().setItem(ShopAdminGui.ADD_ITEM_INPUT_SLOT, null);
+            }
             session.setShopHolder(null);
             if (!player.isConversing()) {
                 sessions.remove(player.getUniqueId());
