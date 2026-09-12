@@ -3,7 +3,7 @@ plugins {
 }
 
 group = "com.avery"
-version = "1.8.0-beta.2"
+version = "1.8.0-beta.3"
 
 repositories {
     mavenCentral()
@@ -40,8 +40,18 @@ val verifyCategories = tasks.register<JavaExec>("verifyCategories") {
     mainClass.set("com.avery.shop.catalog.CategoryVerification")
 }
 
+val testMigration = tasks.register<JavaExec>("testMigration") {
+    classpath = sourceSets["test"].runtimeClasspath
+    mainClass.set("com.avery.shop.config.ConfigMigrationTest")
+}
+
+val testUpdate = tasks.register<JavaExec>("testUpdate") {
+    classpath = sourceSets["test"].runtimeClasspath
+    mainClass.set("com.avery.shop.update.UpdateServiceTest")
+}
+
 tasks.check {
-    dependsOn(verifyCategories)
+    dependsOn(verifyCategories, testMigration, testUpdate)
 }
 
 java {

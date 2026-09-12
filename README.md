@@ -59,6 +59,7 @@ dynamic-pricing:
 - **Discord 線上商店預覽與購買** — 中文斜線指令 `/商店`、動態選單與 DiscordSRV 帳號繫結、背包空間防呆交割
 
 - **Discord 每日/每週/每月營運報表** — 斜線指令 `/report` 查詢，Bot 頻道附帶永久按鈕與下拉選單（切換熱門商品 Top 10、活躍玩家榜與系統明細），支援定期自動推播與 Webhook
+- **GitHub Releases 自動更新與設定檔無縫銜接** — 支援遊戲內指令 `/shop update` 非同步檢查與下載最新發布版本；支援伺服器開機自動檢查/下載（預設關閉，可於設定檔自訂開啟）；外掛升級時自動無痛銜接保留所有自訂設定並補全新項目與中文註解（附帶自動備份）
 - **多語搜尋** — 物品 ID + 本地化名稱，支援自訂語系檔
 - **遊戲內語言切換** — `/lang`，可在 config 新增任意語言
 - **NBT 完整支援** — 附魔書、藥水、自訂 NBT 皆可交易
@@ -96,7 +97,7 @@ ashop 預設提供完善的原版全物品分類體系。為了維持伺服器�
 
 ## 安裝
 
-1. 將 `ashop-1.8.0-beta.2.jar` 放入 `plugins/` 資料夾
+1. 將 `ashop-1.8.0-beta.3.jar` 放入 `plugins/` 資料夾
 2. 安裝 [Vault](https://www.spigotmc.org/resources/vault.34315/) 及經濟插件（如 EssentialsX）
 3. 重啟伺服器
 
@@ -114,12 +115,12 @@ ashop 預設提供完善的原版全物品分類體系。為了維持伺服器�
 | `/ashop sellable` | 查看目前開放系統收購的所有商品清單 |
 | `/ashop add <價格> [分類] [模式]` | 將手持自訂物品上架至商店（管理員） |
 | `/ashop report <daily|weekly|monthly>` | 查詢商店營運報表，加上 `send` 可推播至 Discord（管理員） |
+| `/ashop update [check|download]` | 檢查或下載 GitHub Releases 最新發行版本（管理員） |
 | `/ashop reload` | 重新載入（管理員） |
 | `/ashop reset` | 還原預設全物品商店（管理員） |
 | `/lang <語言>` | 切換介面語言 |
 
 **首次安裝**：若 `plugins/ashop/shop/` 尚無商品分類，插件會自動建立預設巢狀商店（僅含**生存可取得**物品，可在 `config.yml` 關閉 `shop.survival-only-defaults`）。
-| `/lang <代碼>` | 切換語言 |
 
 **別名：** `/商店` `/vs` `/language` `/語言`
 
@@ -128,6 +129,13 @@ ashop 預設提供完善的原版全物品分類體系。為了維持伺服器�
 ## 設定
 
 ```yaml
+# GitHub Releases 自動更新設定
+updater:
+  check-on-startup: false       # 伺服器開機時是否自動檢查更新（預設關閉）
+  auto-download: false          # 發現新版本時是否自動下載至 plugins/update/（預設關閉，需重啟生效）
+  notify-admin-on-join: true   # 管理員登入時是否提示新版本通知
+  repo: "Avery11111101/ashop"   # GitHub 專案倉庫
+
 system-shop:
   enabled: true
   player-listings: false   # 禁止玩家上架

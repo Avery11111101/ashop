@@ -11,7 +11,7 @@ softdepend:
 commands:
   shop:
     description: 開啟商店介面
-    usage: /shop|/ashop [help|search|sell|price|reload|reset]
+    usage: /shop|/ashop [help|search|sell|price|reload|reset|report|update]
     aliases: [ashop, 商店, vs]
   lang:
     description: 切換語言

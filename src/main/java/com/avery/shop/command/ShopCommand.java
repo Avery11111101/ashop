@@ -57,6 +57,9 @@ public final class ShopCommand implements CommandExecutor, TabCompleter {
             if (sub.equals("report") || sub.equals("報表")) {
                 return handleReport(sender, args);
             }
+            if (sub.equals("update") || sub.equals("更新")) {
+                return handleUpdate(sender, args);
+            }
         }
 
         if (!(sender instanceof Player player)) {
@@ -268,6 +271,7 @@ public final class ShopCommand implements CommandExecutor, TabCompleter {
             sender.sendMessage("§7" + locale.msg(loc, "msg.cmd.help.reset.warn"));
             sender.sendMessage("§f" + locale.msg(loc, "msg.cmd.help.add"));
             sender.sendMessage("§f" + locale.msg(loc, "msg.cmd.help.admin-gui"));
+            sender.sendMessage("§f" + locale.msg(loc, "msg.cmd.help.update"));
             sender.sendMessage("");
 
             sender.sendMessage("§c§l" + locale.msg(loc, "msg.cmd.help.section.config"));
@@ -374,6 +378,30 @@ public final class ShopCommand implements CommandExecutor, TabCompleter {
         return true;
     }
 
+    private boolean handleUpdate(CommandSender sender, String[] args) {
+        var locale = plugin.getLocaleService();
+        if (!sender.hasPermission("shop.admin")) {
+            sendError(sender, locale, "msg.cmd.no-admin");
+            return true;
+        }
+
+        var updateService = plugin.getUpdateService();
+        if (updateService == null) {
+            sender.sendMessage("§c[ashop] 更新服務尚未就緒。");
+            return true;
+        }
+
+        if (args.length >= 2 && (args[1].equalsIgnoreCase("download")
+                || args[1].equalsIgnoreCase("install")
+                || args[1].equalsIgnoreCase("下載"))) {
+            updateService.downloadUpdate(sender, null);
+            return true;
+        }
+
+        updateService.checkForUpdates(true, sender, null);
+        return true;
+    }
+
     private void sendError(CommandSender sender, com.avery.shop.locale.LocaleService locale, String key) {
         if (sender instanceof Player player) {
             sender.sendMessage("§c" + locale.msg(player, key));
@@ -422,9 +450,13 @@ public final class ShopCommand implements CommandExecutor, TabCompleter {
         if (args.length == 1) {
             var options = new ArrayList<>(List.of("help", "search", "sell", "sellable", "price", "說明", "搜尋", "上架", "賣", "可收購", "價格"));
             if (sender.hasPermission("shop.admin")) {
-                options.addAll(List.of("add", "additem", "reload", "reset", "resync-prices", "report", "報表", "重算價格", "還原", "restore", "重新載入"));
+                options.addAll(List.of("add", "additem", "reload", "reset", "resync-prices", "report", "報表", "重算價格", "還原", "restore", "重新載入", "update", "更新"));
             }
             return filter(options, args[0]);
+        }
+        if (args.length == 2 && sender.hasPermission("shop.admin")
+                && (args[0].equalsIgnoreCase("update") || args[0].equalsIgnoreCase("更新"))) {
+            return filter(List.of("check", "download", "檢查", "下載"), args[1]);
         }
         if (args.length == 2 && sender.hasPermission("shop.admin")
                 && (args[0].equalsIgnoreCase("add") || args[0].equalsIgnoreCase("additem") || args[0].equalsIgnoreCase("新增商品"))) {

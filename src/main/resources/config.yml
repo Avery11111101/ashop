@@ -1,4 +1,23 @@
-# ashop 設定
+# ==========================================
+# ashop 設定檔
+# ==========================================
+
+# 設定檔版本（請勿手動修改，用於新版本自動銜接升級）
+config-version: 2
+
+# GitHub Releases 自動更新設定
+updater:
+  # 伺服器開機時是否自動檢查更新（預設關閉）
+  check-on-startup: false
+
+  # 發現新版本時是否自動下載至 plugins/update/（預設關閉，需重啟伺服器生效）
+  auto-download: false
+
+  # 管理員（具備 shop.admin 權限）登入伺服器時，是否發送新版本通知提示
+  notify-admin-on-join: true
+
+  # GitHub 專案倉庫名稱
+  repo: "Avery11111101/ashop"
 
 languages:
   default: zh_tw

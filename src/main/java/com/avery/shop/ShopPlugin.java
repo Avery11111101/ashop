@@ -14,6 +14,9 @@ import com.avery.shop.shop.AsyncSaveService;
 import com.avery.shop.shop.ShopAdminService;
 import com.avery.shop.shop.ShopConfigService;
 import com.avery.shop.shop.ShopManager;
+import com.avery.shop.config.ConfigMigrationService;
+import com.avery.shop.update.UpdateListener;
+import com.avery.shop.update.UpdateService;
 import com.avery.shop.util.DiscordWebhookService;
 import org.bukkit.plugin.java.JavaPlugin;
 
@@ -30,12 +33,15 @@ public final class ShopPlugin extends JavaPlugin {
     private DiscordService discordService;
     private ReportService reportService;
     private DiscordReportScheduler reportScheduler;
+    private ConfigMigrationService configMigrationService;
+    private UpdateService updateService;
 
     @Override
     public void onEnable() {
         saveDefaultConfig();
-        getConfig().options().copyDefaults(true);
-        saveConfig();
+        configMigrationService = new ConfigMigrationService(this);
+        configMigrationService.migrateIfNeeded();
+        reloadConfig();
 
         localeService = new LocaleService(this);
         localeService.load();
@@ -91,6 +97,10 @@ public final class ShopPlugin extends JavaPlugin {
         var langCommand = new LangCommand(this, localeService);
         getCommand("lang").setExecutor(langCommand);
         getCommand("lang").setTabCompleter(langCommand);
+
+        updateService = new UpdateService(this);
+        getServer().getPluginManager().registerEvents(new UpdateListener(this, updateService), this);
+        updateService.handleStartupCheck();
 
         getLogger().info("ashop 已啟用，目錄共 " + itemCatalog.size() + " 種物品，營運報表系統已就緒");
     }
@@ -161,5 +171,17 @@ public final class ShopPlugin extends JavaPlugin {
 
     public DiscordReportScheduler getReportScheduler() {
         return reportScheduler;
+    }
+
+    public java.io.File getPluginFile() {
+        return getFile();
+    }
+
+    public ConfigMigrationService getConfigMigrationService() {
+        return configMigrationService;
+    }
+
+    public UpdateService getUpdateService() {
+        return updateService;
     }
 }

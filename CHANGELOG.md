@@ -3,6 +3,14 @@
 All notable changes to ashop are documented here.  
 ashop 的所有重要變更皆記錄於此。
 
+## [1.8.0-beta.3] - 2026-09-12
+
+### Added / 新增
+- **GitHub Releases Auto-Updater & Safe Update Pipeline (GitHub Releases 自動更新系統與安全管道)** — Integrated asynchronous GitHub Releases checking and asset downloading (`/shop update` & `/shop update download`). Downloaded files are placed in `plugins/update/` to prevent Windows file locking issues during runtime and safely replace the plugin jar on server restart. Includes startup auto-check/auto-download toggles (disabled by default) and admin join notifications.  
+  **GitHub Releases 自動更新系統與安全管道** — 整合 GitHub REST API 異步查詢與安全下載機制（支援 `/shop update` 檢查與 `/shop update download` 下載）。下載檔案存放於 `plugins/update/` 資料夾，解決 Windows 系統下 JVM 檔案鎖定無法覆蓋的難題，並於伺服器重啟時由伺服器核心原生安全替換。包含開機自動檢查／自動下載設定項（預設關閉）與管理員進服更新提示。
+- **Seamless Config Migration & Comment Preservation Engine (設定檔無痛銜接升級與註解保留引擎)** — Created `ConfigMigrationService` with automatic version tracking (`config-version: 2`). Upon upgrading, existing user configurations (prices, multipliers, tokens, options) are 100% preserved while newly introduced configuration sections, default values, and full Traditional Chinese comments are seamlessly injected without comment stripping. Includes automatic backup generation (`config.backup-v1.yml`).  
+  **設定檔無痛銜接升級與註解保留引擎** — 建立 `ConfigMigrationService` 與版本追蹤機制（`config-version: 2`）。外掛升級時 100% 保留服主原先自訂的數值（貨幣符號、價格倍率、Discord Token 等），並將新版本新增的設定項目與完整繁中註解自動注入合併，徹底解決 SnakeYAML 清除註解的通病，並自動產生備份檔案。
+
 ## [1.8.0-beta.2] - 2026-09-12
 
 ### Added / 新增
