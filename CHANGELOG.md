@@ -3,6 +3,12 @@
 All notable changes to ashop are documented here.  
 ashop 的所有重要變更皆記錄於此。
 
+## [1.7.3] - 2026-09-12
+
+### Fixed / 修復
+- **Repository Cleanup (儲存庫清理)** — Removed mistakenly tracked `ashop-*.jar` build artifacts from the repository root directory and added `/*.jar` to `.gitignore` to prevent future clutter.  
+  **儲存庫清理** — 移除專案根目錄下誤追蹤的編譯產物 `ashop-*.jar`，並於 `.gitignore` 補上 `/*.jar` 規則，避免未來編譯結果再次意外推入儲存庫。
+
 ## [1.7.2] - 2026-08-15
 
 ### Fixed / 修復
