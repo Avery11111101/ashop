@@ -439,6 +439,21 @@ public final class ShopConfigService {
         return data.getEnabledEntries();
     }
 
+    /** 取得全商店所有已啟用分類的全部商品（依 catalog key 去重） */
+    public List<CatalogEntry> getAllEnabledEntries() {
+        var list = new ArrayList<CatalogEntry>();
+        var seenKeys = new java.util.HashSet<String>();
+        for (var data : categories.values()) {
+            if (!data.getDefinition().isEnabled()) continue;
+            for (var entry : data.getEnabledEntries()) {
+                if (seenKeys.add(entry.getKey())) {
+                    list.add(entry);
+                }
+            }
+        }
+        return list;
+    }
+
     public int getEnabledCount(String categoryId) {
         return countEnabledRecursive(categoryId);
     }
@@ -591,13 +606,16 @@ public final class ShopConfigService {
     public boolean addCustomItem(String categoryId, org.bukkit.inventory.ItemStack stack,
                                  double price, TradeMode tradeMode, ItemCatalog catalog) {
         if (stack == null || stack.getType().isAir()) return false;
+        var itemToSave = stack.clone();
+        itemToSave.setAmount(1);
+
         var file = getCategoryFile(categoryId);
         if (!file.exists()) {
             file.getParentFile().mkdirs();
             var newYaml = new YamlConfiguration();
             newYaml.set("category", categoryId);
             newYaml.set("display-name", categoryId);
-            newYaml.set("icon", stack.getType().name());
+            newYaml.set("icon", itemToSave.getType().name());
             newYaml.set("enabled", true);
             newYaml.set("trade-mode", TradeMode.BOTH.name());
             newYaml.set("allow-buy", true);
@@ -607,7 +625,7 @@ public final class ShopConfigService {
         }
 
         var yaml = YamlConfiguration.loadConfiguration(file);
-        var baseKey = stack.getType().name().toLowerCase(Locale.ROOT);
+        var baseKey = itemToSave.getType().name().toLowerCase(Locale.ROOT);
         var usedKeys = new java.util.HashSet<String>();
         var section = yaml.getConfigurationSection("items");
         if (section != null) {
@@ -621,10 +639,10 @@ public final class ShopConfigService {
         }
 
         var path = "items." + itemKey;
-        var itemData = com.avery.shop.catalog.ItemStackUtil.serialize(stack);
-        var fingerprint = com.avery.shop.catalog.ItemMatcher.fingerprint(stack);
+        var itemData = com.avery.shop.catalog.ItemStackUtil.serialize(itemToSave);
+        var fingerprint = com.avery.shop.catalog.ItemMatcher.fingerprint(itemToSave);
 
-        yaml.set(path + ".material", stack.getType().name());
+        yaml.set(path + ".material", itemToSave.getType().name());
         yaml.set(path + ".catalog-key", fingerprint);
         yaml.set(path + ".item-data", itemData);
         yaml.set(path + ".price", price);

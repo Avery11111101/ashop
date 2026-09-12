@@ -3,6 +3,20 @@
 All notable changes to ashop are documented here.  
 ashop 的所有重要變更皆記錄於此。
 
+## [1.8.0-beta.5] - 2026-09-12
+
+### Added / 新增
+- **Main Menu "All Items" Catalog View (主選單全部商品快捷瀏覽與管理)** — Added an "All Items" button (`ALL_ITEMS_SLOT = 49`, Material: `KNOWLEDGE_BOOK`) on the main shop menu. Players and admins can browse all available items across all enabled categories in a single unified paginated interface, supporting full purchasing, selling, price trend display, and admin direct item modification.  
+  **主選單全部商品快捷瀏覽與管理** — 主選單第 5 行中間（Slot 49，知識之書圖示）新增「全部商品」快捷瀏覽功能。玩家與管理員可在此一站式分頁查看所有已啟用的商品，完整支援動態定價、趨勢顯示、購買、收購以及管理員快捷編輯。
+
+### Fixed / 修復
+- **Admin Custom Item Display on Container Categories (修復管理員自訂物品在上層分類頁面隱形未顯示的問題)** — Fixed an issue where items added to container categories (e.g. `weapons`, `tools`, `minerals`, `armor`, `blocks`, `food`) through the admin GUI workbench (Slot 47) or `/shop add` were not rendered in `openSubcategoryPage`. Container category pages now dynamically render subcategory folders in top rows and display direct custom items in remaining slots with full pricing lore and interactions.  
+  **修復管理員自訂物品在上層分類頁面隱形未顯示問題** — 修復管理員透過 GUI 工作台（Slot 47）或 `/shop add` 上架商品至具有子分類的目錄（如武器、工具、礦產、防具、方塊等）後，`openSubcategoryPage` 僅顯示子分類資料夾而未渲染自訂物品的缺陷。現在上層分類介面會在頂行排列子分類資料夾，並於下方直接展示該分類之自訂商品，支援完整價格標籤、購買與管理操作。
+- **Item Amount Normalization on Custom Item Listing & Fingerprinting (自訂物品堆疊數量規格化與防指紋雜湊偏移)** — Fixed item stack amounts > 1 affecting `ItemMatcher.fingerprint(ItemStack)` byte serialization and custom item registration in `ShopConfigService`. Stacks are now normalized to 1 count during fingerprinting and saving, and GUI automatically redirects admins to the target page upon listing.  
+  **自訂物品堆疊數量規格化與防指紋雜湊偏移** — 修復管理員放置超過 1 個數量之物品至工作台時，導致 `ItemMatcher` 位元組雜湊偏移及上架範本數量異常的問題。上架與雜湊計算時均統一規格化為 1 個，且管理員上架完成後介面會自動跳轉至商品所在之目標頁數。
+- **Automatic Leaf Subcategory Resolution in `/shop add` (指令上架自動解析最深層葉子子分類)** — When the category argument is omitted in `/shop add <price>`, the system now automatically resolves the leaf subcategory path via `ShopSubcategoryResolver` (e.g. Diamond Sword -> `weapons/swords`) instead of placing it into the top-level container.  
+  **指令上架自動解析最深層葉子子分類** — 當使用 `/shop add <價格>` 省略分類參數時，系統會透過 `ShopSubcategoryResolver` 自動判定並導向至最底層子分類（如鑽石劍自動分類至 `weapons/swords`），避免直接寫入頂層容器。
+
 ## [1.8.0-beta.4] - 2026-09-12
 
 ### Fixed / 修復

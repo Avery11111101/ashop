@@ -132,7 +132,7 @@ public final class GuiListener implements Listener {
 
         switch (session.getViewType()) {
             case MAIN -> handleMainClick(player, session, slot, event);
-            case CATEGORY, SEARCH, LISTINGS, SELLABLE_ITEMS -> handleListingClick(player, session, slot, event);
+            case CATEGORY, ALL_ITEMS, SEARCH, LISTINGS, SELLABLE_ITEMS -> handleListingClick(player, session, slot, event);
             default -> {}
         }
     }
@@ -167,7 +167,7 @@ public final class GuiListener implements Listener {
             return false;
         }
         var view = session.getViewType();
-        return (view == GuiSession.ViewType.SEARCH || view == GuiSession.ViewType.CATEGORY || view == GuiSession.ViewType.SELLABLE_ITEMS)
+        return (view == GuiSession.ViewType.SEARCH || view == GuiSession.ViewType.CATEGORY || view == GuiSession.ViewType.SELLABLE_ITEMS || view == GuiSession.ViewType.ALL_ITEMS)
                 && session.isCatalogBrowse();
     }
 
@@ -491,6 +491,11 @@ public final class GuiListener implements Listener {
             return;
         }
 
+        if (slot == ShopGui.getAllItemsSlot()) {
+            ShopGui.openAllItems(shopManager, player, session, 0);
+            return;
+        }
+
         if (slot == ShopGui.getSellSlot()) {
             if (!shopManager.isSellToSystemEnabled()) {
                 player.sendMessage("§c" + locale.msg(player, "msg.sell.disabled"));
@@ -546,7 +551,7 @@ public final class GuiListener implements Listener {
         var click = event.getClick();
 
         if (slot == ShopGui.getBackSlot()) {
-            if (session.getViewType() == GuiSession.ViewType.SEARCH) {
+            if (session.getViewType() == GuiSession.ViewType.SEARCH || session.getViewType() == GuiSession.ViewType.ALL_ITEMS) {
                 ShopGui.openMain(shopManager, player, session);
             } else {
                 navigateCategoryBack(player, session);
@@ -951,6 +956,9 @@ public final class GuiListener implements Listener {
                 player.sendMessage("§a[商店] 成功將自訂物品上架至分類 [" + categoryId + "]！售價: §f$" + shopManager.getEconomy().format(price));
                 topInv.setItem(ShopAdminGui.ADD_ITEM_INPUT_SLOT, null);
                 session.setCategoryId(categoryId);
+                var totalEntries = shopManager.getCatalogByCategory(categoryId);
+                int targetPage = Math.max(0, (totalEntries.size() - 1) / ShopGui.getPageSize());
+                session.setPage(targetPage);
                 ShopGui.openCategory(shopManager, player, session);
             } else {
                 player.sendMessage("§c[商店] 上架自訂物品失敗，請檢查後台日誌！");
@@ -968,6 +976,9 @@ public final class GuiListener implements Listener {
         } else if (returnTo == GuiSession.ViewType.CATEGORY) {
             session.setViewType(GuiSession.ViewType.CATEGORY);
             ShopGui.openCategory(shopManager, player, session);
+        } else if (returnTo == GuiSession.ViewType.ALL_ITEMS) {
+            session.setViewType(GuiSession.ViewType.ALL_ITEMS);
+            ShopGui.openAllItems(shopManager, player, session, session.getPage());
         } else {
             ShopGui.openMain(shopManager, player, session);
         }
@@ -1071,6 +1082,9 @@ public final class GuiListener implements Listener {
         } else if (returnTo == GuiSession.ViewType.CATEGORY) {
             session.setViewType(GuiSession.ViewType.CATEGORY);
             ShopGui.openCategory(shopManager, player, session);
+        } else if (returnTo == GuiSession.ViewType.ALL_ITEMS) {
+            session.setViewType(GuiSession.ViewType.ALL_ITEMS);
+            ShopGui.openAllItems(shopManager, player, session, session.getPage());
         } else if (returnTo == GuiSession.ViewType.SELLABLE_ITEMS) {
             session.setViewType(GuiSession.ViewType.SELLABLE_ITEMS);
             ShopGui.openSellableCatalog(shopManager, player, session, session.getPage());
@@ -1082,6 +1096,7 @@ public final class GuiListener implements Listener {
     private void refreshListingView(Player player, GuiSession session) {
         switch (session.getViewType()) {
             case CATEGORY -> ShopGui.openCategory(shopManager, player, session);
+            case ALL_ITEMS -> ShopGui.openAllItems(shopManager, player, session, session.getPage());
             case SEARCH -> ShopGui.openSearch(shopManager, player, session);
             case LISTINGS -> ShopGui.openMyListings(shopManager, player, session);
             case SELLABLE_ITEMS -> ShopGui.openSellableCatalog(shopManager, player, session, session.getPage());

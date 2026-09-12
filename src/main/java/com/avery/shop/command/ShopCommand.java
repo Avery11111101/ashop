@@ -208,7 +208,22 @@ public final class ShopCommand implements CommandExecutor, TabCompleter {
                     categoryId = args[2].toLowerCase();
                 } else {
                     var cat = catalog.categorize(hand.getType());
-                    categoryId = cat != null ? cat.getId() : "minerals";
+                    if (cat != null) {
+                        var matchedEntry = catalog.findMatching(hand);
+                        if (matchedEntry == null) {
+                            matchedEntry = new com.avery.shop.catalog.CatalogEntry(
+                                    com.avery.shop.catalog.ItemMatcher.fingerprint(hand),
+                                    hand, cat, hand.getType().name().toLowerCase(java.util.Locale.ROOT), null);
+                        }
+                        var subPath = com.avery.shop.shop.ShopSubcategoryResolver.resolve(cat, matchedEntry);
+                        if (subPath != null && !subPath.equals("all") && !subPath.isBlank()) {
+                            categoryId = cat.getId() + "/" + subPath;
+                        } else {
+                            categoryId = cat.getId();
+                        }
+                    } else {
+                        categoryId = "minerals";
+                    }
                 }
 
                 var mode = com.avery.shop.shop.TradeMode.BOTH;

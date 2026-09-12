@@ -25,6 +25,7 @@ public final class ShopGui {
     private static final int NEXT_SLOT = 53;
     private static final int BACK_SLOT = 49;
     private static final int SEARCH_SLOT = 48;
+    private static final int ALL_ITEMS_SLOT = 49;
     private static final int SELL_SLOT = 50;
 
     public static final int SELL_DEPOSIT_SIZE = 45;
@@ -94,6 +95,12 @@ public final class ShopGui {
                 locale.msg(player, "msg.gui.search.title"),
                 locale.msg(player, "msg.gui.search.lore1"),
                 locale.msg(player, "msg.gui.search.lore2")));
+
+        inv.setItem(ALL_ITEMS_SLOT, button(
+                Material.KNOWLEDGE_BOOK,
+                locale.msg(player, "msg.gui.all-items.title"),
+                locale.msg(player, "msg.gui.all-items.lore1"),
+                locale.msg(player, "msg.gui.all-items.lore2")));
 
         inv.setItem(SELL_SLOT, button(
                 Material.CHEST,
@@ -269,15 +276,15 @@ public final class ShopGui {
         var config = manager.getShopConfig();
 
         var children = config.getChildCategories(categoryId);
+        var entries = manager.getCatalogByCategory(categoryId);
         if (!children.isEmpty()) {
             var title = config.getCategoryDisplayName(player, categoryId);
-            openSubcategoryPage(manager, player, session, children, title);
+            openSubcategoryPage(manager, player, session, children, entries, title);
             return;
         }
 
         if (manager.usesCatalogBrowse()) {
             session.setCatalogBrowse(true);
-            var entries = manager.getCatalogByCategory(categoryId);
             var title = config.getCategoryDisplayName(player, categoryId)
                     + " " + locale.msg(player, "msg.gui.page", session.getPage() + 1);
             openCatalogPage(manager, player, session, entries, title);
@@ -292,34 +299,88 @@ public final class ShopGui {
 
     private static void openSubcategoryPage(ShopManager manager, Player player, GuiSession session,
                                             List<com.avery.shop.shop.ShopCategoryDefinition> children,
+                                            List<CatalogEntry> directEntries,
                                             String title) {
         var locale = manager.getPlugin().getLocaleService();
         var holder = new ShopInventoryHolder(ShopInventoryHolder.Kind.CATEGORY);
         var inv = createShopInventory(holder, ROWS * 9,
                 Component.text(title).color(NamedTextColor.GOLD).decorate(TextDecoration.BOLD),
                 session);
+        session.setCatalogBrowse(true);
 
-        int slotIndex = 0;
-        for (var category : children) {
-            if (!category.isEnabled()) continue;
-            if (!manager.isCategoryVisible(category.getId())) continue;
+        var visibleChildren = children.stream()
+                .filter(c -> c.isEnabled() && manager.isCategoryVisible(c.getId()))
+                .toList();
 
-            int row = 1 + slotIndex / 5;
-            int col = 2 + (slotIndex % 5);
-            int slot = row * 9 + col;
+        if (directEntries.isEmpty()) {
+            // 無直屬自訂商品時，保留原置中 5 欄排列
+            int slotIndex = 0;
+            for (var category : visibleChildren) {
+                int row = 1 + slotIndex / 5;
+                int col = 2 + (slotIndex % 5);
+                int slot = row * 9 + col;
 
-            session.getSlotSubcategoryMap().put(slot, category.getId());
+                session.getSlotSubcategoryMap().put(slot, category.getId());
 
-            var icon = new ItemStack(category.getIcon());
-            var meta = icon.getItemMeta();
-            meta.displayName(Component.text(manager.getShopConfig().getCategoryDisplayName(player, category.getId()))
-                    .color(NamedTextColor.YELLOW).decoration(TextDecoration.ITALIC, false));
+                var icon = new ItemStack(category.getIcon());
+                var meta = icon.getItemMeta();
+                meta.displayName(Component.text(manager.getShopConfig().getCategoryDisplayName(player, category.getId()))
+                        .color(NamedTextColor.YELLOW).decoration(TextDecoration.ITALIC, false));
 
-            int count = manager.getCategoryDisplayCount(category.getId());
-            meta.lore(buildSubcategoryLore(manager, player, locale, category.getId()));
-            icon.setItemMeta(meta);
-            inv.setItem(slot, icon);
-            slotIndex++;
+                meta.lore(buildSubcategoryLore(manager, player, locale, category.getId()));
+                icon.setItemMeta(meta);
+                inv.setItem(slot, tagShopGuiItem(icon));
+                slotIndex++;
+            }
+        } else {
+            // 包含直屬自訂商品時：上方排列子分類，下方排列直屬商品（支援分頁）
+            int childCount = visibleChildren.size();
+            int childRows = Math.max(1, (int) Math.ceil(childCount / 9.0));
+            int itemStartSlot = childRows * 9;
+            int itemSlotsPerPage = 45 - itemStartSlot;
+
+            int childIdx = 0;
+            int startOffset = (childRows == 1 && childCount < 9) ? (9 - childCount) / 2 : 0;
+            for (var category : visibleChildren) {
+                int slot = startOffset + childIdx;
+                session.getSlotSubcategoryMap().put(slot, category.getId());
+
+                var icon = new ItemStack(category.getIcon());
+                var meta = icon.getItemMeta();
+                meta.displayName(Component.text(manager.getShopConfig().getCategoryDisplayName(player, category.getId()))
+                        .color(NamedTextColor.YELLOW).decoration(TextDecoration.ITALIC, false));
+
+                meta.lore(buildSubcategoryLore(manager, player, locale, category.getId()));
+                icon.setItemMeta(meta);
+                inv.setItem(slot, tagShopGuiItem(icon));
+                childIdx++;
+            }
+
+            int page = session.getPage();
+            int totalPages = Math.max(1, (int) Math.ceil(directEntries.size() / (double) itemSlotsPerPage));
+            page = Math.clamp(page, 0, totalPages - 1);
+            session.setPage(page);
+
+            int start = page * itemSlotsPerPage;
+            int end = Math.min(start + itemSlotsPerPage, directEntries.size());
+            var systemName = locale.msg(player, "msg.system.shop-name");
+
+            for (int i = start; i < end; i++) {
+                var entry = directEntries.get(i);
+                int slot = itemStartSlot + (i - start);
+                renderCatalogItem(manager, player, session, inv, slot, entry, locale, systemName);
+            }
+
+            if (page > 0) {
+                inv.setItem(PREV_SLOT, button(Material.ARROW,
+                        locale.msg(player, "msg.gui.prev"),
+                        locale.msg(player, "msg.gui.prev.lore", page)));
+            }
+            if (page < totalPages - 1) {
+                inv.setItem(NEXT_SLOT, button(Material.ARROW,
+                        locale.msg(player, "msg.gui.next"),
+                        locale.msg(player, "msg.gui.next.lore", page + 2)));
+            }
         }
 
         inv.setItem(BACK_SLOT, button(Material.BARRIER, locale.msg(player, "msg.gui.back")));
@@ -382,45 +443,7 @@ public final class ShopGui {
         for (int i = start; i < end; i++) {
             var entry = allEntries.get(i);
             int slot = i - start;
-            session.getSlotCatalogMap().put(slot, entry.getKey());
-
-            var display = entry.getTemplate().clone();
-            var meta = display.getItemMeta();
-            var lore = new ArrayList<Component>();
-
-            var quote = manager.getCatalogPriceQuote(entry.getKey());
-            appendPriceLore(manager, player, locale, lore, quote,
-                    manager.getPricing().isEnabled());
-
-            lore.add(Component.text(locale.msg(player, "msg.gui.seller", systemName))
-                    .color(NamedTextColor.GRAY).decoration(TextDecoration.ITALIC, false));
-            lore.add(Component.empty());
-            var effectiveMode = manager.getShopConfig().getItemTradeMode(entry.getKey());
-            if (effectiveMode.allowsBuy()) {
-                lore.add(Component.text(locale.msg(player, "msg.gui.buy-one"))
-                        .color(NamedTextColor.GREEN).decoration(TextDecoration.ITALIC, false));
-                lore.add(Component.text(locale.msg(player, "msg.gui.buy-stack"))
-                        .color(NamedTextColor.GREEN).decoration(TextDecoration.ITALIC, false));
-                lore.add(Component.text(locale.msg(player, "msg.gui.buy-custom"))
-                        .color(NamedTextColor.YELLOW).decoration(TextDecoration.ITALIC, false));
-            } else if (effectiveMode == com.avery.shop.shop.TradeMode.SELL_ONLY) {
-                lore.add(Component.text("§e交易模式：只收不賣 (至 /shop sell 出售)")
-                        .decoration(TextDecoration.ITALIC, false));
-            } else if (effectiveMode == com.avery.shop.shop.TradeMode.DISABLED) {
-                lore.add(Component.text("§c交易模式：暫不開放交易")
-                        .decoration(TextDecoration.ITALIC, false));
-            } else {
-                lore.add(Component.text(locale.msg(player, "msg.gui.buy-disabled"))
-                        .color(NamedTextColor.RED).decoration(TextDecoration.ITALIC, false));
-            }
-            if (player.hasPermission("shop.admin")) {
-                lore.add(Component.text(locale.msg(player, "msg.gui.admin.item.hint"))
-                        .color(NamedTextColor.RED).decoration(TextDecoration.ITALIC, false));
-            }
-
-            meta.lore(lore);
-            display.setItemMeta(meta);
-            inv.setItem(slot, display);
+            renderCatalogItem(manager, player, session, inv, slot, entry, locale, systemName);
         }
 
         addNavButtons(manager, player, session, inv, page, totalPages);
@@ -431,6 +454,64 @@ public final class ShopGui {
             inv.setItem(ShopAdminGui.ADMIN_ADD_ITEM_SLOT, ShopAdminGui.adminAddItemButton(manager, player));
         }
         player.openInventory(inv);
+    }
+
+    public static void openAllItems(ShopManager manager, Player player, GuiSession session, int page) {
+        session.setViewType(GuiSession.ViewType.ALL_ITEMS);
+        session.setCatalogBrowse(true);
+        session.setPage(page);
+        session.clearSlotMap();
+
+        var locale = manager.getPlugin().getLocaleService();
+        var allEntries = manager.getShopConfig().getAllEnabledEntries();
+        var title = locale.msg(player, "msg.gui.all-items.title")
+                + " " + locale.msg(player, "msg.gui.page", page + 1);
+        openCatalogPage(manager, player, session, allEntries, title);
+    }
+
+    static void renderCatalogItem(ShopManager manager, Player player, GuiSession session,
+                                  org.bukkit.inventory.Inventory inv, int slot,
+                                  CatalogEntry entry, com.avery.shop.locale.LocaleService locale,
+                                  String systemName) {
+        session.getSlotCatalogMap().put(slot, entry.getKey());
+
+        var display = entry.getTemplate().clone();
+        var meta = display.getItemMeta();
+        var lore = new ArrayList<Component>();
+
+        var quote = manager.getCatalogPriceQuote(entry.getKey());
+        appendPriceLore(manager, player, locale, lore, quote,
+                manager.getPricing().isEnabled());
+
+        lore.add(Component.text(locale.msg(player, "msg.gui.seller", systemName))
+                .color(NamedTextColor.GRAY).decoration(TextDecoration.ITALIC, false));
+        lore.add(Component.empty());
+        var effectiveMode = manager.getShopConfig().getItemTradeMode(entry.getKey());
+        if (effectiveMode.allowsBuy()) {
+            lore.add(Component.text(locale.msg(player, "msg.gui.buy-one"))
+                    .color(NamedTextColor.GREEN).decoration(TextDecoration.ITALIC, false));
+            lore.add(Component.text(locale.msg(player, "msg.gui.buy-stack"))
+                    .color(NamedTextColor.GREEN).decoration(TextDecoration.ITALIC, false));
+            lore.add(Component.text(locale.msg(player, "msg.gui.buy-custom"))
+                    .color(NamedTextColor.YELLOW).decoration(TextDecoration.ITALIC, false));
+        } else if (effectiveMode == com.avery.shop.shop.TradeMode.SELL_ONLY) {
+            lore.add(Component.text("§e交易模式：只收不賣 (至 /shop sell 出售)")
+                    .decoration(TextDecoration.ITALIC, false));
+        } else if (effectiveMode == com.avery.shop.shop.TradeMode.DISABLED) {
+            lore.add(Component.text("§c交易模式：暫不開放交易")
+                    .decoration(TextDecoration.ITALIC, false));
+        } else {
+            lore.add(Component.text(locale.msg(player, "msg.gui.buy-disabled"))
+                    .color(NamedTextColor.RED).decoration(TextDecoration.ITALIC, false));
+        }
+        if (player.hasPermission("shop.admin")) {
+            lore.add(Component.text(locale.msg(player, "msg.gui.admin.item.hint"))
+                    .color(NamedTextColor.RED).decoration(TextDecoration.ITALIC, false));
+        }
+
+        meta.lore(lore);
+        display.setItemMeta(meta);
+        inv.setItem(slot, tagShopGuiItem(display));
     }
 
     public static void openBuyQuantity(ShopManager manager, Player player, GuiSession session,
@@ -727,6 +808,7 @@ public final class ShopGui {
     public static int getNextSlot() { return NEXT_SLOT; }
     public static int getBackSlot() { return BACK_SLOT; }
     public static int getSearchSlot() { return SEARCH_SLOT; }
+    public static int getAllItemsSlot() { return ALL_ITEMS_SLOT; }
     public static int getSellSlot() { return SELL_SLOT; }
     public static int getPageSize() { return PAGE_SIZE; }
 }

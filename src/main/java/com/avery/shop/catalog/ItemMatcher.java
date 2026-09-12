@@ -67,7 +67,12 @@ public final class ItemMatcher {
     }
 
     public static String fingerprint(ItemStack stack) {
-        if (stack == null) return "air";
+        if (stack == null || stack.getType().isAir()) return "air";
+        if (stack.getAmount() != 1) {
+            var copy = stack.clone();
+            copy.setAmount(1);
+            stack = copy;
+        }
         var sb = new StringBuilder(stack.getType().name());
 
         var meta = stack.getItemMeta();
