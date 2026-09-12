@@ -3,7 +3,7 @@ plugins {
 }
 
 group = "com.avery"
-version = "1.8.0-beta.3"
+version = "1.8.0-beta.4"
 
 repositories {
     mavenCentral()
@@ -50,8 +50,13 @@ val testUpdate = tasks.register<JavaExec>("testUpdate") {
     mainClass.set("com.avery.shop.update.UpdateServiceTest")
 }
 
+val testPriceModel = tasks.register<JavaExec>("testPriceModel") {
+    classpath = sourceSets["test"].runtimeClasspath
+    mainClass.set("com.avery.shop.catalog.SurvivalPriceModelTest")
+}
+
 tasks.check {
-    dependsOn(verifyCategories, testMigration, testUpdate)
+    dependsOn(verifyCategories, testMigration, testUpdate, testPriceModel)
 }
 
 java {

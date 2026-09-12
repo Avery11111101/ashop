@@ -3,6 +3,12 @@
 All notable changes to ashop are documented here.  
 ashop 的所有重要變更皆記錄於此。
 
+## [1.8.0-beta.4] - 2026-09-12
+
+### Fixed / 修復
+- **Survival Price Model Netherite Recursion Fix (修復定價模型獄髓物品無限遞迴 StackOverflowError)** — Fixed infinite recursion in `SurvivalPriceModel` caused by matching on `NETHERITE_` prefix before validating tool/armor suffixes (`_HELMET`, `_SWORD`, etc.). Non-equipment netherite materials (`NETHERITE_INGOT`, `NETHERITE_SCRAP`, `NETHERITE_BLOCK`, `NETHERITE_UPGRADE_SMITHING_TEMPLATE`) now cleanly return base resource or pattern pricing, and `calculateBuyPrice(Material, ItemCategory)` overload was introduced for modular pricing.  
+  **修復定價模型獄髓物品無限遞迴錯誤** — 修復 `SurvivalPriceModel` 中因在驗證工具/裝備後綴前過早匹配 `NETHERITE_` 前綴（如 `NETHERITE_INGOT` 獄髓錠），導致在計算獄髓鍛造升級配方時與 `res()` 方法相互呼叫引發 `StackOverflowError` 的問題。非裝備類獄髓物品現在能精準回傳基礎資源單價，並新增 `calculateBuyPrice(Material, ItemCategory)` 解耦多載。
+
 ## [1.8.0-beta.3] - 2026-09-12
 
 ### Added / 新增

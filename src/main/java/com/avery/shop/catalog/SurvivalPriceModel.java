@@ -142,30 +142,45 @@ public final class SurvivalPriceModel {
   private SurvivalPriceModel() {}
 
   public static double calculateBuyPrice(CatalogEntry entry) {
+    if (entry == null) return 10.0;
     var stack = entry.getTemplate();
-    var material = stack.getType();
+    var material = stack != null ? stack.getType() : null;
+    if (material == null) return 10.0;
 
+    double basePrice;
     var anchor = BUY_ANCHORS.get(material);
     if (anchor != null) {
-      return roundPrice(anchor * variantMultiplier(stack, entry));
+      basePrice = anchor;
+    } else if (LOOT_PRICES.containsKey(material)) {
+      basePrice = LOOT_PRICES.get(material);
+    } else {
+      var crafted = craftedPrice(material);
+      if (crafted > 0) {
+        basePrice = crafted;
+      } else if (BASE_RESOURCES.containsKey(material)) {
+        basePrice = BASE_RESOURCES.get(material);
+      } else {
+        basePrice = patternPrice(material, entry.getCategory());
+      }
     }
+    return roundPrice(basePrice * variantMultiplier(stack, entry));
+  }
+
+  public static double calculateBuyPrice(Material material, ItemCategory category) {
+    if (material == null) return 10.0;
+    var anchor = BUY_ANCHORS.get(material);
+    if (anchor != null) return roundPrice(anchor);
 
     var loot = LOOT_PRICES.get(material);
-    if (loot != null) {
-      return roundPrice(loot * variantMultiplier(stack, entry));
-    }
+    if (loot != null) return roundPrice(loot);
 
     var crafted = craftedPrice(material);
-    if (crafted > 0) {
-      return roundPrice(crafted * variantMultiplier(stack, entry));
-    }
+    if (crafted > 0) return roundPrice(crafted);
 
-  var base = BASE_RESOURCES.get(material);
-    if (base != null) {
-      return roundPrice(base * variantMultiplier(stack, entry));
-    }
+    var base = BASE_RESOURCES.get(material);
+    if (base != null) return roundPrice(base);
 
-    return roundPrice(patternPrice(material, entry) * variantMultiplier(stack, entry));
+    return roundPrice(patternPrice(material, category));
   }
 
   public static Optional<Double> sellRatioOverride(Material material) {
@@ -273,16 +288,6 @@ public final class SurvivalPriceModel {
 
   private static double toolOrArmorPrice(Material material) {
     var name = material.name();
-    if (name.startsWith("NETHERITE_")) {
-      var diamondName = name.replace("NETHERITE_", "DIAMOND_");
-      var diamondMat = Material.matchMaterial(diamondName);
-      double diamondCost = diamondMat != null ? toolOrArmorPrice(diamondMat) : 1000.0;
-      return diamondCost + res(Material.NETHERITE_INGOT) + res(Material.NETHERITE_UPGRADE_SMITHING_TEMPLATE);
-    }
-
-    var tier = toolTier(material);
-    if (tier == null) return 0;
-
     int units;
     double stickCost = 0;
 
@@ -302,6 +307,16 @@ public final class SurvivalPriceModel {
     } else {
       return 0;
     }
+
+    if (name.startsWith("NETHERITE_")) {
+      var diamondName = name.replace("NETHERITE_", "DIAMOND_");
+      var diamondMat = Material.matchMaterial(diamondName);
+      double diamondCost = diamondMat != null ? toolOrArmorPrice(diamondMat) : 1000.0;
+      return diamondCost + res(Material.NETHERITE_INGOT) + res(Material.NETHERITE_UPGRADE_SMITHING_TEMPLATE);
+    }
+
+    var tier = toolTier(material);
+    if (tier == null) return 0;
 
     return tier.ingotPrice * units + stickCost;
   }
@@ -430,18 +445,23 @@ public final class SurvivalPriceModel {
   }
 
   private static double variantMultiplier(ItemStack stack, CatalogEntry entry) {
-    var meta = stack.getItemMeta();
+    if (stack == null) return 1.0;
+    try {
+      var meta = stack.getItemMeta();
 
-    if (meta instanceof PotionMeta pm) {
-      return potionFactor(pm.getBasePotionType(), stack.getType());
-    }
-
-    if (meta instanceof EnchantmentStorageMeta esm && !esm.getStoredEnchants().isEmpty()) {
-      double total = 1.0;
-      for (var enchEntry : esm.getStoredEnchants().entrySet()) {
-        total += enchantBookFactor(enchEntry.getKey(), enchEntry.getValue());
+      if (meta instanceof PotionMeta pm) {
+        return potionFactor(pm.getBasePotionType(), stack.getType());
       }
-      return total;
+
+      if (meta instanceof EnchantmentStorageMeta esm && !esm.getStoredEnchants().isEmpty()) {
+        double total = 1.0;
+        for (var enchEntry : esm.getStoredEnchants().entrySet()) {
+          total += enchantBookFactor(enchEntry.getKey(), enchEntry.getValue());
+        }
+        return total;
+      }
+    } catch (Throwable ignored) {
+      // 容錯防護（如無伺服器執行個體環境測試）
     }
 
     if (entry.getDisplayTag() != null && !entry.getDisplayTag().isBlank()) {
@@ -493,6 +513,9 @@ public final class SurvivalPriceModel {
   private static double res(Material material) {
     if (BUY_ANCHORS.containsKey(material)) return BUY_ANCHORS.get(material);
     if (LOOT_PRICES.containsKey(material)) return LOOT_PRICES.get(material);
+    if (BASE_RESOURCES.containsKey(material) && material != Material.GRANITE && material != Material.ANDESITE) {
+      return BASE_RESOURCES.get(material);
+    }
     var crafted = craftedPrice(material);
     if (crafted > 0) return crafted;
     return BASE_RESOURCES.getOrDefault(material, 3.0);
