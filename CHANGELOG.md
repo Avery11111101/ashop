@@ -3,6 +3,16 @@
 All notable changes to ashop are documented here.  
 ashop 的所有重要變更皆記錄於此。
 
+## [1.9.0] - 2026-09-12
+
+### Added / 新增
+- **Dedicated Top-Level Resource Categories & Strict Filtering (頂層獨立五大基礎資源分類與精準過濾)** — Elevated 5 primary gatherable survival resources into independent top-level categories: Logs (`LOGS`), Pure Stones (`STONES`), Farm Crops (`CROPS`), Raw Meat (`RAW_MEAT`), and Minerals (`MINERALS`). Strict filtering ensures only direct mining/harvesting products are included, excluding processed stairs, slabs, ingots, compacted blocks, and cooked foods.  
+  **頂層獨立五大基礎資源分類與精準過濾** — 將原木木材 (`LOGS`)、天然石材 (`STONES`)、農耕作物 (`CROPS`)、生鮮肉品 (`RAW_MEAT`) 與礦產原礦 (`MINERALS`) 提升為頂層主分類（Slot 0~4）。嚴密過濾機制確保僅納入純採集收穫物，排除階梯、半磚、石磚、金屬錠與合成方塊。
+- **Selective Default Trade Mode Control (預設收購模式精確管控)** — Implemented selective default trade modes: only the 5 primary gatherable resource categories default to `TradeMode.BOTH` (buy & sell enabled). All remaining 12 categories (building blocks, tools, weapons, armor, cooked food, potions, books, redstone, transport, decorations, misc) default to `TradeMode.BUY_ONLY` to prevent economy collapse from mass selling non-resource or manufactured items.  
+  **預設收購模式精確管控** — 僅 5 大基礎資源分類預設開啟系統收購 (`TradeMode.BOTH`)，其餘 12 大加工、裝備與衍生分類預設為只賣不收 (`TradeMode.BUY_ONLY`)，杜絕非採集商品無限傾銷沖垮伺服器經濟。
+- **Documentation & Category Matrix (分類體系表與文檔更新)** — Added comprehensive default category matrix and hierarchy specifications to `README.md`.  
+  **分類體系說明更新** — 於 `README.md` 新增完整預設 17 大分類表格與收購模式說明。
+
 ## [1.8.0-beta.1] - 2026-09-12
 
 ### Added / 新增
