@@ -3,6 +3,16 @@
 All notable changes to ashop are documented here.  
 ashop 的所有重要變更皆記錄於此。
 
+## [1.8.0-beta.1] - 2026-09-12
+
+### Added / 新增
+- **Dedicated Mineral Top-Level Category & Silk Touch Subcategories (頂層獨立礦物分類與絲綢鎬子分類)** — Added a dedicated top-level `MINERALS` category (Slot 0), cleanly split into `silk_touch` (ore blocks requiring silk touch to drop as blocks) and `non_silk_touch` (raw ores, ingots, gems, nuggets, and compressed blocks). Block category is now cleanly purged of mineral clutter.  
+  **頂層獨立礦物分類與子分類** — 新增頂層獨立主分類「礦物」（Slot 0），並細分為「方塊類礦物（絲綢鎬採集）」與「無絲綢鎬採集礦物（粗礦、寶石、金屬錠等）」。原有方塊分類全面移出礦物，回歸乾淨建材。
+- **Fortune-Proof Pricing Model & Rarity Rebalancing (防時運鎬套利定價模型與稀有度重構)** — Adjusted raw ore buying/selling price formulas and survival price anchor baselines to mathematically prevent infinite money exploits using Fortune III picks, while giving deepslate variants and rare ores (like deepslate emerald ore) authentic survival rarity value.  
+  **防時運鎬套利定價模型與稀有度重構** — 嚴格調整原礦售價與收購比率，確保原礦售價高於時運 III 期望掉落價值，杜絕透過絲綢鎬速挖、時運鎬暴擊再賣回商店的洗錢漏洞；同時賦予深板岩綠寶石等罕見原礦應有的稀有度價值。
+- **Admin Custom Item Selling Workbench & Quick Command (管理員自訂物品上架工作台與指令)** — Admins can now list and sell custom items (custom name, lore, enchants, custom model data, and NBT) via an intuitive 6-row GUI workbench (Slot 47) or quick command `/shop add <price> [category] [mode]`. Items are safely refunded on inventory close or disconnect to prevent loss.  
+  **管理員自訂物品上架販售系統** — 提供管理員專屬 6 行 GUI 工作台（分類頁面 Slot 47）與 `/shop add <價格> [分類] [模式]` 指令，完整保留自訂物品之客製化名稱、Lore、附魔與 NBT 數據（以 Base64 持久化），並具備返回、關閉與斷線安全退還防吃裝機制。
+
 ## [1.7.4] - 2026-09-12
 
 ### Fixed / 修復

@@ -6,4 +6,5 @@ build/
 /*.jar
 README.AI.md
 gh.zip
+bin/
 *_Conflict*
