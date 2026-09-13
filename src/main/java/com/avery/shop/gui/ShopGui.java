@@ -109,6 +109,7 @@ public final class ShopGui {
                 locale.msg(player, "msg.gui.sell.lore2")));
 
         if (player.hasPermission("shop.admin")) {
+            inv.setItem(ShopAdminGui.ADMIN_CREATE_CATEGORY_MAIN_SLOT, ShopAdminGui.adminCreateCategoryButton(manager, player));
             inv.setItem(ShopAdminGui.ADMIN_SETTINGS_SLOT, ShopAdminGui.adminMainButton(manager, player));
         }
 
@@ -385,6 +386,7 @@ public final class ShopGui {
 
         inv.setItem(BACK_SLOT, button(Material.BARRIER, locale.msg(player, "msg.gui.back")));
         if (player.hasPermission("shop.admin") && session.getCategoryId() != null) {
+            inv.setItem(ShopAdminGui.ADMIN_CREATE_SUBCATEGORY_SLOT, ShopAdminGui.adminCreateSubcategoryButton(manager, player));
             inv.setItem(ShopAdminGui.ADMIN_CATEGORY_SLOT, ShopAdminGui.adminCategoryButton(manager, player));
             inv.setItem(ShopAdminGui.ADMIN_ADD_ITEM_SLOT, ShopAdminGui.adminAddItemButton(manager, player));
         }
@@ -450,6 +452,7 @@ public final class ShopGui {
         if (session.getViewType() == GuiSession.ViewType.CATEGORY
                 && player.hasPermission("shop.admin")
                 && session.getCategoryId() != null) {
+            inv.setItem(ShopAdminGui.ADMIN_CREATE_SUBCATEGORY_SLOT, ShopAdminGui.adminCreateSubcategoryButton(manager, player));
             inv.setItem(ShopAdminGui.ADMIN_CATEGORY_SLOT, ShopAdminGui.adminCategoryButton(manager, player));
             inv.setItem(ShopAdminGui.ADMIN_ADD_ITEM_SLOT, ShopAdminGui.adminAddItemButton(manager, player));
         }

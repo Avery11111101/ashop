@@ -3,6 +3,16 @@
 All notable changes to ashop are documented here.  
 ashop 的所有重要變更皆記錄於此。
 
+## [1.8.0-beta.7] - 2026-09-13
+
+### Added / 新增
+- **Main Menu Create Category Button (商店主選單新增頂層分類按鈕)** — Added an admin button (`ADMIN_CREATE_CATEGORY_MAIN_SLOT = 45`, Material: `CHEST`) to the bottom-left corner of the main shop menu. Admins with `shop.admin` permission can click to input a category ID and display name via chat prompt (supports `id:Display Name` or plain `Category Name`), instantly generating a new `shop/<categoryId>/items.yml` category and redirecting directly into it.  
+  **商店主選單新增頂層分類按鈕** — 主畫面面板左下角（Slot 45，箱子圖示）新增「新增頂層分類」管理員按鈕。具備 `shop.admin` 權限之管理員點擊後，可於聊天欄輸入新分類 ID 與顯示名稱（支援 `分類ID:顯示名稱` 或純輸入 `分類名稱`），即時生成對應 `shop/<categoryId>/items.yml` 並無縫開啟該分類目錄。
+- **In-Category Create Subcategory Button (分類頁面建立全新子分類按鈕)** — Added an admin button (`ADMIN_CREATE_SUBCATEGORY_SLOT = 46`, Material: `CHEST_MINECART`) across all category listing and subcategory navigation pages. Allows admins to dynamically create nested subcategories under the current parent category (e.g. `weapons/magic` or `minerals/rare`) via interactive chat prompt without manually creating folders in the file system.  
+  **分類頁面建立全新子分類按鈕** — 在所有分類導航與商品瀏覽頁面的管理員控制列（Slot 46，儲物車圖示）新增「建立新子分類」按鈕。管理員可直接在目前所在的分類下即時建立子資料夾結構與 `items.yml`（例如在 `weapons` 下新增 `magic` 形成 `weapons/magic`），省去手動開啟伺服器後台建檔繁瑣流程。
+- **Admin Custom Item Listing Flow Enhancement (管理員自訂物品上架機制無縫整合)** — Strengthened custom item listing workflow through GUI and backend services. Automatically generates category definitions if not pre-existing, normalizes stack items, preserves complete custom names, Lore, enchantments, and NBT attributes, and automatically navigates the admin to the target page upon listing.  
+  **管理員自訂物品上架機制無縫整合** — 全面升級自訂物品上架流程與底層 API。支援放置任何自訂名稱、Lore、附魔與 NBT 神裝，若該分類尚未建立會自動補全基礎 YAML 結構，上架成功後立即重載記憶體快取並定位至該商品頁數。
+
 ## [1.8.0-beta.6] - 2026-09-13
 
 ### Added / 新增

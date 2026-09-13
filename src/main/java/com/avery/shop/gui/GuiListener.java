@@ -515,6 +515,20 @@ public final class GuiListener implements Listener {
             return;
         }
 
+        if (slot == ShopAdminGui.ADMIN_CREATE_CATEGORY_MAIN_SLOT && player.hasPermission("shop.admin")) {
+            session.setShopHolder(null);
+            player.closeInventory();
+            String promptText = "§e" + locale.msg(player, "msg.gui.admin.category.create.prompt") + "\n§7"
+                    + locale.msg(player, "msg.gui.admin.category.create.prompt-example");
+            ChatPrompt.start(shopManager.getPlugin(), player, promptText, (input) -> {
+                handleAdminChat(player, locale, input, "CREATE_TOP_CATEGORY", null, null);
+            }, () -> {
+                var activeSession = getOrCreateSession(player);
+                ShopGui.openMain(shopManager, player, activeSession);
+            });
+            return;
+        }
+
         var categoryId = session.getSlotSubcategoryMap().get(slot);
         if (categoryId != null) {
             if (player.hasPermission("shop.admin") && isAdminEditClick(event)) {
@@ -568,6 +582,22 @@ public final class GuiListener implements Listener {
                 && session.getCategoryId() != null) {
             session.setReturnViewType(session.getViewType());
             ShopAdminGui.openAdminAddItem(shopManager, player, session, session.getCategoryId());
+            return;
+        }
+        if (slot == ShopAdminGui.ADMIN_CREATE_SUBCATEGORY_SLOT && player.hasPermission("shop.admin")
+                && session.getCategoryId() != null) {
+            var currentCategoryId = session.getCategoryId();
+            session.setShopHolder(null);
+            player.closeInventory();
+            String promptText = "§e" + locale.msg(player, "msg.gui.admin.subcategory.create.prompt", currentCategoryId) + "\n§7"
+                    + locale.msg(player, "msg.gui.admin.subcategory.create.prompt-example");
+            ChatPrompt.start(shopManager.getPlugin(), player, promptText, (input) -> {
+                handleAdminChat(player, locale, input, "CREATE_SUBCATEGORY", null, null);
+            }, () -> {
+                var activeSession = getOrCreateSession(player);
+                activeSession.setCategoryId(currentCategoryId);
+                ShopGui.openCategory(shopManager, player, activeSession);
+            });
             return;
         }
         if (slot == ShopGui.getPrevSlot()) {
@@ -1220,6 +1250,86 @@ public final class GuiListener implements Listener {
                 session.setAdminAddPrice(price);
                 player.sendMessage("§a自訂上架售價已設定為：$" + shopManager.getEconomy().format(price));
                 ShopAdminGui.openAdminAddItem(shopManager, player, session, session.getCategoryId());
+                return;
+            }
+
+            if ("CREATE_TOP_CATEGORY".equals(type)) {
+                String raw = input.trim();
+                if (raw.isEmpty()) {
+                    player.sendMessage("§c" + locale.msg(player, "msg.gui.admin.category.create.empty"));
+                    ShopGui.openMain(shopManager, player, session);
+                    return;
+                }
+                String idPart = raw;
+                String namePart = raw;
+                if (raw.contains(":")) {
+                    var parts = raw.split(":", 2);
+                    idPart = parts[0].trim();
+                    namePart = parts[1].trim();
+                } else if (raw.contains("：")) {
+                    var parts = raw.split("：", 2);
+                    idPart = parts[0].trim();
+                    namePart = parts[1].trim();
+                }
+                String cleanId = idPart.toLowerCase(java.util.Locale.ROOT).replaceAll("[^a-z0-9_-]", "_");
+                if (cleanId.isEmpty()) {
+                    player.sendMessage("§c" + locale.msg(player, "msg.gui.admin.category.create.invalid-id"));
+                    ShopGui.openMain(shopManager, player, session);
+                    return;
+                }
+                boolean ok = admin.createCategory(cleanId, namePart, org.bukkit.Material.CHEST, shopManager.getCatalog());
+                if (ok) {
+                    player.sendMessage("§a" + locale.msg(player, "msg.gui.admin.category.create.success", namePart, cleanId));
+                    session.setCategoryId(cleanId);
+                    session.setPage(0);
+                    ShopGui.openCategory(shopManager, player, session);
+                } else {
+                    player.sendMessage("§c" + locale.msg(player, "msg.gui.admin.category.create.failed", cleanId));
+                    ShopGui.openMain(shopManager, player, session);
+                }
+                return;
+            }
+
+            if ("CREATE_SUBCATEGORY".equals(type)) {
+                String parentId = session.getCategoryId();
+                if (parentId == null || parentId.isBlank()) {
+                    ShopGui.openMain(shopManager, player, session);
+                    return;
+                }
+                String raw = input.trim();
+                if (raw.isEmpty()) {
+                    player.sendMessage("§c" + locale.msg(player, "msg.gui.admin.category.create.empty"));
+                    ShopGui.openCategory(shopManager, player, session);
+                    return;
+                }
+                String idPart = raw;
+                String namePart = raw;
+                if (raw.contains(":")) {
+                    var parts = raw.split(":", 2);
+                    idPart = parts[0].trim();
+                    namePart = parts[1].trim();
+                } else if (raw.contains("：")) {
+                    var parts = raw.split("：", 2);
+                    idPart = parts[0].trim();
+                    namePart = parts[1].trim();
+                }
+                String cleanSubId = idPart.toLowerCase(java.util.Locale.ROOT).replaceAll("[^a-z0-9_-]", "_");
+                if (cleanSubId.isEmpty()) {
+                    player.sendMessage("§c" + locale.msg(player, "msg.gui.admin.category.create.invalid-id"));
+                    ShopGui.openCategory(shopManager, player, session);
+                    return;
+                }
+                String fullSubcategoryId = parentId + "/" + cleanSubId;
+                boolean ok = admin.createCategory(fullSubcategoryId, namePart, org.bukkit.Material.CHEST_MINECART, shopManager.getCatalog());
+                if (ok) {
+                    player.sendMessage("§a" + locale.msg(player, "msg.gui.admin.subcategory.create.success", namePart, fullSubcategoryId));
+                    session.setCategoryId(fullSubcategoryId);
+                    session.setPage(0);
+                    ShopGui.openCategory(shopManager, player, session);
+                } else {
+                    player.sendMessage("§c" + locale.msg(player, "msg.gui.admin.category.create.failed", fullSubcategoryId));
+                    ShopGui.openCategory(shopManager, player, session);
+                }
                 return;
             }
         });

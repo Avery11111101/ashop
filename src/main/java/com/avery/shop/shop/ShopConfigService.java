@@ -654,6 +654,39 @@ public final class ShopConfigService {
         return true;
     }
 
+    public boolean createCategory(String categoryId, String displayName, Material icon, ItemCatalog catalog) {
+        if (categoryId == null || categoryId.isBlank()) return false;
+        var cleanId = categoryId.trim().replace('\\', '/').replaceAll("/+", "/");
+        if (cleanId.startsWith("/")) cleanId = cleanId.substring(1);
+        if (cleanId.endsWith("/")) cleanId = cleanId.substring(0, cleanId.length() - 1);
+        if (cleanId.isBlank()) return false;
+
+        var file = getCategoryFile(cleanId);
+        if (file.exists()) {
+            return false;
+        }
+
+        var dir = file.getParentFile();
+        if (!dir.exists()) {
+            dir.mkdirs();
+        }
+
+        var yaml = new YamlConfiguration();
+        yaml.set("category", cleanId);
+        yaml.set("display-name", (displayName != null && !displayName.isBlank()) ? displayName.trim() : cleanId);
+        yaml.set("icon", (icon != null && !icon.isAir()) ? icon.name() : Material.CHEST.name());
+        yaml.set("enabled", true);
+        yaml.set("trade-mode", TradeMode.BOTH.name());
+        yaml.set("allow-buy", true);
+        yaml.set("slot", defaultSlotFor(cleanId));
+        yaml.set("default-price", globalDefaultPrice());
+        yaml.createSection("items");
+
+        saveYaml(file, yaml);
+        load(catalog);
+        return true;
+    }
+
     private double resolveItemPrice(org.bukkit.configuration.ConfigurationSection section,
                                     String catalogKey, String materialId,
                                     ItemCatalog catalog, double fallback) {

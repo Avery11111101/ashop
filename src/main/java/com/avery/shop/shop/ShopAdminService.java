@@ -2,6 +2,7 @@ package com.avery.shop.shop;
 
 import com.avery.shop.ShopPlugin;
 import com.avery.shop.catalog.ItemCatalog;
+import org.bukkit.Material;
 import org.bukkit.configuration.file.YamlConfiguration;
 
 import java.io.File;
@@ -287,6 +288,10 @@ public final class ShopAdminService {
     public boolean addCustomItem(String categoryId, org.bukkit.inventory.ItemStack stack,
                                  double price, TradeMode tradeMode, ItemCatalog catalog) {
         return shopConfig.addCustomItem(categoryId, stack, price, tradeMode, catalog);
+    }
+
+    public boolean createCategory(String categoryId, String displayName, Material icon, ItemCatalog catalog) {
+        return shopConfig.createCategory(categoryId, displayName, icon, catalog);
     }
 
     private String findYamlItemPath(YamlConfiguration yaml, String catalogKey, ItemCatalog catalog) {

@@ -21,6 +21,8 @@ public final class ShopAdminGui {
     public static final int ADMIN_SETTINGS_SLOT = 52;
     public static final int ADMIN_CATEGORY_SLOT = 48;
     public static final int ADMIN_ADD_ITEM_SLOT = 47;
+    public static final int ADMIN_CREATE_CATEGORY_MAIN_SLOT = 45;
+    public static final int ADMIN_CREATE_SUBCATEGORY_SLOT = 46;
 
     public static final int ADD_ITEM_INFO_SLOT = 4;
     public static final int ADD_ITEM_INPUT_SLOT = 13;
@@ -259,6 +261,24 @@ public final class ShopAdminGui {
                 "§a§l[+ 上架新物品 / 自訂物品]",
                 "§7點擊開啟管理員上架工作台",
                 "§7可放入自訂名稱/Lore/附魔的自訂物品進行販售！");
+    }
+
+    public static ItemStack adminCreateCategoryButton(ShopManager manager, Player player) {
+        var locale = manager.getPlugin().getLocaleService();
+        return ShopGui.button(
+                Material.CHEST,
+                locale.msg(player, "msg.gui.admin.category.create.button"),
+                locale.msg(player, "msg.gui.admin.category.create.lore1"),
+                locale.msg(player, "msg.gui.admin.category.create.lore2"));
+    }
+
+    public static ItemStack adminCreateSubcategoryButton(ShopManager manager, Player player) {
+        var locale = manager.getPlugin().getLocaleService();
+        return ShopGui.button(
+                Material.CHEST_MINECART,
+                locale.msg(player, "msg.gui.admin.subcategory.create.button"),
+                locale.msg(player, "msg.gui.admin.subcategory.create.lore1"),
+                locale.msg(player, "msg.gui.admin.subcategory.create.lore2"));
     }
 
     public static void openAdminAddItem(ShopManager manager, Player player, GuiSession session, String categoryId) {
