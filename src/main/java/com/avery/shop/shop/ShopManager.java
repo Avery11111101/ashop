@@ -488,7 +488,9 @@ public final class ShopManager {
 
     private static boolean isSellGuiMarker(String plain) {
         return plain.contains("單價：") || plain.contains("小計：") || plain.contains("系統不收購")
-                || plain.contains("Unit:") || plain.contains("Subtotal:") || plain.contains("Not Accepted");
+                || plain.contains("Unit:") || plain.contains("Subtotal:") || plain.contains("Not Accepted")
+                || plain.contains("原買價：") || plain.contains("商店售價：")
+                || plain.contains("Shop Buy Price:") || plain.contains("Shop Price:");
     }
 
     /** 剝除收購箱預覽標籤，完整還原物品原始 Lore 與 PDC */

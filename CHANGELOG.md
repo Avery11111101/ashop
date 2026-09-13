@@ -3,6 +3,12 @@
 All notable changes to ashop are documented here.  
 ashop 的所有重要變更皆記錄於此。
 
+## [1.8.0-beta.9] - 2026-09-13
+
+### Added / 新增
+- **Sell Chest Valuation & Comprehensive Estimation Feature (收購箱價值估計與全面統計功能)** — Resolved GitHub Issue #2. In the sell-to-system panel (`SELL_TO_SYSTEM`), the summary button (`SELL_TOTAL_SLOT`) now displays comprehensive valuation information: total deposited stacks and items, total shop purchase valuation across all deposited items, breakdown of sellable vs. non-sellable items, original purchase cost for sellable items, estimated instant sell payout, and estimated recovery rate percentage. Deposited items now also preview their shop buy price alongside unit sell prices, and non-sellable items clearly show warnings that they will be returned upon confirmation.  
+  **收購箱價值估計與全面統計功能** — 實做 GitHub Issue #2。收購箱（`/shop sell`）介面底部的總計按鈕（`SELL_TOTAL_SLOT`）升級為完整價值估計面板：包含總放入物品組數與個數、全部物品的商店購買總估值、可收購與不可收購統計、可收購物品的原購買成本、現在賣掉可獲得的收購總額，以及預估回收折率（%）。同時在放入的各商品標籤中同步標註商店原買價，若有不可收購之物品亦清晰標示並註明出售時退還背包。
+
 ## [1.8.0-beta.8] - 2026-09-13
 
 ### Fixed / 修復

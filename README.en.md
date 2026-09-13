@@ -47,6 +47,7 @@ Use `/shop price` to check **system sell and buyback prices** (with trends).
 ## Other Features
 
 - **Full vanilla catalog** — potions, enchanted books, NBT variants
+- **Sell Chest Valuation & Estimation** — View total shop buy cost, sellable vs non-sellable counts, sellable original cost vs current payout, and recovery rate
 - **12 categories** — blocks, tools, weapons, armor, and more
 - **Multi-language search** — item ID + localized names
 - **In-game language switch** — `/lang zh_tw` / `/lang en_us`
@@ -57,7 +58,7 @@ Use `/shop price` to check **system sell and buyback prices** (with trends).
 
 ## Installation
 
-1. Place `ashop-1.7.2.jar` in the `plugins/` folder
+1. Place `ashop-1.8.0-beta.9.jar` in the `plugins/` folder
 2. Install [Vault](https://www.spigotmc.org/resources/vault.34315/) and an economy plugin (e.g. EssentialsX)
 3. Restart the server
 

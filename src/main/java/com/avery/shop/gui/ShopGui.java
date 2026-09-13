@@ -1,6 +1,7 @@
 package com.avery.shop.gui;
 
 import com.avery.shop.catalog.CatalogEntry;
+import com.avery.shop.pricing.PriceQuote;
 import com.avery.shop.shop.ShopListing;
 import com.avery.shop.shop.ShopManager;
 import net.kyori.adventure.text.Component;
@@ -164,13 +165,21 @@ public final class ShopGui {
 
     public static void refreshSellPanel(ShopManager manager, Player player, org.bukkit.inventory.Inventory inv) {
         var locale = manager.getPlugin().getLocaleService();
-        double total = 0;
-        int stackCount = 0;
+        int totalStacks = 0;
+        int totalItems = 0;
+        double allBuyTotal = 0.0;
+
+        int sellableStacks = 0;
+        int sellableItems = 0;
+        double sellableBuyTotal = 0.0;
+        double totalSell = 0.0;
+
+        int unsellableStacks = 0;
+        int unsellableItems = 0;
 
         for (int slot = 0; slot < SELL_DEPOSIT_SIZE; slot++) {
             var stack = inv.getItem(slot);
             if (stack == null || stack.getType().isAir()) continue;
-            stackCount++;
 
             // 先剝離可能存在的舊預覽標籤，取得純淨的原始物品
             var cleanItem = ShopManager.stripSellGuiLore(stack.clone());
@@ -178,6 +187,18 @@ public final class ShopGui {
             if (meta == null) {
                 meta = Bukkit.getItemFactory().getItemMeta(cleanItem.getType());
                 if (meta == null) continue;
+            }
+
+            int amount = cleanItem.getAmount();
+            totalStacks++;
+            totalItems += amount;
+
+            var buyQuote = manager.getItemPriceQuote(cleanItem);
+            boolean hasBuyPrice = buyQuote.available();
+            double unitBuyPrice = hasBuyPrice ? buyQuote.price() : 0.0;
+            double stackBuyTotal = unitBuyPrice * amount;
+            if (hasBuyPrice) {
+                allBuyTotal += stackBuyTotal;
             }
 
             var origLore = meta.lore();
@@ -190,32 +211,50 @@ public final class ShopGui {
             displayLore.add(Component.text("─────────")
                     .color(NamedTextColor.DARK_GRAY).decoration(TextDecoration.ITALIC, false));
 
-            if (manager.canSellToSystem(cleanItem)) {
-                var sellQuote = manager.getSellToSystemQuote(cleanItem);
-                if (sellQuote.available()) {
-                    var unit = sellQuote.price();
-                    var subtotal = unit * cleanItem.getAmount();
-                    total += subtotal;
-                    if (manager.getPricing().isEnabled()) {
-                        displayLore.add(Component.text(locale.msg(player, "msg.gui.sell.unit-price-dynamic",
-                                        manager.getEconomy().format(unit),
-                                        sellQuote.formatTrend(locale, player)))
-                                .color(NamedTextColor.GOLD).decoration(TextDecoration.ITALIC, false));
-                    } else {
-                        displayLore.add(Component.text(locale.msg(player, "msg.gui.sell.unit-price",
-                                        manager.getEconomy().format(unit)))
-                                .color(NamedTextColor.GOLD).decoration(TextDecoration.ITALIC, false));
-                    }
-                    displayLore.add(Component.text(locale.msg(player, "msg.gui.sell.subtotal",
-                                    manager.getEconomy().format(subtotal)))
-                            .color(NamedTextColor.YELLOW).decoration(TextDecoration.ITALIC, false));
-                } else {
-                    displayLore.add(Component.text(locale.msg(player, "msg.gui.sell.rejected"))
-                            .color(NamedTextColor.RED).decoration(TextDecoration.ITALIC, false));
+            boolean canSell = manager.canSellToSystem(cleanItem);
+            var sellQuote = canSell ? manager.getSellToSystemQuote(cleanItem) : PriceQuote.unavailable();
+
+            if (sellQuote.available()) {
+                sellableStacks++;
+                sellableItems += amount;
+
+                var unitSell = sellQuote.price();
+                var subtotalSell = unitSell * amount;
+                totalSell += subtotalSell;
+
+                if (hasBuyPrice) {
+                    sellableBuyTotal += stackBuyTotal;
+                    displayLore.add(Component.text(locale.msg(player, "msg.gui.sell.item-buy-cost",
+                                    manager.getEconomy().format(stackBuyTotal),
+                                    manager.getEconomy().format(unitBuyPrice)))
+                            .color(NamedTextColor.GRAY).decoration(TextDecoration.ITALIC, false));
                 }
+
+                if (manager.getPricing().isEnabled()) {
+                    displayLore.add(Component.text(locale.msg(player, "msg.gui.sell.unit-price-dynamic",
+                                    manager.getEconomy().format(unitSell),
+                                    sellQuote.formatTrend(locale, player)))
+                            .color(NamedTextColor.GOLD).decoration(TextDecoration.ITALIC, false));
+                } else {
+                    displayLore.add(Component.text(locale.msg(player, "msg.gui.sell.unit-price",
+                                    manager.getEconomy().format(unitSell)))
+                            .color(NamedTextColor.GOLD).decoration(TextDecoration.ITALIC, false));
+                }
+                displayLore.add(Component.text(locale.msg(player, "msg.gui.sell.subtotal",
+                                manager.getEconomy().format(subtotalSell)))
+                        .color(NamedTextColor.YELLOW).decoration(TextDecoration.ITALIC, false));
             } else {
+                unsellableStacks++;
+                unsellableItems += amount;
+
                 displayLore.add(Component.text(locale.msg(player, "msg.gui.sell.rejected"))
                         .color(NamedTextColor.RED).decoration(TextDecoration.ITALIC, false));
+
+                if (hasBuyPrice) {
+                    displayLore.add(Component.text(locale.msg(player, "msg.gui.sell.item-buy-only",
+                                    manager.getEconomy().format(stackBuyTotal)))
+                            .color(NamedTextColor.DARK_GRAY).decoration(TextDecoration.ITALIC, false));
+                }
             }
 
             meta.lore(displayLore);
@@ -229,19 +268,57 @@ public final class ShopGui {
 
         var totalItem = new ItemStack(Material.GOLD_INGOT);
         var totalMeta = totalItem.getItemMeta();
-        totalMeta.displayName(Component.text(locale.msg(player, "msg.gui.sell.total"))
+        totalMeta.displayName(Component.text(locale.msg(player, "msg.gui.sell.estimate-title"))
                 .color(NamedTextColor.GOLD).decoration(TextDecoration.BOLD, false));
 
         var totalLore = new ArrayList<Component>();
-        if (stackCount == 0) {
+        if (totalStacks == 0) {
             totalLore.add(Component.text(locale.msg(player, "msg.gui.sell.empty"))
                     .color(NamedTextColor.GRAY).decoration(TextDecoration.ITALIC, false));
         } else {
-            totalLore.add(Component.text(locale.msg(player, "msg.gui.sell.total-amount",
-                            manager.getEconomy().format(total)))
-                    .color(NamedTextColor.YELLOW).decoration(TextDecoration.ITALIC, false));
-            totalLore.add(Component.text(locale.msg(player, "msg.gui.sell.stack-count", stackCount))
-                    .color(NamedTextColor.GRAY).decoration(TextDecoration.ITALIC, false));
+            totalLore.add(Component.text("─────────")
+                    .color(NamedTextColor.DARK_GRAY).decoration(TextDecoration.ITALIC, false));
+            totalLore.add(Component.text(locale.msg(player, "msg.gui.sell.total-items",
+                            totalStacks, totalItems))
+                    .color(NamedTextColor.WHITE).decoration(TextDecoration.ITALIC, false));
+            totalLore.add(Component.text(locale.msg(player, "msg.gui.sell.all-buy-cost",
+                            manager.getEconomy().format(allBuyTotal)))
+                    .color(NamedTextColor.AQUA).decoration(TextDecoration.ITALIC, false));
+
+            totalLore.add(Component.text("─────────")
+                    .color(NamedTextColor.DARK_GRAY).decoration(TextDecoration.ITALIC, false));
+            totalLore.add(Component.text(locale.msg(player, "msg.gui.sell.sellable-count",
+                            sellableStacks, sellableItems))
+                    .color(NamedTextColor.GREEN).decoration(TextDecoration.ITALIC, false));
+
+            if (sellableStacks > 0) {
+                totalLore.add(Component.text(locale.msg(player, "msg.gui.sell.sellable-buy-cost",
+                                manager.getEconomy().format(sellableBuyTotal)))
+                        .color(NamedTextColor.GRAY).decoration(TextDecoration.ITALIC, false));
+                totalLore.add(Component.text(locale.msg(player, "msg.gui.sell.sellable-payout",
+                                manager.getEconomy().format(totalSell)))
+                        .color(NamedTextColor.GOLD).decoration(TextDecoration.BOLD, false));
+
+                if (sellableBuyTotal > 0) {
+                    double rate = (totalSell / sellableBuyTotal) * 100.0;
+                    totalLore.add(Component.text(locale.msg(player, "msg.gui.sell.recovery-rate",
+                                    String.format(java.util.Locale.ROOT, "%.1f", rate)))
+                            .color(NamedTextColor.YELLOW).decoration(TextDecoration.ITALIC, false));
+                }
+            }
+
+            if (unsellableStacks > 0) {
+                totalLore.add(Component.text("─────────")
+                        .color(NamedTextColor.DARK_GRAY).decoration(TextDecoration.ITALIC, false));
+                totalLore.add(Component.text(locale.msg(player, "msg.gui.sell.unsellable-count",
+                                unsellableStacks, unsellableItems))
+                        .color(NamedTextColor.RED).decoration(TextDecoration.ITALIC, false));
+                totalLore.add(Component.text(locale.msg(player, "msg.gui.sell.unsellable-hint"))
+                        .color(NamedTextColor.DARK_RED).decoration(TextDecoration.ITALIC, false));
+            } else {
+                totalLore.add(Component.text(locale.msg(player, "msg.gui.sell.all-sellable"))
+                        .color(NamedTextColor.DARK_GREEN).decoration(TextDecoration.ITALIC, false));
+            }
         }
         totalMeta.lore(totalLore);
         totalItem.setItemMeta(totalMeta);
