@@ -3,6 +3,18 @@
 All notable changes to ashop are documented here.  
 ashop 的所有重要變更皆記錄於此。
 
+## [1.8.0-beta.6] - 2026-09-13
+
+### Added / 新增
+- **Dual-Track Update Pipeline - Scheme C (GitHub Releases 雙重推播更新機制 - 方案 C)** — Upgraded `UpdateService` to fetch all releases via the GitHub API and parse both the latest Official Release (`latestOfficial`) and the latest Beta Pre-release (`latestBeta`). Admins running `/shop update [check]` receive dual-track notifications with release titles, formatted Markdown changelog summaries, and direct options to download either channel (`/shop update download release` or `/shop update download beta`).  
+  **GitHub Releases 雙重推播更新機制 (方案 C)** — 全面重構 `UpdateService`，對接 GitHub Releases 清單 API，雙軌分辨並同時呈現最新「正式穩定版」與「搶先測試版」之版本資訊、更新日誌精選摘要與獨立下載指令（`/shop update download release` 與 `/shop update download beta`）。管理員進服時亦會顯示對應版本類型標記。
+- **Dynamic In-Game Version & GitHub Release Notes Command (`/shop version`)** — Added `/shop version` (aliases: `/shop ver`, `/shop 查看版本`, `/shop 版本`) which dynamically fetches and displays the current plugin version's release title, publish timestamp, and full release notes directly from GitHub Releases, formatted with a custom Markdown-to-Minecraft chat color engine. Eliminates outdated hardcoded version strings.  
+  **動態版本說明與更新日誌指令 (`/shop version`)** — 新增 `/shop version`（別名 `/shop ver`、`/shop 查看版本`、`/shop 版本`）。外掛非同步連線 GitHub Releases API 即時抓取對應版本之發布標題、時間與 Markdown 更新日誌，並以 Minecraft 專屬色彩排版輸出，徹底解決傳統外掛版本說明寫死容易過期的問題。
+- **Physical Plugin Jar Replacement & Windows Lock Safe Handling (外掛 Jar 實體安全替換機制)** — When executing update download commands, the updater directly downloads the asset into `plugins/`. For differing filenames, the new jar is written immediately and the old file is scheduled for automatic unlinked deletion on JVM shutdown (`deleteOnExit()`). For identical filenames, atomic replacement or Bukkit `plugins/update/` staging is used to safely handle Windows file locking without crashing.  
+  **外掛 Jar 實體安全替換機制** — 執行下載指令時直接將新版本寫入伺服器 `plugins/` 目錄。若檔名不同，新檔直接落地生效並標記舊檔於伺服器關機瞬間自動清除；若檔名相同且遭遇 Windows 檔案鎖定，自動轉存至 `plugins/update/` 於下次重啟時原生覆蓋，杜絕多版本 Jar 重疊衝突。
+- **Config Migration Version 3 (設定檔無痛升級至 v3)** — Bumped `config-version` to `3` and added `updater.channel: RELEASE` (options: `RELEASE` or `BETA`). Existing server configs are safely backed up and seamlessly merged with new fields and comments.  
+  **設定檔無痛升級至 v3** — 設定檔版本升級至 `3`，新增 `updater.channel` 更新通道偏好設定。既有服主升級時自動備份並保留所有舊數值。
+
 ## [1.8.0-beta.5] - 2026-09-12
 
 ### Added / 新增

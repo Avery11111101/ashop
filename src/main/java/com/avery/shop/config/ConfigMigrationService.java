@@ -18,7 +18,7 @@ import java.util.List;
  */
 public final class ConfigMigrationService {
 
-    public static final int CURRENT_CONFIG_VERSION = 2;
+    public static final int CURRENT_CONFIG_VERSION = 3;
 
     private final ShopPlugin plugin;
 

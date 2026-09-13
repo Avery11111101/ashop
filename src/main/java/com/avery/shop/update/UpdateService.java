@@ -2,6 +2,7 @@ package com.avery.shop.update;
 
 import com.avery.shop.ShopPlugin;
 import com.google.gson.JsonArray;
+import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import org.bukkit.Bukkit;
@@ -16,12 +17,16 @@ import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.StandardCopyOption;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
 
 /**
- * GitHub Releases 自動更新服務
- * 支援非同步檢查最新發布版本、語意化版本比對，以及將最新 .jar 下載至 plugins/update/ 目錄。
+ * GitHub Releases 自動更新與版本服務 (方案 C 雙重推播制)
+ * 支援非同步取得 GitHub Releases 列表、雙軌分辨正式穩定版與搶先測試版、
+ * 動態解析 Release Notes 說明文字、以及外掛 Jar 實體安全替換機制。
  */
 public final class UpdateService {
 
@@ -32,25 +37,62 @@ public final class UpdateService {
             String htmlUrl,
             String downloadUrl,
             String assetName,
-            long assetSize
+            long assetSize,
+            boolean isPrerelease,
+            String publishedAt
     ) {}
+
+    public record UpdateCatalog(
+            ReleaseInfo latestOfficial,
+            ReleaseInfo latestBeta,
+            ReleaseInfo currentVersionInfo,
+            List<ReleaseInfo> allReleases
+    ) {}
+
+    private static final long CACHE_TTL_MS = 3 * 60 * 1000L; // 3 分鐘快取防止 GitHub API 速率限制
 
     private final ShopPlugin plugin;
     private final AtomicBoolean isDownloading = new AtomicBoolean(false);
     private final AtomicBoolean isChecking = new AtomicBoolean(false);
-    private volatile ReleaseInfo cachedLatestRelease = null;
-    private volatile boolean updateAvailable = false;
+
+    private volatile UpdateCatalog cachedCatalog = null;
+    private volatile long lastFetchTime = 0L;
 
     public UpdateService(ShopPlugin plugin) {
         this.plugin = plugin;
     }
 
+    /**
+     * 是否有可用更新（不論正式或測試版）
+     */
     public boolean hasUpdate() {
-        return updateAvailable && cachedLatestRelease != null;
+        if (cachedCatalog == null) return false;
+        String current = plugin.getDescription().getVersion();
+        boolean hasOfficial = cachedCatalog.latestOfficial() != null
+                && isNewerVersion(current, cachedCatalog.latestOfficial().tagName());
+        boolean hasBeta = cachedCatalog.latestBeta() != null
+                && isNewerVersion(current, cachedCatalog.latestBeta().tagName());
+        return hasOfficial || hasBeta;
+    }
+
+    public UpdateCatalog getCachedCatalog() {
+        return cachedCatalog;
     }
 
     public ReleaseInfo getCachedLatestRelease() {
-        return cachedLatestRelease;
+        if (cachedCatalog == null) return null;
+        String channel = plugin.getConfig().getString("updater.channel", "RELEASE").trim().toUpperCase();
+        String current = plugin.getDescription().getVersion();
+
+        if ("BETA".equals(channel) && cachedCatalog.latestBeta() != null) {
+            if (isNewerVersion(current, cachedCatalog.latestBeta().tagName())) {
+                return cachedCatalog.latestBeta();
+            }
+        }
+        if (cachedCatalog.latestOfficial() != null && isNewerVersion(current, cachedCatalog.latestOfficial().tagName())) {
+            return cachedCatalog.latestOfficial();
+        }
+        return cachedCatalog.latestBeta() != null ? cachedCatalog.latestBeta() : cachedCatalog.latestOfficial();
     }
 
     /**
@@ -64,38 +106,48 @@ public final class UpdateService {
             return;
         }
 
-        plugin.getLogger().info("正在檢查 GitHub Releases 最新版本...");
-        checkForUpdates(false, null, release -> {
-            if (release != null) {
-                plugin.getLogger().info("發現新版本: " + release.tagName() + " (目前版本: v" + plugin.getDescription().getVersion() + ")");
-                plugin.getLogger().info("發布頁面: " + release.htmlUrl());
-                if (autoDownload) {
-                    plugin.getLogger().info("已啟用 updater.auto-download，正在背景下載更新檔案...");
-                    downloadUpdate(null, null);
-                } else {
-                    plugin.getLogger().info("可於遊戲中由管理員執行 /shop update download 進行更新。");
-                }
-            } else {
-                plugin.getLogger().info("目前已是最新版本 (v" + plugin.getDescription().getVersion() + ")");
+        plugin.getLogger().info("正在檢查 GitHub Releases 最新發布版本 (方案 C 雙軌檢查)...");
+        fetchReleases(false, catalog -> {
+            if (catalog == null) return;
+
+            String current = plugin.getDescription().getVersion();
+            boolean hasOfficial = catalog.latestOfficial() != null && isNewerVersion(current, catalog.latestOfficial().tagName());
+            boolean hasBeta = catalog.latestBeta() != null && isNewerVersion(current, catalog.latestBeta().tagName());
+
+            if (hasOfficial) {
+                plugin.getLogger().info("🌟 發現新正式穩定版: " + catalog.latestOfficial().tagName()
+                        + " (" + catalog.latestOfficial().name() + ")");
+                plugin.getLogger().info("   頁面: " + catalog.latestOfficial().htmlUrl());
+            }
+            if (hasBeta) {
+                plugin.getLogger().info("🧪 發現新搶先測試版: " + catalog.latestBeta().tagName()
+                        + " (" + catalog.latestBeta().name() + ")");
+                plugin.getLogger().info("   頁面: " + catalog.latestBeta().htmlUrl());
+            }
+
+            if (autoDownload && (hasOfficial || hasBeta)) {
+                plugin.getLogger().info("已啟用 updater.auto-download，正在背景下載更新檔案...");
+                downloadUpdate(null, null, null);
+            } else if (!hasOfficial && !hasBeta) {
+                plugin.getLogger().info("目前已是最新版本 (v" + current + ")");
             }
         });
     }
 
     /**
-     * 非同步檢查 GitHub Releases 最新版本
+     * 非同步獲取 Releases 列表並建立快取目錄
      */
-    public void checkForUpdates(boolean notifyIfLatest, CommandSender feedbackSender, Consumer<ReleaseInfo> onComplete) {
-        if (isChecking.getAndSet(true)) {
-            if (feedbackSender != null) {
-                feedbackSender.sendMessage("§e[ashop] 正在檢查更新中，請稍候...");
-            }
+    public void fetchReleases(boolean forceRefresh, Consumer<UpdateCatalog> onComplete) {
+        long now = System.currentTimeMillis();
+        if (!forceRefresh && cachedCatalog != null && (now - lastFetchTime < CACHE_TTL_MS)) {
+            if (onComplete != null) onComplete.accept(cachedCatalog);
             return;
         }
 
         Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
             try {
                 String repo = plugin.getConfig().getString("updater.repo", "Avery11111101/ashop").trim();
-                String apiUrl = "https://api.github.com/repos/" + repo + "/releases/latest";
+                String apiUrl = "https://api.github.com/repos/" + repo + "/releases?per_page=15";
 
                 var url = URI.create(apiUrl).toURL();
                 var conn = (HttpURLConnection) url.openConnection();
@@ -107,189 +159,460 @@ public final class UpdateService {
 
                 int responseCode = conn.getResponseCode();
                 if (responseCode != 200) {
-                    if (feedbackSender != null) {
-                        feedbackSender.sendMessage("§c[ashop] 檢查更新失敗 (HTTP " + responseCode + ")");
-                    }
-                    if (onComplete != null) onComplete.accept(null);
+                    plugin.getLogger().warning("獲取 GitHub Releases 失敗: HTTP " + responseCode);
+                    if (onComplete != null) onComplete.accept(cachedCatalog);
                     return;
                 }
 
-                JsonObject json;
+                JsonArray array;
                 try (var reader = new InputStreamReader(conn.getInputStream(), StandardCharsets.UTF_8)) {
-                    json = JsonParser.parseReader(reader).getAsJsonObject();
+                    array = JsonParser.parseReader(reader).getAsJsonArray();
                 }
 
-                String tagName = json.has("tag_name") ? json.get("tag_name").getAsString() : "";
-                String releaseName = json.has("name") && !json.get("name").isJsonNull() ? json.get("name").getAsString() : tagName;
-                String body = json.has("body") && !json.get("body").isJsonNull() ? json.get("body").getAsString() : "";
-                String htmlUrl = json.has("html_url") ? json.get("html_url").getAsString() : "";
+                List<ReleaseInfo> list = new ArrayList<>();
+                ReleaseInfo firstOfficial = null;
+                ReleaseInfo firstBeta = null;
+                ReleaseInfo currentMatch = null;
 
-                String downloadUrl = null;
-                String assetName = null;
-                long assetSize = 0;
+                String currentVer = plugin.getDescription().getVersion().trim().toLowerCase();
+                String cleanCurrent = currentVer.startsWith("v") ? currentVer.substring(1) : currentVer;
 
-                if (json.has("assets") && json.get("assets").isJsonArray()) {
-                    JsonArray assets = json.getAsJsonArray("assets");
-                    for (var elem : assets) {
-                        if (elem.isJsonObject()) {
-                            var assetObj = elem.getAsJsonObject();
-                            String name = assetObj.get("name").getAsString();
-                            if (name.endsWith(".jar")) {
-                                downloadUrl = assetObj.get("browser_download_url").getAsString();
-                                assetName = name;
-                                assetSize = assetObj.get("size").getAsLong();
-                                break;
+                for (JsonElement elem : array) {
+                    if (!elem.isJsonObject()) continue;
+                    JsonObject obj = elem.getAsJsonObject();
+
+                    boolean draft = obj.has("draft") && obj.get("draft").getAsBoolean();
+                    if (draft) continue;
+
+                    boolean prerelease = obj.has("prerelease") && obj.get("prerelease").getAsBoolean();
+                    String tagName = obj.has("tag_name") ? obj.get("tag_name").getAsString() : "";
+                    String name = obj.has("name") && !obj.get("name").isJsonNull() ? obj.get("name").getAsString() : tagName;
+                    String body = obj.has("body") && !obj.get("body").isJsonNull() ? obj.get("body").getAsString() : "";
+                    String htmlUrl = obj.has("html_url") ? obj.get("html_url").getAsString() : "";
+                    String publishedAt = obj.has("published_at") && !obj.get("published_at").isJsonNull()
+                            ? obj.get("published_at").getAsString() : "";
+
+                    String downloadUrl = null;
+                    String assetName = null;
+                    long assetSize = 0;
+
+                    if (obj.has("assets") && obj.get("assets").isJsonArray()) {
+                        for (JsonElement a : obj.getAsJsonArray("assets")) {
+                            if (a.isJsonObject()) {
+                                var assetObj = a.getAsJsonObject();
+                                String aname = assetObj.get("name").getAsString();
+                                if (aname.endsWith(".jar")) {
+                                    downloadUrl = assetObj.get("browser_download_url").getAsString();
+                                    assetName = aname;
+                                    assetSize = assetObj.get("size").getAsLong();
+                                    break;
+                                }
                             }
                         }
                     }
+
+                    var release = new ReleaseInfo(tagName, name, body, htmlUrl, downloadUrl, assetName, assetSize, prerelease, publishedAt);
+                    list.add(release);
+
+                    if (!prerelease && firstOfficial == null) {
+                        firstOfficial = release;
+                    }
+                    if (prerelease && firstBeta == null) {
+                        firstBeta = release;
+                    }
+
+                    String cleanTag = tagName.trim().toLowerCase();
+                    if (cleanTag.startsWith("v")) cleanTag = cleanTag.substring(1);
+                    if (cleanTag.equalsIgnoreCase(cleanCurrent) && currentMatch == null) {
+                        currentMatch = release;
+                    }
                 }
 
-                String currentVersion = plugin.getDescription().getVersion();
-                boolean newer = isNewerVersion(currentVersion, tagName);
+                UpdateCatalog catalog = new UpdateCatalog(firstOfficial, firstBeta, currentMatch, Collections.unmodifiableList(list));
+                this.cachedCatalog = catalog;
+                this.lastFetchTime = System.currentTimeMillis();
 
-                if (newer) {
-                    var release = new ReleaseInfo(tagName, releaseName, body, htmlUrl, downloadUrl, assetName, assetSize);
-                    this.cachedLatestRelease = release;
-                    this.updateAvailable = true;
-
-                    if (feedbackSender != null) {
-                        feedbackSender.sendMessage("§6=================[ ashop 更新通知 ]=================");
-                        feedbackSender.sendMessage("§e發現新版本: §a" + tagName + " §7(目前版本: v" + currentVersion + ")");
-                        if (!releaseName.isEmpty() && !releaseName.equalsIgnoreCase(tagName)) {
-                            feedbackSender.sendMessage("§7標題: §f" + releaseName);
-                        }
-                        feedbackSender.sendMessage("§7連結: §b" + htmlUrl);
-                        if (downloadUrl != null) {
-                            feedbackSender.sendMessage("§e請輸入指令 §a/shop update download §e以立即下載更新！");
-                        } else {
-                            feedbackSender.sendMessage("§c(此發布版本未包含 .jar 附檔，請至網頁手動下載)");
-                        }
-                        feedbackSender.sendMessage("§6=================================================");
-                    }
-
-                    if (onComplete != null) onComplete.accept(release);
-                } else {
-                    this.updateAvailable = false;
-                    if (feedbackSender != null && notifyIfLatest) {
-                        feedbackSender.sendMessage("§a[ashop] 目前已是最新版本 (v" + currentVersion + ")，無需更新。");
-                    }
-                    if (onComplete != null) onComplete.accept(null);
+                if (onComplete != null) {
+                    onComplete.accept(catalog);
                 }
 
             } catch (Exception e) {
-                if (feedbackSender != null) {
-                    feedbackSender.sendMessage("§c[ashop] 檢查更新時發生錯誤: " + e.getMessage());
-                } else {
-                    plugin.getLogger().warning("檢查更新失敗: " + e.getMessage());
-                }
-                if (onComplete != null) onComplete.accept(null);
-            } finally {
-                isChecking.set(false);
+                plugin.getLogger().warning("連線 GitHub 檢查更新發生錯誤: " + e.getMessage());
+                if (onComplete != null) onComplete.accept(cachedCatalog);
             }
         });
     }
 
     /**
-     * 下載最新更新檔案至 plugins/update/ 目錄
+     * 檢查更新（方案 C 雙重推播輸出）
      */
-    public void downloadUpdate(CommandSender feedbackSender, Consumer<Boolean> onComplete) {
-        if (cachedLatestRelease == null || cachedLatestRelease.downloadUrl() == null) {
+    public void checkForUpdates(boolean notifyIfLatest, CommandSender feedbackSender, Consumer<UpdateCatalog> onComplete) {
+        if (isChecking.getAndSet(true)) {
             if (feedbackSender != null) {
-                feedbackSender.sendMessage("§e[ashop] 正在確認最新版本資訊...");
+                feedbackSender.sendMessage("§e[ashop] 正在連線 GitHub 檢查更新中，請稍候...");
             }
-            checkForUpdates(false, feedbackSender, release -> {
-                if (release != null && release.downloadUrl() != null) {
-                    downloadUpdate(feedbackSender, onComplete);
-                } else {
-                    if (feedbackSender != null) {
-                        feedbackSender.sendMessage("§c[ashop] 無法取得更新下載連結，請確認已發行包含 .jar 的 Release。");
+            return;
+        }
+
+        fetchReleases(true, catalog -> {
+            isChecking.set(false);
+            if (catalog == null) {
+                if (feedbackSender != null) {
+                    feedbackSender.sendMessage("§c[ashop] 無法連線至 GitHub 取得更新資訊，請稍後再試。");
+                }
+                if (onComplete != null) onComplete.accept(null);
+                return;
+            }
+
+            String current = plugin.getDescription().getVersion();
+            boolean officialNewer = catalog.latestOfficial() != null && isNewerVersion(current, catalog.latestOfficial().tagName());
+            boolean betaNewer = catalog.latestBeta() != null && isNewerVersion(current, catalog.latestBeta().tagName());
+
+            if (feedbackSender != null) {
+                feedbackSender.sendMessage("§6§l=================[ ashop 雙軌更新檢測 ]=================");
+                feedbackSender.sendMessage("§7目前外掛版本: §f" + current);
+                feedbackSender.sendMessage("");
+
+                // 1. 最新正式發布版
+                if (catalog.latestOfficial() != null) {
+                    var off = catalog.latestOfficial();
+                    if (officialNewer) {
+                        feedbackSender.sendMessage("§a§l🌟 [最新正式穩定版] §a" + off.tagName() + " §7- §f" + off.name());
+                        feedbackSender.sendMessage("  §7連結: §b" + off.htmlUrl());
+                        showMarkdownSummary(feedbackSender, off.body(), 3);
+                        feedbackSender.sendMessage("  §e👉 下載正式版: §f/shop update download release");
+                    } else {
+                        feedbackSender.sendMessage("§7🌟 [最新正式穩定版] " + off.tagName() + " §a(目前已是最新正式版)");
                     }
+                } else {
+                    feedbackSender.sendMessage("§7🌟 [最新正式穩定版] 尚未發布正式版本");
+                }
+                feedbackSender.sendMessage("");
+
+                // 2. 最新搶先測試版
+                if (catalog.latestBeta() != null) {
+                    var beta = catalog.latestBeta();
+                    if (betaNewer) {
+                        feedbackSender.sendMessage("§b§l🧪 [最新搶先測試版] §b" + beta.tagName() + " §7- §f" + beta.name());
+                        feedbackSender.sendMessage("  §7連結: §b" + beta.htmlUrl());
+                        showMarkdownSummary(feedbackSender, beta.body(), 3);
+                        feedbackSender.sendMessage("  §e👉 下載測試版: §f/shop update download beta");
+                    } else {
+                        feedbackSender.sendMessage("§7🧪 [最新搶先測試版] " + beta.tagName() + " §8(目前版本已高於或等於此測試版)");
+                    }
+                } else {
+                    feedbackSender.sendMessage("§7🧪 [最新搶先測試版] 目前無測試版發布");
+                }
+
+                feedbackSender.sendMessage("");
+                if (!officialNewer && !betaNewer) {
+                    if (notifyIfLatest) {
+                        feedbackSender.sendMessage("§a✔ 目前外掛已是最新版本，運作狀態良好！");
+                    }
+                } else {
+                    feedbackSender.sendMessage("§7提示: 可依伺服器營運需求選擇穩定版 (release) 或搶先測試版 (beta) 更新。");
+                }
+                feedbackSender.sendMessage("§6§l====================================================");
+            }
+
+            if (onComplete != null) onComplete.accept(catalog);
+        });
+    }
+
+    /**
+     * 查看當前版本詳細說明 (供 /shop version 或 /shop 查看版本 使用)
+     */
+    public void fetchVersionInfo(CommandSender feedbackSender) {
+        String current = plugin.getDescription().getVersion();
+        feedbackSender.sendMessage("§e[ashop] 正在自 GitHub 取得外掛版本詳細日誌...");
+
+        fetchReleases(false, catalog -> {
+            feedbackSender.sendMessage("§6§l=================[ ashop 版本與更新日誌 ]=================");
+            feedbackSender.sendMessage("§e外掛名稱: §fashop §7| §e目前安裝版本: §av" + current);
+
+            if (catalog != null && catalog.currentVersionInfo() != null) {
+                var info = catalog.currentVersionInfo();
+                feedbackSender.sendMessage("§7發布標題: §f" + info.name());
+                if (!info.publishedAt().isBlank()) {
+                    feedbackSender.sendMessage("§7發布時間: §f" + info.publishedAt().replace("T", " ").replace("Z", " UTC"));
+                }
+                feedbackSender.sendMessage("§7版本類型: " + (info.isPrerelease() ? "§b[搶先測試版 🧪]" : "§a[正式穩定版 🌟]"));
+                feedbackSender.sendMessage("§7發布連結: §b" + info.htmlUrl());
+                feedbackSender.sendMessage("");
+                feedbackSender.sendMessage("§e§l📋 該版本詳細更新日誌 (GitHub Release Notes):");
+                printFormattedMarkdown(feedbackSender, info.body(), 15);
+            } else {
+                feedbackSender.sendMessage("§7(此版本為本地建置版或尚未於 GitHub Releases 登錄)");
+                if (catalog != null) {
+                    if (catalog.latestOfficial() != null) {
+                        feedbackSender.sendMessage("§7線上最新正式版: §a" + catalog.latestOfficial().tagName());
+                    }
+                    if (catalog.latestBeta() != null) {
+                        feedbackSender.sendMessage("§7線上最新測試版: §b" + catalog.latestBeta().tagName());
+                    }
+                }
+            }
+
+            // 若有更新版本，給出升級提示
+            if (catalog != null) {
+                boolean offNew = catalog.latestOfficial() != null && isNewerVersion(current, catalog.latestOfficial().tagName());
+                boolean betaNew = catalog.latestBeta() != null && isNewerVersion(current, catalog.latestBeta().tagName());
+                if (offNew || betaNew) {
+                    feedbackSender.sendMessage("");
+                    feedbackSender.sendMessage("§6💡 發現更新版本可用！請輸入 §f/shop update §6查看或下載更新。");
+                }
+            }
+
+            feedbackSender.sendMessage("§6§l====================================================");
+        });
+    }
+
+    /**
+     * 下載指定版本並安全取代外掛檔案
+     *
+     * @param channelChoice "release", "beta" 或 null (依 config 預設)
+     */
+    public void downloadUpdate(String channelChoice, CommandSender feedbackSender, Consumer<Boolean> onComplete) {
+        fetchReleases(false, catalog -> {
+            if (catalog == null) {
+                if (feedbackSender != null) {
+                    feedbackSender.sendMessage("§c[ashop] 無法取得 Releases 清單，請確認網路連線與 GitHub 設定。");
+                }
+                if (onComplete != null) onComplete.accept(false);
+                return;
+            }
+
+            ReleaseInfo target = selectTargetRelease(catalog, channelChoice);
+            if (target == null || target.downloadUrl() == null) {
+                if (feedbackSender != null) {
+                    feedbackSender.sendMessage("§c[ashop] 找不到符合指定條件且包含 .jar 資產的發布版本。");
+                }
+                if (onComplete != null) onComplete.accept(false);
+                return;
+            }
+
+            if (isDownloading.getAndSet(true)) {
+                if (feedbackSender != null) {
+                    feedbackSender.sendMessage("§c[ashop] 檔案正在下載中，請稍候...");
+                }
+                if (onComplete != null) onComplete.accept(false);
+                return;
+            }
+
+            Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
+                try {
+                    String channelName = target.isPrerelease() ? "搶先測試版 🧪" : "正式穩定版 🌟";
+                    if (feedbackSender != null) {
+                        feedbackSender.sendMessage("§e[ashop] 開始下載 " + channelName + " (" + target.tagName() + ")...");
+                    } else {
+                        plugin.getLogger().info("開始下載 " + channelName + " (" + target.tagName() + ")...");
+                    }
+
+                    File pluginsFolder = plugin.getDataFolder().getParentFile();
+                    File currentJar = plugin.getPluginFile();
+                    String currentJarName = currentJar.getName();
+                    String targetJarName = target.assetName() != null ? target.assetName() : currentJarName;
+
+                    File tempFile = new File(pluginsFolder, ".ashop_download.part");
+                    if (tempFile.exists()) {
+                        tempFile.delete();
+                    }
+
+                    // 1. 串流下載至臨時檔案
+                    var url = URI.create(target.downloadUrl()).toURL();
+                    var conn = (HttpURLConnection) url.openConnection();
+                    conn.setRequestMethod("GET");
+                    conn.setRequestProperty("User-Agent", "ashop-Plugin-Updater/" + plugin.getDescription().getVersion());
+                    conn.setConnectTimeout(10000);
+                    conn.setReadTimeout(30000);
+
+                    int status = conn.getResponseCode();
+                    if (status == HttpURLConnection.HTTP_MOVED_TEMP || status == HttpURLConnection.HTTP_MOVED_PERM || status == 307 || status == 308) {
+                        String newUrl = conn.getHeaderField("Location");
+                        conn = (HttpURLConnection) URI.create(newUrl).toURL().openConnection();
+                        conn.setRequestProperty("User-Agent", "ashop-Plugin-Updater/" + plugin.getDescription().getVersion());
+                    }
+
+                    try (var in = new BufferedInputStream(conn.getInputStream());
+                         var out = new FileOutputStream(tempFile)) {
+                        byte[] buffer = new byte[8192];
+                        int read;
+                        while ((read = in.read(buffer)) != -1) {
+                            out.write(buffer, 0, read);
+                        }
+                        out.flush();
+                    }
+
+                    if (!tempFile.exists() || tempFile.length() == 0) {
+                        throw new IllegalStateException("下載檔案為空或寫入失敗！");
+                    }
+
+                    // 2. 執行外掛檔案取代邏輯
+                    boolean directReplaced = false;
+                    boolean queuedForRestart = false;
+
+                    if (targetJarName.equalsIgnoreCase(currentJarName)) {
+                        // 情況 A：新舊檔名相同（例如同為 ashop.jar）
+                        try {
+                            // 嘗試原子覆蓋（在 Linux/macOS 上立即生效）
+                            Files.move(tempFile.toPath(), currentJar.toPath(), StandardCopyOption.REPLACE_EXISTING);
+                            directReplaced = true;
+                        } catch (Exception e) {
+                            // Windows JVM 鎖定保護：改放入 Bukkit 原生 plugins/update/ 目錄
+                            File updateFolder = new File(pluginsFolder, "update");
+                            if (!updateFolder.exists()) {
+                                updateFolder.mkdirs();
+                            }
+                            File updateTarget = new File(updateFolder, currentJarName);
+                            Files.move(tempFile.toPath(), updateTarget.toPath(), StandardCopyOption.REPLACE_EXISTING);
+                            queuedForRestart = true;
+                        }
+                    } else {
+                        // 情況 B：新舊檔名不同（例如舊版 ashop-1.8.0-beta.4.jar，新版 ashop-1.8.0-beta.5.jar）
+                        File targetFile = new File(pluginsFolder, targetJarName);
+                        // 新檔未被 JVM 開啟，在 Windows 下可直接成功寫入！
+                        Files.move(tempFile.toPath(), targetFile.toPath(), StandardCopyOption.REPLACE_EXISTING);
+                        directReplaced = true;
+
+                        // 清除舊外掛檔案：能刪除則立即刪除，若 Windows 鎖定則標記於關機/重啟時刪除
+                        boolean oldDeleted = currentJar.delete();
+                        if (!oldDeleted) {
+                            currentJar.deleteOnExit();
+                            queuedForRestart = true;
+                        }
+                    }
+
+                    // 3. 發送成果通知
+                    if (directReplaced && !queuedForRestart) {
+                        String msg = "§a[ashop] ✔ 成功下載並取代外掛檔案！\n"
+                                + "§a[ashop] 已就緒檔案: §fplugins/" + targetJarName + "\n"
+                                + "§6[ashop] 請於離峰時段重啟伺服器 (/restart 或 /stop)，新版本將完整載入！";
+                        if (feedbackSender != null) feedbackSender.sendMessage(msg);
+                        plugin.getLogger().info("新版本已直接替換外掛檔 plugins/" + targetJarName + "，請重啟伺服器生效。");
+                    } else {
+                        String msg = "§a[ashop] ✔ 成功下載新版本 " + target.tagName() + "！\n"
+                                + "§a[ashop] 新檔案已寫入: §fplugins/" + targetJarName + "\n"
+                                + "§e[ashop] 舊檔案已排定於伺服器關機時自動清除，避免多版本衝突。\n"
+                                + "§6[ashop] 請於離峰時段重啟伺服器 (/restart) 完成版本升級套用！";
+                        if (feedbackSender != null) feedbackSender.sendMessage(msg);
+                        plugin.getLogger().info("新版本已就緒 (plugins/" + targetJarName + ")，舊檔已排定清除，請重啟伺服器以套用。");
+                    }
+
+                    if (onComplete != null) onComplete.accept(true);
+
+                } catch (Exception e) {
+                    String err = "§c[ashop] 下載或替換外掛失敗: " + e.getMessage();
+                    if (feedbackSender != null) feedbackSender.sendMessage(err);
+                    plugin.getLogger().severe("下載或替換外掛失敗: " + e.getMessage());
                     if (onComplete != null) onComplete.accept(false);
+                } finally {
+                    isDownloading.set(false);
                 }
             });
-            return;
-        }
-
-        if (isDownloading.getAndSet(true)) {
-            if (feedbackSender != null) {
-                feedbackSender.sendMessage("§c[ashop] 檔案正在下載中，請稍候...");
-            }
-            return;
-        }
-
-        Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
-            try {
-                if (feedbackSender != null) {
-                    feedbackSender.sendMessage("§e[ashop] 開始下載最新版本 " + cachedLatestRelease.tagName() + "...");
-                } else {
-                    plugin.getLogger().info("開始下載最新版本 " + cachedLatestRelease.tagName() + "...");
-                }
-
-                File updateFolder = new File(plugin.getDataFolder().getParentFile(), "update");
-                if (!updateFolder.exists()) {
-                    updateFolder.mkdirs();
-                }
-
-                String currentJarName = plugin.getPluginFile().getName();
-                File targetFile = new File(updateFolder, currentJarName);
-                File tempFile = new File(updateFolder, currentJarName + ".part");
-
-                var url = URI.create(cachedLatestRelease.downloadUrl()).toURL();
-                var conn = (HttpURLConnection) url.openConnection();
-                conn.setRequestMethod("GET");
-                conn.setRequestProperty("User-Agent", "ashop-Plugin-Updater/" + plugin.getDescription().getVersion());
-                conn.setConnectTimeout(10000);
-                conn.setReadTimeout(30000);
-
-                // 處理可能出現的 302 重定向 (GitHub Releases assets 會 302 到 AWS S3)
-                int status = conn.getResponseCode();
-                if (status == HttpURLConnection.HTTP_MOVED_TEMP || status == HttpURLConnection.HTTP_MOVED_PERM || status == 307 || status == 308) {
-                    String newUrl = conn.getHeaderField("Location");
-                    conn = (HttpURLConnection) URI.create(newUrl).toURL().openConnection();
-                    conn.setRequestProperty("User-Agent", "ashop-Plugin-Updater/" + plugin.getDescription().getVersion());
-                }
-
-                try (var in = new BufferedInputStream(conn.getInputStream());
-                     var out = new FileOutputStream(tempFile)) {
-                    byte[] buffer = new byte[8192];
-                    int read;
-                    while ((read = in.read(buffer)) != -1) {
-                        out.write(buffer, 0, read);
-                    }
-                    out.flush();
-                }
-
-                // 下載成功後進行原子覆蓋
-                Files.move(tempFile.toPath(), targetFile.toPath(), StandardCopyOption.REPLACE_EXISTING);
-
-                String successMsg = "§a[ashop] 最新版本 " + cachedLatestRelease.tagName() + " 下載完成！\n"
-                        + "§a[ashop] 檔案已存放在 plugins/update/" + currentJarName + "\n"
-                        + "§6[ashop] 請於伺服器離峰時「重啟伺服器 (Restart)」，更新將自動完成套用！";
-
-                if (feedbackSender != null) {
-                    feedbackSender.sendMessage(successMsg);
-                }
-                plugin.getLogger().info("最新版本已成功下載至 " + targetFile.getAbsolutePath() + "，請重啟伺服器以套用。");
-
-                if (onComplete != null) onComplete.accept(true);
-
-            } catch (Exception e) {
-                String errorMsg = "§c[ashop] 下載更新失敗: " + e.getMessage();
-                if (feedbackSender != null) {
-                    feedbackSender.sendMessage(errorMsg);
-                }
-                plugin.getLogger().severe("下載更新失敗: " + e.getMessage());
-                if (onComplete != null) onComplete.accept(false);
-            } finally {
-                isDownloading.set(false);
-            }
         });
+    }
+
+    private ReleaseInfo selectTargetRelease(UpdateCatalog catalog, String channelChoice) {
+        if (channelChoice != null) {
+            String c = channelChoice.trim().toLowerCase();
+            if (c.contains("beta") || c.contains("test") || c.contains("測試")) {
+                return catalog.latestBeta();
+            }
+            if (c.contains("release") || c.contains("official") || c.contains("正式") || c.contains("stable")) {
+                return catalog.latestOfficial();
+            }
+        }
+
+        // 預設遵循 config.yml
+        String pref = plugin.getConfig().getString("updater.channel", "RELEASE").trim().toUpperCase();
+        String current = plugin.getDescription().getVersion();
+
+        if ("BETA".equals(pref)) {
+            if (catalog.latestBeta() != null && isNewerVersion(current, catalog.latestBeta().tagName())) {
+                return catalog.latestBeta();
+            }
+            if (catalog.latestOfficial() != null && isNewerVersion(current, catalog.latestOfficial().tagName())) {
+                return catalog.latestOfficial();
+            }
+            return catalog.latestBeta() != null ? catalog.latestBeta() : catalog.latestOfficial();
+        } else {
+            if (catalog.latestOfficial() != null && isNewerVersion(current, catalog.latestOfficial().tagName())) {
+                return catalog.latestOfficial();
+            }
+            if (catalog.latestBeta() != null && isNewerVersion(current, catalog.latestBeta().tagName())) {
+                return catalog.latestBeta();
+            }
+            return catalog.latestOfficial() != null ? catalog.latestOfficial() : catalog.latestBeta();
+        }
+    }
+
+    /**
+     * 印出排版後的 Markdown 更新日誌
+     */
+    private void printFormattedMarkdown(CommandSender sender, String markdown, int maxLines) {
+        List<String> lines = formatMarkdown(markdown, maxLines);
+        for (String line : lines) {
+            sender.sendMessage(line);
+        }
+    }
+
+    private void showMarkdownSummary(CommandSender sender, String markdown, int maxLines) {
+        List<String> lines = formatMarkdown(markdown, maxLines);
+        for (String line : lines) {
+            sender.sendMessage("  " + line);
+        }
+    }
+
+    /**
+     * 將 GitHub Markdown 轉為 Minecraft 聊天色彩排版
+     */
+    public static List<String> formatMarkdown(String markdown, int maxLines) {
+        if (markdown == null || markdown.isBlank()) {
+            return List.of("§7  (無更新說明)");
+        }
+
+        List<String> output = new ArrayList<>();
+        String[] rawLines = markdown.replace("\r\n", "\n").replace("\r", "\n").split("\n");
+
+        int count = 0;
+        for (String line : rawLines) {
+            String trimmed = line.trim();
+            if (trimmed.isEmpty() || trimmed.startsWith("```") || trimmed.startsWith("---") || trimmed.startsWith("___")) {
+                continue;
+            }
+
+            // 過濾 HTML 標籤
+            trimmed = trimmed.replaceAll("<[^>]*>", "");
+            if (trimmed.isBlank()) continue;
+
+            // 粗體轉換 **text** -> §e§ltext§r§7
+            trimmed = trimmed.replaceAll("\\*\\*([^*]+)\\*\\*", "§e§l$1§r§7");
+
+            if (trimmed.startsWith("# ")) {
+                output.add("§6§l=== " + trimmed.substring(2) + " ===");
+            } else if (trimmed.startsWith("## ")) {
+                output.add("§e§l▸ " + trimmed.substring(3));
+            } else if (trimmed.startsWith("### ")) {
+                output.add("§b§l  • " + trimmed.substring(4));
+            } else if (trimmed.startsWith("- ") || trimmed.startsWith("* ")) {
+                output.add("§7    • §f" + trimmed.substring(2));
+            } else {
+                output.add("§7    " + trimmed);
+            }
+
+            count++;
+            if (count >= maxLines) {
+                output.add("§8    ... (更多詳細資訊請點擊發布網址查閱)");
+                break;
+            }
+        }
+
+        return output.isEmpty() ? List.of("§7  (無更新說明)") : output;
     }
 
     /**
      * 語意化版本比對 (SemVer comparison)
-     * 比較最新版本 tag 與目前外掛版本
-     * @return true 若 latest 較新
+     * @return true 若 latestStr 較 currentStr 新
      */
     public static boolean isNewerVersion(String currentStr, String latestStr) {
         if (currentStr == null || latestStr == null) return false;
@@ -328,17 +651,44 @@ public final class UpdateService {
         boolean lHasPre = lParts.length > 1;
 
         if (cHasPre && !lHasPre) {
-            return true; // 例如 current = 1.8.0-beta.2, latest = 1.8.0 -> latest 較新
+            return true; // 例如 current = 1.8.0-beta.2, latest = 1.8.0 -> latest 正式版較新
         }
         if (!cHasPre && lHasPre) {
             return false; // 例如 current = 1.8.0, latest = 1.8.0-beta.3 -> current 已是正式版
         }
 
         if (cHasPre && lHasPre) {
-            // 兩者皆有預發布標籤，進行字串比對
-            return lParts[1].compareToIgnoreCase(cParts[1]) > 0;
+            // 兩者皆有預發布標籤，進行自然數字序號解析比較（如 beta.2 vs beta.10）
+            return comparePreRelease(cParts[1], lParts[1]) < 0;
         }
 
         return false;
+    }
+
+    private static int comparePreRelease(String pre1, String pre2) {
+        String[] p1 = pre1.split("\\.");
+        String[] p2 = pre2.split("\\.");
+        int len = Math.max(p1.length, p2.length);
+
+        for (int i = 0; i < len; i++) {
+            if (i >= p1.length) return -1;
+            if (i >= p2.length) return 1;
+
+            String s1 = p1[i];
+            String s2 = p2[i];
+
+            boolean s1IsNum = s1.matches("\\d+");
+            boolean s2IsNum = s2.matches("\\d+");
+
+            if (s1IsNum && s2IsNum) {
+                int n1 = Integer.parseInt(s1);
+                int n2 = Integer.parseInt(s2);
+                if (n1 != n2) return Integer.compare(n1, n2);
+            } else {
+                int cmp = s1.compareToIgnoreCase(s2);
+                if (cmp != 0) return cmp;
+            }
+        }
+        return 0;
     }
 }

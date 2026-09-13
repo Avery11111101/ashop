@@ -45,6 +45,9 @@ public final class ShopCommand implements CommandExecutor, TabCompleter {
                 sendHelp(sender);
                 return true;
             }
+            if (sub.equals("version") || sub.equals("ver") || sub.equals("查看版本") || sub.equals("版本") || sub.equals("about")) {
+                return handleVersion(sender);
+            }
             if (sub.equals("reload") || sub.equals("重新載入")) {
                 return handleReload(sender);
             }
@@ -269,6 +272,7 @@ public final class ShopCommand implements CommandExecutor, TabCompleter {
         sender.sendMessage("§f" + locale.msg(loc, "msg.cmd.help.search"));
         sender.sendMessage("§f" + locale.msg(loc, "msg.cmd.help.sell"));
         sender.sendMessage("§f" + locale.msg(loc, "msg.cmd.help.price"));
+        sender.sendMessage("§f" + locale.msg(loc, "msg.cmd.help.version"));
         sender.sendMessage("§f" + locale.msg(loc, "msg.cmd.help.lang"));
         sender.sendMessage("");
 
@@ -393,6 +397,16 @@ public final class ShopCommand implements CommandExecutor, TabCompleter {
         return true;
     }
 
+    private boolean handleVersion(CommandSender sender) {
+        var updateService = plugin.getUpdateService();
+        if (updateService == null) {
+            sender.sendMessage("§e[ashop] 目前外掛版本: §fv" + plugin.getDescription().getVersion());
+            return true;
+        }
+        updateService.fetchVersionInfo(sender);
+        return true;
+    }
+
     private boolean handleUpdate(CommandSender sender, String[] args) {
         var locale = plugin.getLocaleService();
         if (!sender.hasPermission("shop.admin")) {
@@ -406,13 +420,24 @@ public final class ShopCommand implements CommandExecutor, TabCompleter {
             return true;
         }
 
+        // /shop update download [release|beta]
         if (args.length >= 2 && (args[1].equalsIgnoreCase("download")
                 || args[1].equalsIgnoreCase("install")
-                || args[1].equalsIgnoreCase("下載"))) {
-            updateService.downloadUpdate(sender, null);
+                || args[1].equalsIgnoreCase("下載")
+                || args[1].equalsIgnoreCase("安裝"))) {
+            String channel = args.length >= 3 ? args[2] : null;
+            updateService.downloadUpdate(channel, sender, null);
             return true;
         }
 
+        // /shop update check
+        if (args.length >= 2 && (args[1].equalsIgnoreCase("check")
+                || args[1].equalsIgnoreCase("檢查"))) {
+            updateService.checkForUpdates(true, sender, null);
+            return true;
+        }
+
+        // 預設: 檢查更新 (方案 C 雙軌資訊)
         updateService.checkForUpdates(true, sender, null);
         return true;
     }
@@ -463,7 +488,7 @@ public final class ShopCommand implements CommandExecutor, TabCompleter {
     @Override
     public List<String> onTabComplete(CommandSender sender, Command command, String alias, String[] args) {
         if (args.length == 1) {
-            var options = new ArrayList<>(List.of("help", "search", "sell", "sellable", "price", "說明", "搜尋", "上架", "賣", "可收購", "價格"));
+            var options = new ArrayList<>(List.of("help", "version", "ver", "search", "sell", "sellable", "price", "說明", "版本", "查看版本", "搜尋", "上架", "賣", "可收購", "價格"));
             if (sender.hasPermission("shop.admin")) {
                 options.addAll(List.of("add", "additem", "reload", "reset", "resync-prices", "report", "報表", "重算價格", "還原", "restore", "重新載入", "update", "更新"));
             }
@@ -471,7 +496,11 @@ public final class ShopCommand implements CommandExecutor, TabCompleter {
         }
         if (args.length == 2 && sender.hasPermission("shop.admin")
                 && (args[0].equalsIgnoreCase("update") || args[0].equalsIgnoreCase("更新"))) {
-            return filter(List.of("check", "download", "檢查", "下載"), args[1]);
+            return filter(List.of("check", "download", "install", "檢查", "下載", "安裝"), args[1]);
+        }
+        if (args.length == 3 && sender.hasPermission("shop.admin")
+                && (args[0].equalsIgnoreCase("update") || args[0].equalsIgnoreCase("更新"))) {
+            return filter(List.of("release", "beta", "正式版", "測試版"), args[2]);
         }
         if (args.length == 2 && sender.hasPermission("shop.admin")
                 && (args[0].equalsIgnoreCase("add") || args[0].equalsIgnoreCase("additem") || args[0].equalsIgnoreCase("新增商品"))) {

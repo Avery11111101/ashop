@@ -98,7 +98,7 @@ ashop 預設提供完善的原版全物品分類體系。為了維持伺服器�
 
 ## 安裝
 
-1. 將 `ashop-1.8.0-beta.5.jar` 放入 `plugins/` 資料夾
+1. 將 `ashop-1.8.0-beta.6.jar` 放入 `plugins/` 資料夾
 2. 安裝 [Vault](https://www.spigotmc.org/resources/vault.34315/) 及經濟插件（如 EssentialsX）
 3. 重啟伺服器
 
@@ -111,12 +111,13 @@ ashop 預設提供完善的原版全物品分類體系。為了維持伺服器�
 | `/ashop` 或 `/shop` | 開啟動態市場 GUI |
 | `/ashop help` | 查看完整指令與 GUI 教學 |
 | `/ashop price` | 查詢系統售價與收購價 |
+| `/ashop version` | 查看目前外掛版本與 GitHub 最新 Release 詳細更新日誌 |
 | `/ashop search <關鍵字>` | 搜尋物品 |
 | `/ashop sell` | 開啟收購箱（角落支援一鍵填入與查看可收購商品） |
 | `/ashop sellable` | 查看目前開放系統收購的所有商品清單 |
 | `/ashop add <價格> [分類] [模式]` | 將手持自訂物品上架至商店（管理員） |
 | `/ashop report <daily|weekly|monthly>` | 查詢商店營運報表，加上 `send` 可推播至 Discord（管理員） |
-| `/ashop update [check|download]` | 檢查或下載 GitHub Releases 最新發行版本（管理員） |
+| `/ashop update [check\|download] [release\|beta]` | 檢查或下載 GitHub Releases 最新發行版本，支援正式版/測試版雙軌自選並自動替換外掛檔（管理員） |
 | `/ashop reload` | 重新載入（管理員） |
 | `/ashop reset` | 還原預設全物品商店（管理員） |
 | `/lang <語言>` | 切換介面語言 |
@@ -130,12 +131,13 @@ ashop 預設提供完善的原版全物品分類體系。為了維持伺服器�
 ## 設定
 
 ```yaml
-# GitHub Releases 自動更新設定
+# GitHub Releases 自動更新設定 (方案 C 雙重推播制)
 updater:
   check-on-startup: false       # 伺服器開機時是否自動檢查更新（預設關閉）
-  auto-download: false          # 發現新版本時是否自動下載至 plugins/update/（預設關閉，需重啟生效）
+  auto-download: false          # 發現新版本時是否自動下載至 plugins/（預設關閉，需重啟生效）
   notify-admin-on-join: true   # 管理員登入時是否提示新版本通知
   repo: "Avery11111101/ashop"   # GitHub 專案倉庫
+  channel: RELEASE              # 自動更新偏好通道 (RELEASE: 正式穩定版 | BETA: 搶先測試版)
 
 system-shop:
   enabled: true

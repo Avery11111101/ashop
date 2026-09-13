@@ -3,7 +3,9 @@ plugins {
 }
 
 group = "com.avery"
-version = "1.8.0-beta.5"
+version = "1.8.0-beta.6"
+
+layout.buildDirectory.set(file("${System.getProperty("user.home")}/.gradle_ashop_build"))
 
 repositories {
     mavenCentral()
@@ -65,6 +67,7 @@ java {
 
 tasks.withType<JavaCompile> {
     options.encoding = "UTF-8"
+    options.isIncremental = false
 }
 
 tasks.processResources {
@@ -82,5 +85,14 @@ tasks.jar {
         configurations.runtimeClasspath.get().filter { it.name.endsWith(".jar") }.map { zipTree(it) }
     }) {
         exclude("META-INF/*.SF", "META-INF/*.DSA", "META-INF/*.RSA")
+    }
+    doLast {
+        try {
+            val rootBuildLibs = file("build/libs")
+            rootBuildLibs.mkdirs()
+            archiveFile.get().asFile.copyTo(File(rootBuildLibs, archiveFileName.get()), overwrite = true)
+        } catch (e: Exception) {
+            println("Notice: Could not mirror jar to project build/libs: ${e.message}")
+        }
     }
 }

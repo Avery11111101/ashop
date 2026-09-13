@@ -16,25 +16,31 @@ public class ConfigMigrationTest {
                 # ==========================================
                 # ashop 商店插件設定檔
                 # ==========================================
-                config-version: 2
+                config-version: 3
 
                 languages:
                   # 預設語言
                   default: zh_tw
                   fallback: en_us
 
-                # 自動更新設定
+                # 自動更新設定 (方案 C 雙重推播制)
                 updater:
                   # 伺服器開機時是否自動檢查更新
                   check-on-startup: false
                   # 專案名稱
                   repo: "Avery11111101/ashop"
+                  # 自動更新通道
+                  channel: RELEASE
                 """;
 
         String userYaml = """
-                # 使用者的舊設定檔
+                # 使用者的舊設定檔 (v2)
+                config-version: 2
                 languages:
                   default: en_us
+                updater:
+                  check-on-startup: true
+                  repo: "Avery11111101/ashop"
                 """;
 
         File tempDir = Files.createTempDirectory("ashop_test").toFile();
@@ -45,7 +51,7 @@ public class ConfigMigrationTest {
         YamlConfiguration user = YamlConfiguration.loadConfiguration(userFile);
 
         int oldVersion = user.getInt("config-version", 1);
-        int newVersion = template.getInt("config-version", 2);
+        int newVersion = template.getInt("config-version", 3);
 
         if (oldVersion < newVersion) {
             File backup = new File(tempDir, "config.backup-v" + oldVersion + ".yml");
@@ -73,7 +79,10 @@ public class ConfigMigrationTest {
         System.out.println("=== Saved Config Content ===");
         System.out.println(savedContent);
 
-        if (!savedContent.contains("updater:") || !user.getString("languages.default").equals("en_us") || user.getInt("config-version") != 2) {
+        if (!savedContent.contains("channel: RELEASE")
+                || !user.getString("languages.default").equals("en_us")
+                || !user.getBoolean("updater.check-on-startup")
+                || user.getInt("config-version") != 3) {
             throw new AssertionError("Migration failed!");
         }
         System.out.println("ConfigMigrationTest passed 100%!");
