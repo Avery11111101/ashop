@@ -3,6 +3,12 @@
 All notable changes to ashop are documented here.  
 ashop 的所有重要變更皆記錄於此。
 
+## [1.8.0-beta.8] - 2026-09-13
+
+### Fixed / 修復
+- **Admin Add Item Custom Price Adjustment Vanishing Fix (修復管理員上架自訂物品調整售價時物品消失問題)** — Resolved GitHub Issue #1. In `GuiSession`, added session-scoped caching for the pending custom item (`pendingCustomItem`). When clicking the price setting button (`ADD_ITEM_PRICE_DISPLAY_SLOT`) to initiate the chat prompt, the item in the workbench slot 13 is safely preserved and restored upon reopen. Closing or canceling properly refunds the item to the player's inventory without item duplication or loss.  
+  **修復管理員上架自訂物品調整售價時物品消失問題** — 修復 GitHub Issue #1。於 `GuiSession` 新增暫存自訂商品欄位（`pendingCustomItem`）。當管理員在自訂上架介面放入物品並點擊設定價格（Slot 22）彈出聊天欄時，系統安全暫存第 13 格物品並於價格設定完成重新開啟 GUI 時自動還原。退回或非對話關閉介面時亦完善執行背包退還與掉落防呆，徹底防止自訂物品遺失。
+
 ## [1.8.0-beta.7] - 2026-09-13
 
 ### Added / 新增

@@ -293,7 +293,11 @@ public final class ShopAdminGui {
                 session);
 
         fillGray(inv, " ");
-        inv.setItem(ADD_ITEM_INPUT_SLOT, null);
+        if (session.getPendingCustomItem() != null && !session.getPendingCustomItem().getType().isAir()) {
+            inv.setItem(ADD_ITEM_INPUT_SLOT, session.getPendingCustomItem());
+        } else {
+            inv.setItem(ADD_ITEM_INPUT_SLOT, null);
+        }
 
         inv.setItem(ADD_ITEM_INFO_SLOT, ShopGui.button(
                 Material.BOOK,

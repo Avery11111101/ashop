@@ -181,6 +181,16 @@ public final class GuiSession {
         this.adminAddTradeMode = adminAddTradeMode != null ? adminAddTradeMode : com.avery.shop.shop.TradeMode.BOTH;
     }
 
+    private ItemStack pendingCustomItem;
+
+    public ItemStack getPendingCustomItem() {
+        return pendingCustomItem;
+    }
+
+    public void setPendingCustomItem(ItemStack pendingCustomItem) {
+        this.pendingCustomItem = pendingCustomItem;
+    }
+
     public boolean isInShopGui() {
         return shopHolder != null
                 && player.getOpenInventory().getTopInventory().getHolder() == shopHolder;
