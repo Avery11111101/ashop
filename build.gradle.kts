@@ -3,7 +3,7 @@ plugins {
 }
 
 group = "com.avery"
-version = "1.8.0-beta.9"
+version = "1.9.0-beta.1"
 
 layout.buildDirectory.set(file("${System.getProperty("user.home")}/.gradle_ashop_build"))
 
@@ -62,7 +62,7 @@ tasks.check {
 }
 
 java {
-    toolchain.languageVersion.set(JavaLanguageVersion.of(21))
+    toolchain.languageVersion.set(JavaLanguageVersion.of(25))
 }
 
 tasks.withType<JavaCompile> {

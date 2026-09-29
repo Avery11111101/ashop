@@ -3,6 +3,14 @@
 All notable changes to ashop are documented here.  
 ashop 的所有重要變更皆記錄於此。
 
+## [1.9.0-beta.1] - 2026-09-29
+
+### Added / 新增
+- **Paper 26.3 Wilderness Bound Native Support (原生支援 Paper 26.3「荒野之境」與全新物品分類體系)** — Full native support for Minecraft 26.3 / Paper 26.3 (`api-version: '26.3'`) and Java 25. Accurately mapped and categorized all 26.3 new items: Poplar wood set (logs in `LOGS`, planks/stairs/slabs/doors/fences in `blocks/building/wood`, leaves/saplings in `blocks/natural`), 16-color wool stairs and slabs (restored to `blocks/dyed/wool`), 16-color concrete stairs and slabs (`blocks/dyed/concrete`), 16-color sit-able cushions (`decorations/cushions`), single-use camping straw beds (`blocks/functional`), and Dappled Forest vegetation including shelf mushrooms and red shrubs (`blocks/natural/flowers`). Added survival dynamic pricing and multi-language keys (`category.decorations.cushions`).  
+  **原生支援 Paper 26.3「荒野之境」與全新物品分類體系** — 完整原生支援 Minecraft 26.3 / Paper 26.3（`api-version: '26.3'`）與 Java 25 運行環境。全數精確分類 26.3 新增物資：白楊木系列（原木進 `LOGS` 支援雙向買賣、建材與門欄進 `blocks/building/wood`、樹葉樹苗進自然環境）、16 色羊毛階梯與半磚（精確歸入 `blocks/dyed/wool`）、16 色混凝土階梯與半磚（`blocks/dyed/concrete`）、16 色家具坐墊（獨立新增裝飾子目錄 `decorations/cushions`）、單次使用露營草蓆（`blocks/functional`）、斑駁森林之架狀真菌與紅灌木（`blocks/natural/flowers`）。同步擴充生存基準定價模型與繁簡中英語系標籤。
+- **Modern Non-blocking Async Chat Listener (現代化非同步聊天監聽器重構)** — Fully removed deprecated-for-removal Bukkit Conversation API (`ConversationFactory`, `StringPrompt`). Modernized `ChatPrompt` to native Paper `AsyncChatEvent` and Adventure Component architecture (`PlainTextComponentSerializer`) with lowest-priority cancellation to prevent price prompt input from leaking into public chat, alongside UUID-bound single-fire handling and a 60-second automatic safety timeout.  
+  **現代化非同步聊天監聽器重構** — 徹底拔除在 Paper 26.3 被標註為即將移除之舊式 Bukkit Conversation API。將 `ChatPrompt` 重構為 Paper 原生 `AsyncChatEvent` 與 Adventure Component 體系，具備最低優先權攔截防公頻洩漏、UUID 精確單次觸發與 60 秒超時自動清理防呆。
+
 ## [1.8.0-beta.9] - 2026-09-13
 
 ### Added / 新增

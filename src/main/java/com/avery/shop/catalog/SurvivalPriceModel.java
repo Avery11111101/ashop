@@ -137,6 +137,13 @@ public final class SurvivalPriceModel {
     putLoot(Material.NETHERITE_UPGRADE_SMITHING_TEMPLATE, 25_000.0);
     putLoot(Material.ECHO_SHARD, 12_000.0);
     putLoot(Material.DISC_FRAGMENT_5, 15_000.0);
+
+    // 26.3 Wilderness Bound
+    putBaseByName("POPLAR_LOG", 4.0);
+    putBaseByName("SHELF_MUSHROOM", 3.0);
+    putBaseByName("RED_SHRUB", 2.0);
+    putBaseByName("STRAW_BED", 45.0);
+    putBaseByName("WHITE_CUSHION", 6.0);
   }
 
   private SurvivalPriceModel() {}
@@ -229,7 +236,16 @@ public final class SurvivalPriceModel {
   }
 
   private static void putBase(Material material, double price) {
-    BASE_RESOURCES.put(material, price);
+    if (material != null) {
+      BASE_RESOURCES.put(material, price);
+    }
+  }
+
+  private static void putBaseByName(String name, double price) {
+    var mat = Material.matchMaterial(name);
+    if (mat != null) {
+      putBase(mat, price);
+    }
   }
 
   private static void putLoot(Material material, double price) {

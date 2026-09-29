@@ -14,7 +14,12 @@ public final class ShopSubcategoryResolver {
     private ShopSubcategoryResolver() {}
 
     public static String resolve(ItemCategory topCategory, CatalogEntry entry) {
-        var material = entry.getTemplate().getType();
+        if (entry == null || entry.getTemplate() == null) return "all";
+        return resolve(topCategory, entry.getTemplate().getType());
+    }
+
+    public static String resolve(ItemCategory topCategory, Material material) {
+        if (material == null) return "other";
         return switch (topCategory) {
             case MINERALS -> resolveMineral(material);
             case LOGS -> "all";
@@ -96,6 +101,10 @@ public final class ShopSubcategoryResolver {
             case "minecarts" -> Material.MINECART;
             case "banners" -> Material.WHITE_BANNER;
             case "candles" -> Material.CANDLE;
+            case "cushions" -> {
+                var m = Material.matchMaterial("WHITE_CUSHION");
+                yield m != null ? m : Material.WHITE_WOOL;
+            }
             case "display" -> Material.ITEM_FRAME;
             case "passive" -> Material.PIG_SPAWN_EGG;
             case "hostile" -> Material.ZOMBIE_SPAWN_EGG;
@@ -156,7 +165,8 @@ public final class ShopSubcategoryResolver {
             case "minecarts" -> 2;
             case "banners" -> 0;
             case "candles" -> 1;
-            case "display" -> 2;
+            case "cushions" -> 2;
+            case "display" -> 3;
             case "passive" -> 0;
             case "hostile" -> 1;
             case "boss" -> 2;
@@ -258,7 +268,9 @@ public final class ShopSubcategoryResolver {
     }
 
     private static boolean isDyedWool(String name) {
-        return name.endsWith("_WOOL") || name.equals("WOOL");
+        return (name.contains("WOOL") || name.equals("WOOL"))
+                && !name.contains("CARPET")
+                && !name.contains("CUSHION");
     }
 
     private static boolean isDyedCarpet(String name) {
@@ -273,10 +285,21 @@ public final class ShopSubcategoryResolver {
             return name.contains("OAK") || name.contains("SPRUCE") || name.contains("BIRCH")
                     || name.contains("JUNGLE") || name.contains("ACACIA") || name.contains("DARK_OAK")
                     || name.contains("MANGROVE") || name.contains("CHERRY") || name.contains("PALE_OAK")
+                    || name.contains("POPLAR")
                     || name.contains("BAMBOO") || name.contains("CRIMSON") || name.contains("WARPED");
         }
         if (name.contains("_SLAB") || name.contains("_STAIRS")) {
-            return name.contains("PLANKS") || name.contains("BAMBOO") || name.contains("CRIMSON")
+            return name.contains("OAK") || name.contains("SPRUCE") || name.contains("BIRCH")
+                    || name.contains("JUNGLE") || name.contains("ACACIA") || name.contains("DARK_OAK")
+                    || name.contains("MANGROVE") || name.contains("CHERRY") || name.contains("PALE_OAK")
+                    || name.contains("POPLAR") || name.contains("PLANKS") || name.contains("BAMBOO")
+                    || name.contains("CRIMSON") || name.contains("WARPED");
+        }
+        if (name.contains("_BUTTON") || name.contains("_PRESSURE_PLATE")) {
+            return name.contains("OAK") || name.contains("SPRUCE") || name.contains("BIRCH")
+                    || name.contains("JUNGLE") || name.contains("ACACIA") || name.contains("DARK_OAK")
+                    || name.contains("MANGROVE") || name.contains("CHERRY") || name.contains("PALE_OAK")
+                    || name.contains("POPLAR") || name.contains("BAMBOO") || name.contains("CRIMSON")
                     || name.contains("WARPED");
         }
         return name.equals("COMPOSTER") || name.equals("BARREL") || name.equals("LECTERN")
@@ -286,7 +309,8 @@ public final class ShopSubcategoryResolver {
 
     private static boolean isStoneBuilding(String name, Material material) {
         if (name.contains("COPPER") || name.contains("BAMBOO")) return false;
-        if (name.contains("GLASS") || name.contains("WOOL") || name.contains("CARPET")) return false;
+        if (name.contains("GLASS") || name.contains("WOOL") || name.contains("CARPET")
+                || name.contains("CONCRETE") || name.contains("CUSHION")) return false;
         if (name.endsWith("_ORE") || name.endsWith("_LEAVES")) return false;
 
         if (name.contains("STONE") || name.contains("COBBLE") || name.contains("BRICK")
@@ -317,6 +341,7 @@ public final class ShopSubcategoryResolver {
                 || name.contains("HANGING_ROOTS") || name.contains("SPORE") || name.contains("FUNGUS")
                 || name.contains("SHROOM") || name.contains("ROOTS") || name.contains("KELP")
                 || name.contains("SEAGRASS") || name.contains("CORAL") || name.contains("BUSH")
+                || name.contains("SHRUB") || name.contains("MUSHROOM")
                 || name.contains("CACTUS") || name.contains("BAMBOO") && !isWoodBuilding(name, material)) {
             return true;
         }
@@ -437,6 +462,7 @@ public final class ShopSubcategoryResolver {
 
     private static String resolveDecoration(Material material) {
         var name = material.name();
+        if (name.contains("CUSHION")) return "cushions";
         if (name.contains("BANNER")) return "banners";
         if (name.contains("CANDLE")) return "candles";
         if (name.contains("POT") || name.contains("PAINTING") || name.contains("ITEM_FRAME")

@@ -88,6 +88,29 @@ public class CategoryVerification {
         assertCategory(catalog, Material.COOKED_SALMON, ItemCategory.FOOD);
         assertCategory(catalog, Material.BREAD, ItemCategory.FOOD);
 
+        // 3. 驗證 Subcategory 子目錄解析
+        assertSubcategory(ItemCategory.BLOCKS, Material.OAK_STAIRS, "building/wood");
+        assertSubcategory(ItemCategory.BLOCKS, Material.OAK_DOOR, "building/wood");
+        assertSubcategory(ItemCategory.BLOCKS, Material.WHITE_WOOL, "dyed/wool");
+        assertSubcategory(ItemCategory.BLOCKS, Material.WHITE_CARPET, "dyed/carpet");
+        assertSubcategory(ItemCategory.BLOCKS, Material.WHITE_CONCRETE, "dyed/concrete");
+        assertSubcategory(ItemCategory.BLOCKS, Material.BROWN_MUSHROOM, "natural/flowers");
+
+        // 4. 26.3 新增物品相容性動態驗證 (若執行環境具備該 Material 則嚴格比對)
+        verifyIfPresent(catalog, "POPLAR_LOG", ItemCategory.LOGS, "all");
+        verifyIfPresent(catalog, "POPLAR_WOOD", ItemCategory.LOGS, "all");
+        verifyIfPresent(catalog, "POPLAR_PLANKS", ItemCategory.BLOCKS, "building/wood");
+        verifyIfPresent(catalog, "POPLAR_STAIRS", ItemCategory.BLOCKS, "building/wood");
+        verifyIfPresent(catalog, "POPLAR_DOOR", ItemCategory.BLOCKS, "building/wood");
+        verifyIfPresent(catalog, "WHITE_WOOL_STAIRS", ItemCategory.BLOCKS, "dyed/wool");
+        verifyIfPresent(catalog, "WHITE_WOOL_SLAB", ItemCategory.BLOCKS, "dyed/wool");
+        verifyIfPresent(catalog, "WHITE_CONCRETE_STAIRS", ItemCategory.BLOCKS, "dyed/concrete");
+        verifyIfPresent(catalog, "WHITE_CONCRETE_SLAB", ItemCategory.BLOCKS, "dyed/concrete");
+        verifyIfPresent(catalog, "WHITE_CUSHION", ItemCategory.DECORATIONS, "cushions");
+        verifyIfPresent(catalog, "STRAW_BED", ItemCategory.BLOCKS, "functional");
+        verifyIfPresent(catalog, "SHELF_MUSHROOM", ItemCategory.BLOCKS, "natural/flowers");
+        verifyIfPresent(catalog, "RED_SHRUB", ItemCategory.BLOCKS, "natural/flowers");
+
         System.out.println("==================================================");
         System.out.println("ALL VERIFICATIONS COMPLETED AND PASSED 100%!");
         System.out.println("==================================================");
@@ -99,5 +122,23 @@ public class CategoryVerification {
             throw new AssertionError("Expected " + material + " to be " + expected + ", but got " + actual);
         }
         System.out.println("Categorize OK: " + material + " -> " + actual);
+    }
+
+    private static void assertSubcategory(ItemCategory topCat, Material material, String expectedSub) {
+        var actual = com.avery.shop.shop.ShopSubcategoryResolver.resolve(topCat, material);
+        if (!expectedSub.equals(actual)) {
+            throw new AssertionError("Expected subcategory for " + material + " to be " + expectedSub + ", but got " + actual);
+        }
+        System.out.println("Subcategory OK: " + material + " -> " + actual);
+    }
+
+    private static void verifyIfPresent(ItemCatalog catalog, String materialName, ItemCategory expectedCat, String expectedSub) {
+        var mat = Material.matchMaterial(materialName);
+        if (mat != null) {
+            assertCategory(catalog, mat, expectedCat);
+            assertSubcategory(expectedCat, mat, expectedSub);
+        } else {
+            System.out.println("Notice: 26.3 material " + materialName + " not present in current test classpath (skipped)");
+        }
     }
 }

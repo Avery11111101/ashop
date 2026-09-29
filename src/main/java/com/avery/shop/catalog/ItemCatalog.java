@@ -154,7 +154,8 @@ public final class ItemCatalog {
                 || name.contains("POT") || name.contains("PAINTING") || name.contains("ITEM_FRAME")
                 || name.contains("ARMOR_STAND") || name.contains("DECORATED_POT")
                 || name.contains("HEAD") || name.contains("SKULL") || name.contains("TORCH")
-                || name.contains("LANTERN") || name.contains("CAMPFIRE"))
+                || name.contains("LANTERN") || name.contains("CAMPFIRE")
+                || name.contains("CUSHION"))
             return ItemCategory.DECORATIONS;
         if (isBlockSafe(name, material)) return ItemCategory.BLOCKS;
 
