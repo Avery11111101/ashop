@@ -320,7 +320,7 @@ public final class ShopSubcategoryResolver {
                 || name.contains("QUARTZ") || name.contains("PURPUR") || name.contains("BLACKSTONE")
                 || name.contains("BASALT") || name.contains("MOSSY") || name.contains("POLISHED")
                 || name.contains("CHISELED") || name.contains("SMOOTH") || name.contains("CUT_")
-                || name.contains("TILE") || name.contains("SHULKER_BOX") || name.contains("INFESTED")) {
+                || name.contains("TILE") || name.contains("INFESTED")) {
             return true;
         }
         return name.equals("GRAVEL") || name.equals("CLAY") || name.equals("BRICKS")
@@ -360,7 +360,8 @@ public final class ShopSubcategoryResolver {
                 || name.equals("SOUL_SAND") || name.equals("SOUL_SOIL") || name.equals("SNOW_BLOCK")
                 || name.equals("SNOW") || name.contains("ICE") || name.equals("PACKED_ICE")
                 || name.equals("BLUE_ICE") || name.equals("FARMLAND") || name.equals("DIRT_PATH")
-                || name.equals("SUSPICIOUS_SAND") || name.equals("SUSPICIOUS_GRAVEL");
+                || name.equals("SUSPICIOUS_SAND") || name.equals("SUSPICIOUS_GRAVEL")
+                || name.contains("SULFUR");
     }
 
     private static boolean isFunctionalBlock(String name, Material material) {
@@ -455,7 +456,7 @@ public final class ShopSubcategoryResolver {
     private static String resolveTransport(Material material) {
         var name = material.name();
         if (name.contains("RAIL")) return "rails";
-        if (name.contains("BOAT") || name.contains("RAFT")) return "boats";
+        if (name.contains("BOAT") || name.endsWith("_RAFT") || name.contains("_RAFT_")) return "boats";
         if (name.contains("MINECART") || name.equals("SADDLE")) return "minecarts";
         return "minecarts";
     }
@@ -465,7 +466,8 @@ public final class ShopSubcategoryResolver {
         if (name.contains("CUSHION")) return "cushions";
         if (name.contains("BANNER")) return "banners";
         if (name.contains("CANDLE")) return "candles";
-        if (name.contains("POT") || name.contains("PAINTING") || name.contains("ITEM_FRAME")
+        if (name.endsWith("_POT") || name.startsWith("POTTED_") || name.equals("FLOWER_POT")
+                || name.contains("PAINTING") || name.contains("ITEM_FRAME")
                 || name.contains("ARMOR_STAND") || name.contains("DECORATED")) {
             return "display";
         }
@@ -505,13 +507,15 @@ public final class ShopSubcategoryResolver {
                 || name.equals("LEATHER") || name.equals("STRING") || name.equals("BONE")
                 || name.equals("SLIME_BALL") || name.equals("GUNPOWDER") || name.equals("PAPER")
                 || name.equals("BOOK") || name.equals("EMERALD") || name.equals("DIAMOND")
-                || name.equals("NETHERITE_INGOT") || name.equals("NETHERITE_SCRAP")) {
+                || name.equals("NETHERITE_INGOT") || name.equals("NETHERITE_SCRAP")
+                || name.equals("ROTTEN_FLESH")) {
             return "materials";
         }
         if (name.contains("POTION") || name.contains("BREW") || name.contains("BLAZE")
                 || name.contains("FERMENTED") || name.contains("GHAST") || name.contains("MAGMA")
                 || name.contains("NETHER_WART") || name.contains("DRAGON_BREATH")
-                || name.contains("TURTLE") || name.contains("PHANTOM")) {
+                || name.contains("TURTLE") || name.contains("PHANTOM")
+                || name.contains("SPIDER_EYE")) {
             return "brewing";
         }
         return "other";

@@ -3,7 +3,7 @@ plugins {
 }
 
 group = "com.avery"
-version = "1.9.0-beta.2"
+version = "1.9.0-beta.3"
 
 layout.buildDirectory.set(file("${System.getProperty("user.home")}/.gradle_ashop_build"))
 

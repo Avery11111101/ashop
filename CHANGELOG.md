@@ -3,6 +3,26 @@
 All notable changes to ashop are documented here.  
 ashop 的所有重要變更皆記錄於此。
 
+## [1.9.0-beta.3] - 2026-09-30
+
+### Fixed / 修復
+- **Item Categorization False Positive Fixes (修復物品分類與子目錄路由誤判問題)** — Resolved widespread categorization edge-cases caused by loose substring matching:
+  - **Potent Sulfur (烈性硫磺)**: Refined flower pot matchers (`_POT`) to eliminate false positive mapping to decorations/display. Accurately relocated to `blocks/natural/terrain`.
+  - **Shulker Box (界符盒 / 潛影盒)**: Removed hardcoded `contains("SHULKER_BOX")` from `isStoneBuilding()`, allowing all 16-color shulker boxes to correctly route into `blocks/functional`.
+  - **Spider Eye & Rotten Flesh (蜘蛛眼與腐肉)**: Excluded non-conventional edible materials from food categorization; relocated Spider Eye to brewing (`misc/brewing`) and Rotten Flesh to materials (`misc/materials`).
+  - **Crafting Table & Crafter (工作台與自動合成機)**: Fixed loose `contains("RAFT")` substring matching; accurately restored Crafting Table to functional blocks (`blocks/functional`) and Crafter to Redstone (`redstone`).
+  - **Waxed Copper Products (塗蠟銅製品)**: Fixed loose `contains("AXE")` matcher in tool detection that falsely matched `w-AXE-d`; restored 36+ waxed copper building blocks to `blocks/building/copper`.
+  - **Wooden Bowl (木碗)**: Refined bow weapon matcher to prevent `BOWL` from being categorized as a ranged weapon.
+  - Added full test regression suite covering all fixed categories and dynamic pricing validation.  
+  **修復物品分類與子目錄路由誤判問題** — 徹底解決多項關鍵字子字串匹配導致的分類錯位問題：
+  - **烈性硫磺 (`POTENT_SULFUR`)**：花盆判定改為精確後綴比對，解決被 `POT` 關鍵字劫持至展示品之問題，正確歸入地形方塊 (`blocks/natural/terrain`)。
+  - **界符盒 (`SHULKER_BOX`)**：自 `isStoneBuilding()` 移除硬編碼，原色及 16 色塗色界符盒全數回歸功能性方塊 (`blocks/functional`)。
+  - **蜘蛛眼與腐肉 (`SPIDER_EYE` / `ROTTEN_FLESH`)**：排除因可食用性被誤分至點心之問題，蜘蛛眼精確歸入鍊金釀造 (`misc/brewing`)，腐肉歸入材料 (`misc/materials`)。
+  - **工作台與自動合成機 (`CRAFTING_TABLE` / `CRAFTER`)**：竹筏改為精確比對，避免 `c-RAFT-ing` 誤判為船隻，合成台正確回歸功能性方塊 (`blocks/functional`)，自動合成機回歸紅石。
+  - **塗蠟銅製品 (`WAXED_*`)**：工具斧頭改為精準後綴比對，避免 `w-AXE-d` 誤判為斧頭，36 種塗蠟銅方塊全數回歸銅類建材 (`blocks/building/copper`)。
+  - **木碗 (`BOWL`)**：弓類武器精確化，避免木碗落入作戰武器。
+  - 完整補齊單元測試與防回歸斷言。
+
 ## [1.9.0-beta.2] - 2026-09-30
 
 ### Fixed / 修復

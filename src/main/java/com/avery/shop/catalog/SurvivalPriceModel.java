@@ -426,7 +426,7 @@ public final class SurvivalPriceModel {
     if (name.contains("GLASS")) return 2.0;
     if (name.contains("STAIRS") || name.contains("SLAB") || name.contains("WALL")) return 1.5;
     if (name.contains("DOOR") || name.contains("TRAPDOOR") || name.contains("FENCE")) return 4.0;
-    if (name.contains("BOAT") || name.contains("RAFT")) return 15.0;
+    if (name.contains("BOAT") || name.endsWith("_RAFT") || name.contains("_RAFT_")) return 15.0;
     if (name.contains("MINECART")) return 35.0;
     if (name.contains("RAIL")) return 8.0;
     if (material == Material.SADDLE) return 120.0;

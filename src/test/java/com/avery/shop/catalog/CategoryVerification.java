@@ -96,7 +96,38 @@ public class CategoryVerification {
         assertSubcategory(ItemCategory.BLOCKS, Material.WHITE_CONCRETE, "dyed/concrete");
         assertSubcategory(ItemCategory.BLOCKS, Material.BROWN_MUSHROOM, "natural/flowers");
 
-        // 4. 26.3 新增物品相容性動態驗證 (若執行環境具備該 Material 則嚴格比對)
+        // 4. 修復異常分類回歸測試
+        // 工作台 / 合成台：不再被 RAFT 誤判為船，正確歸入 BLOCKS -> functional
+        assertCategory(catalog, Material.CRAFTING_TABLE, ItemCategory.BLOCKS);
+        assertSubcategory(ItemCategory.BLOCKS, Material.CRAFTING_TABLE, "functional");
+        assertCategory(catalog, Material.CRAFTER, ItemCategory.REDSTONE);
+
+        // 界符盒 / 潛影盒：不再被誤判為石製建材，正確歸入 BLOCKS -> functional
+        assertCategory(catalog, Material.SHULKER_BOX, ItemCategory.BLOCKS);
+        assertSubcategory(ItemCategory.BLOCKS, Material.SHULKER_BOX, "functional");
+        assertCategory(catalog, Material.WHITE_SHULKER_BOX, ItemCategory.BLOCKS);
+        assertSubcategory(ItemCategory.BLOCKS, Material.WHITE_SHULKER_BOX, "functional");
+
+        // 蜘蛛眼 / 腐肉：不再因食用性被誤判為點心，正確歸入 MISC -> brewing / materials
+        assertCategory(catalog, Material.SPIDER_EYE, ItemCategory.MISC);
+        assertSubcategory(ItemCategory.MISC, Material.SPIDER_EYE, "brewing");
+        assertCategory(catalog, Material.FERMENTED_SPIDER_EYE, ItemCategory.MISC);
+        assertSubcategory(ItemCategory.MISC, Material.FERMENTED_SPIDER_EYE, "brewing");
+        assertCategory(catalog, Material.ROTTEN_FLESH, ItemCategory.MISC);
+        assertSubcategory(ItemCategory.MISC, Material.ROTTEN_FLESH, "materials");
+
+        // 銅製品（塗蠟）：不再因 WAXED 含有 AXE 被誤判為工具雜項，正確歸入 BLOCKS -> building/copper
+        assertCategory(catalog, Material.WAXED_COPPER_BLOCK, ItemCategory.BLOCKS);
+        assertSubcategory(ItemCategory.BLOCKS, Material.WAXED_COPPER_BLOCK, "building/copper");
+        assertCategory(catalog, Material.WAXED_CUT_COPPER, ItemCategory.BLOCKS);
+        assertSubcategory(ItemCategory.BLOCKS, Material.WAXED_CUT_COPPER, "building/copper");
+
+        // 木碗：不再因 BOW 誤判為武器
+        assertCategory(catalog, Material.BOWL, ItemCategory.MISC);
+
+        // 5. 26.2 / 26.3 新增物品相容性動態驗證 (若執行環境具備該 Material 則嚴格比對)
+        verifyIfPresent(catalog, "POTENT_SULFUR", ItemCategory.BLOCKS, "natural/terrain");
+        verifyIfPresent(catalog, "SULFUR_BLOCK", ItemCategory.BLOCKS, "natural/terrain");
         verifyIfPresent(catalog, "POPLAR_LOG", ItemCategory.LOGS, "all");
         verifyIfPresent(catalog, "POPLAR_WOOD", ItemCategory.LOGS, "all");
         verifyIfPresent(catalog, "POPLAR_PLANKS", ItemCategory.BLOCKS, "building/wood");
@@ -111,7 +142,7 @@ public class CategoryVerification {
         verifyIfPresent(catalog, "SHELF_MUSHROOM", ItemCategory.BLOCKS, "natural/flowers");
         verifyIfPresent(catalog, "RED_SHRUB", ItemCategory.BLOCKS, "natural/flowers");
 
-        // 5. 靜態字串防回歸檢驗：確保 STRAW_BED 等非礦物絕不被 isMineral 誤判
+        // 6. 靜態字串防回歸檢驗：確保 STRAW_BED 等非礦物絕不被 isMineral 誤判
         if (ItemCatalog.isMineral("STRAW_BED", null)) {
             throw new AssertionError("Regression: STRAW_BED must not be recognized as mineral!");
         }

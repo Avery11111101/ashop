@@ -129,20 +129,20 @@ public final class ItemCatalog {
         // 食物（熟食、烹飪料理、點心等）
         if (isEdibleSafe(name, material)) return ItemCategory.FOOD;
 
-        if (name.contains("SWORD") || name.contains("BOW") || name.contains("CROSSBOW")
+        if (name.contains("SWORD") || name.equals("BOW") || name.contains("_BOW") || name.contains("BOW_") || name.contains("CROSSBOW")
                 || name.contains("TRIDENT") || name.contains("MACE") || name.contains("ARROW")
                 || name.equals("WIND_CHARGE")) return ItemCategory.WEAPONS;
         if (name.contains("HELMET") || name.contains("CHESTPLATE")
                 || name.contains("LEGGINGS") || name.contains("BOOTS")
                 || name.contains("SHIELD") || name.contains("ELYTRA")
                 || name.contains("HORSE_ARMOR") || name.equals("WOLF_ARMOR")) return ItemCategory.ARMOR;
-        if (name.contains("PICKAXE") || name.contains("AXE") || name.contains("SHOVEL")
+        if (name.contains("PICKAXE") || name.endsWith("_AXE") || name.contains("_AXE_") || name.contains("SHOVEL")
                 || name.contains("HOE") || name.contains("SHEARS")
                 || name.contains("FISHING_ROD") || name.contains("FLINT_AND_STEEL")
                 || name.equals("BRUSH") || name.equals("SPYGLASS") || name.equals("COMPASS")
                 || name.equals("RECOVERY_COMPASS") || name.equals("CLOCK") || name.equals("LEAD")) return ItemCategory.TOOLS;
         if (name.contains("RAIL") || name.contains("MINECART") || name.contains("BOAT")
-                || name.contains("CHEST_BOAT") || name.contains("RAFT") || material == Material.SADDLE) return ItemCategory.TRANSPORT;
+                || name.contains("CHEST_BOAT") || name.endsWith("_RAFT") || name.contains("_RAFT_") || material == Material.SADDLE) return ItemCategory.TRANSPORT;
         if (name.contains("REDSTONE") || name.contains("REPEATER") || name.contains("COMPARATOR")
                 || name.contains("PISTON") || name.contains("OBSERVER")
                 || name.contains("HOPPER") || name.contains("DROPPER") || name.contains("DISPENSER")
@@ -151,7 +151,7 @@ public final class ItemCatalog {
                 || name.contains("SCULK_SENSOR"))
             return ItemCategory.REDSTONE;
         if (name.contains("BANNER") || name.contains("CANDLE") || name.contains("FLOWER")
-                || name.contains("POT") || name.contains("PAINTING") || name.contains("ITEM_FRAME")
+                || name.endsWith("_POT") || name.startsWith("POTTED_") || name.equals("FLOWER_POT") || name.contains("PAINTING") || name.contains("ITEM_FRAME")
                 || name.contains("ARMOR_STAND") || name.contains("DECORATED_POT")
                 || name.contains("HEAD") || name.contains("SKULL") || name.contains("TORCH")
                 || name.contains("LANTERN") || name.contains("CAMPFIRE")
@@ -163,14 +163,18 @@ public final class ItemCatalog {
     }
 
     private static boolean isEdibleSafe(String name, Material material) {
+        // 蜘蛛眼、發酵蜘蛛眼、腐肉、毒馬鈴薯不歸類為一般食品/點心
+        if (name.equals("SPIDER_EYE") || name.equals("FERMENTED_SPIDER_EYE")
+                || name.equals("ROTTEN_FLESH") || name.equals("POISONOUS_POTATO")) {
+            return false;
+        }
         try {
             return material.isEdible();
         } catch (Throwable ignored) {
             return name.startsWith("COOKED_") || name.contains("BAKED") || name.equals("BREAD")
                     || name.equals("COOKIE") || name.equals("CAKE") || name.equals("PUMPKIN_PIE")
                     || name.contains("STEW") || name.contains("SOUP") || name.equals("DRIED_KELP")
-                    || name.equals("HONEY_BOTTLE") || name.equals("GOLDEN_CARROT")
-                    || name.equals("ROTTEN_FLESH") || name.equals("SPIDER_EYE");
+                    || name.equals("HONEY_BOTTLE") || name.equals("GOLDEN_CARROT");
         }
     }
 
@@ -183,7 +187,17 @@ public final class ItemCatalog {
                     || name.contains("CONCRETE") || name.contains("WOOL") || name.contains("CARPET")
                     || name.contains("GLASS") || name.contains("COPPER") || name.endsWith("_BLOCK")
                     || name.endsWith("_LEAVES") || name.equals("DIRT") || name.equals("SAND")
-                    || name.equals("GRAVEL");
+                    || name.equals("GRAVEL") || name.contains("SHULKER") || name.contains("CHEST")
+                    || name.contains("BARREL") || name.contains("TABLE") || name.contains("FURNACE")
+                    || name.contains("ANVIL") || name.contains("STAND") || name.contains("DOOR")
+                    || name.contains("FENCE") || name.contains("GATE") || name.contains("TRAPDOOR")
+                    || name.contains("SIGN") || name.contains("BED") || name.contains("SULFUR")
+                    || name.contains("SMOKER") || name.contains("BLAST") || name.contains("HOPPER")
+                    || name.contains("DISPENSER") || name.contains("DROPPER") || name.contains("OBSERVER")
+                    || name.contains("PISTON") || name.contains("CAULDRON") || name.contains("COMPOSTER")
+                    || name.contains("BELL") || name.contains("BEACON") || name.contains("CONDUIT")
+                    || name.contains("SPAWNER") || name.contains("CAMPFIRE")
+                    || name.equals("CRAFTING_TABLE");
         }
     }
 
