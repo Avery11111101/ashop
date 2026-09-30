@@ -198,7 +198,7 @@ public final class ItemCatalog {
         }
 
         // 2. 無絲綢鎬單純挖掘掉落之粗礦（排除 RAW_*_BLOCK 合成方塊）
-        if ((name.startsWith("RAW_") || name.contains("RAW_")) && !name.endsWith("_BLOCK")) {
+        if (name.startsWith("RAW_") && !name.endsWith("_BLOCK")) {
             return true;
         }
 

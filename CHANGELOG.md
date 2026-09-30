@@ -3,6 +3,12 @@
 All notable changes to ashop are documented here.  
 ashop 的所有重要變更皆記錄於此。
 
+## [1.9.0-beta.2] - 2026-09-30
+
+### Fixed / 修復
+- **Raw Ore Categorization False Positive Fix (修復粗礦比對誤判 STRAW_BED 露營草蓆問題)** — Refined mineral matchers in `ItemCatalog` and `ShopSubcategoryResolver` to strictly require `startsWith("RAW_")` rather than substring matching `contains("RAW_")`. Completely eliminates false positive where `STRAW_BED` (camping straw bed / 甘草床) was miscategorized as a raw ore under "粗礦與金屬寶石". Added regression assertions in test suite.  
+  **修復粗礦比對誤判 STRAW_BED 露營草蓆問題** — 修正 `ItemCatalog` 與 `ShopSubcategoryResolver` 中的粗礦判斷邏輯，改為嚴格前綴匹配 `startsWith("RAW_")`，移除 `contains("RAW_")`。徹底解決 `STRAW_BED`（露營草蓆 / 稻草床 / 甘草床）因名稱包含子字串 `RAW_` 而被誤分類至「粗礦與金屬寶石」的問題，並於測試套件補齊靜態字串防回歸斷言。
+
 ## [1.9.0-beta.1] - 2026-09-29
 
 ### Added / 新增

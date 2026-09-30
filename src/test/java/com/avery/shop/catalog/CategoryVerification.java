@@ -111,6 +111,11 @@ public class CategoryVerification {
         verifyIfPresent(catalog, "SHELF_MUSHROOM", ItemCategory.BLOCKS, "natural/flowers");
         verifyIfPresent(catalog, "RED_SHRUB", ItemCategory.BLOCKS, "natural/flowers");
 
+        // 5. 靜態字串防回歸檢驗：確保 STRAW_BED 等非礦物絕不被 isMineral 誤判
+        if (ItemCatalog.isMineral("STRAW_BED", null)) {
+            throw new AssertionError("Regression: STRAW_BED must not be recognized as mineral!");
+        }
+
         System.out.println("==================================================");
         System.out.println("ALL VERIFICATIONS COMPLETED AND PASSED 100%!");
         System.out.println("==================================================");

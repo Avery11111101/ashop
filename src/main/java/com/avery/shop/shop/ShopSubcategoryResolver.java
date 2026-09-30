@@ -245,7 +245,7 @@ public final class ShopSubcategoryResolver {
         }
 
         // 單純挖掘（無絲綢觸摸）直接掉落的粗礦物、錠、粒、礦產與寶石
-        return name.startsWith("RAW_") || name.contains("RAW_")
+        return name.startsWith("RAW_")
                 || name.contains("INGOT") || name.contains("NUGGET")
                 || name.equals("COAL") || name.equals("CHARCOAL")
                 || name.equals("DIAMOND") || name.equals("EMERALD")
