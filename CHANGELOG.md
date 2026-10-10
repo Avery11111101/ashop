@@ -3,6 +3,23 @@
 All notable changes to ashop are documented here.  
 ashop 的所有重要變更皆記錄於此。
 
+## [1.9.0] - 2026-10-10
+
+### Official Release / 正式版發布
+- **Wilderness Bound Support & Complete Categorization Refinements (原生支援 Paper 26.3 荒野之境與物品分類體系全面完善)**:
+  - Consolidates all beta testing features into stable production release.
+  - Native Minecraft 26.3 / Paper 26.3 (`api-version: '26.3'`) and Java 25 support.
+  - Complete 26.3 item taxonomy: Poplar wood sets, 16-color wool/concrete stairs & slabs, cushions (`decorations/cushions`), camping straw beds, and Dappled Forest flora.
+  - Modernized non-blocking asynchronous chat listener with Paper `AsyncChatEvent` and Adventure components.
+  - Comprehensive classification fixes resolving false matches for sulfur, shulker boxes, spider eyes, rotten flesh, crafting tables, crafters, waxed copper building blocks, and bowls.
+  - Full regression test suites ensuring 100% stability.  
+  **正式版發布**：彙整 1.9.0 測試版期間之所有功能驗證與錯誤修復，正式釋出穩定版生產環境：
+  - 原生支援 Minecraft 26.3 / Paper 26.3 與 Java 25 運行環境。
+  - 完整分類 26.3 全新增物資：白楊木系列、16 色羊毛/混凝土階梯與半磚、坐墊、露營草蓆與斑駁森林植被。
+  - 徹底重構聊天欄監聽器，採用現代化非同步 `AsyncChatEvent` 與 Adventure Component 體系。
+  - 全面解決物品分類邊界誤判問題（烈性硫磺、界符盒、蜘蛛眼、腐肉、工作台、自動合成機、塗蠟銅製品、木碗等）。
+  - 100% 通過單元測試與防回歸驗證。
+
 ## [1.9.0-beta.3] - 2026-09-30
 
 ### Fixed / 修復
