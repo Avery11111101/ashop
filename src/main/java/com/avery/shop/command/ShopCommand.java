@@ -318,6 +318,7 @@ public final class ShopCommand implements CommandExecutor, TabCompleter {
         }
         shopManager.load();
         send(sender, locale, "msg.cmd.reload.success");
+        send(sender, locale, "msg.cmd.reload.economy-hint");
         return true;
     }
 

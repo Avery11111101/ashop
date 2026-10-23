@@ -896,7 +896,8 @@ public final class ShopConfigService {
         if (setting.isPresent() && setting.get().getSellRatio() != null) {
             return setting.get().getSellRatio();
         }
-        return SurvivalPriceModel.sellRatioOverride(material)
+        boolean vein = priceCalculator.isVeinMiner();
+        return SurvivalPriceModel.sellRatioOverride(material, vein)
                 .orElse(plugin.getConfig().getDouble("system-shop.sell-ratio",
                         SurvivalPriceModel.defaultSellRatio()));
     }
@@ -908,7 +909,7 @@ public final class ShopConfigService {
         var counter = new int[]{0};
         resyncPricesInDirectory(getShopFolder(), catalog, counter);
         load(catalog);
-        plugin.getLogger().info("已依生存定價重算 " + counter[0] + " 項商品價格");
+        plugin.getLogger().info("已依工時經濟模型重算 " + counter[0] + " 項商品價格與折讓比");
         return counter[0];
     }
 
@@ -929,20 +930,16 @@ public final class ShopConfigService {
                     if (entry == null) continue;
 
                     boolean itemChanged = false;
-                    var newPrice = priceCalculator.calculate(entry);
-                    if (itemSection.getDouble("price") != newPrice) {
+                    var result = priceCalculator.calculateResult(entry);
+                    var newPrice = result.systemSellPrice();
+                    if (Math.abs(itemSection.getDouble("price") - newPrice) > 0.001) {
                         yaml.set("items." + yamlKey + ".price", newPrice);
                         itemChanged = true;
                     }
 
-                    var ratioOpt = SurvivalPriceModel.sellRatioOverride(entry.getTemplate().getType());
-                    if (ratioOpt.isPresent()) {
-                        if (itemSection.getDouble("sell-ratio") != ratioOpt.get()) {
-                            yaml.set("items." + yamlKey + ".sell-ratio", ratioOpt.get());
-                            itemChanged = true;
-                        }
-                    } else if (itemSection.contains("sell-ratio")) {
-                        yaml.set("items." + yamlKey + ".sell-ratio", null);
+                    var newRatio = result.sellRatio();
+                    if (Math.abs(itemSection.getDouble("sell-ratio", -1.0) - newRatio) > 0.001) {
+                        yaml.set("items." + yamlKey + ".sell-ratio", newRatio);
                         itemChanged = true;
                     }
 
@@ -1148,9 +1145,9 @@ public final class ShopConfigService {
             yaml.set(path + ".catalog-key", entry.getKey());
             yaml.set(path + ".material", entry.getMaterialId());
             yaml.set(path + ".enabled", true);
-            yaml.set(path + ".price", priceCalculator.calculate(entry));
-            SurvivalPriceModel.sellRatioOverride(entry.getTemplate().getType())
-                    .ifPresent(ratio -> yaml.set(path + ".sell-ratio", ratio));
+            var result = priceCalculator.calculateResult(entry);
+            yaml.set(path + ".price", result.systemSellPrice());
+            yaml.set(path + ".sell-ratio", result.sellRatio());
         }
 
         saveYaml(file, yaml);

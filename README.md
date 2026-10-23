@@ -152,9 +152,12 @@ system-shop:
 
 shop:
   pricing:
+    labor-economy:
+      hourly-wage: 1000.0   # 每小時基準工時產值（遊戲幣/小時）
+      vein-miner: false     # 連鎖挖礦修正開關（true 啟用連鎖產能折減）
     exchange:
-      multiply: 2.0   # 基準價 ×2
-      add: 30.0       # 再加 30（例：基準 10 → 實際 50）
+      multiply: 1.0   # 基準價 ×1
+      add: 0.0        # 再加 0（先乘後加）
 
 languages:
   default: zh_tw
