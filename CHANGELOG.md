@@ -3,6 +3,24 @@
 All notable changes to ashop are documented here.  
 ashop 的所有重要變更皆記錄於此。
 
+## [1.10.0] - 2026-10-23
+
+### Feature / 新功能
+- **Standard Labor-Time Valuation Model & VeinMiner Dynamics (工時經濟定價模型體系與連鎖挖礦動態調整)**:
+  - Scientific econometric pricing model based on standard labor-time valuation ($W_{\text{base}}$ = 1,000 currency/hr default).
+  - Deep integration with server plugin ecosystems (SuperHarvest right-click auto-replanting, AutoPickup zero-loss drops, BetterRTP travel discounts, ChunkEntityLimiter automation dampening, and MoneyFromMobs anti-double-faucet controls).
+  - Dynamic VeinMiner toggle (`shop.pricing.labor-economy.vein-miner: false/true`): automatically switches between standard manual harvest and vein-mining coefficients. Strictly isolated to minerals and logs to protect farming and beginner labor value.
+  - Four-layer defensive architecture:
+    1. Anti-arbitrage physical safety valve (`sellRatio = Math.min(0.99, systemBuyPrice / systemSellPrice)`) strictly ensuring buy price never exceeds sell price.
+    2. Automation suppression coefficient ($A_{\text{farm}} = 2.5 \sim 3.5$) preventing runaway inflation from AFK iron and gold farms.
+    3. Micro-value precision scaling (`min-price: 0.01` and `round-to: 0.01`) allowing accurate valuation for seeds ($0.02) and dirt ($0.15).
+    4. Synchronized reload reminder urging administrators to execute `/shop resync-prices` to cleanly flush new labor rates into all category files.  
+  **工時經濟定價模型體系與連鎖挖礦動態調整**：
+  - 導入標準工時產出價值法，以玩家每小時基準產值（預設 1,000 遊戲幣/小時）為定價錨點。
+  - 深度結合伺服器外掛生態（SuperHarvest、AutoPickup、BetterRTP、ChunkEntityLimiter、MoneyFromMobs 等）進行科學化係數校準。
+  - 支援連鎖挖礦（VeinMiner）開關設定與動態降幅，作用域精準限定於礦石與原木，保障新手與基礎建材權益。
+  - 落實 4 大防護：收購折讓比物理安全閥（保證 $\le 0.99$ 嚴防洗錢）、全自動產物折減（$A_{\text{farm}}$）、0.01 微利精度支援、以及 reload 與 resync-prices 資料流提示。
+
 ## [1.9.0] - 2026-10-10
 
 ### Official Release / 正式版發布
