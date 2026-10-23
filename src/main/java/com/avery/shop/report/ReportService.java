@@ -2,6 +2,7 @@ package com.avery.shop.report;
 
 import com.avery.shop.ShopPlugin;
 import com.avery.shop.catalog.CatalogEntry;
+import com.avery.shop.util.AtomicFileUtil;
 import org.bukkit.configuration.file.YamlConfiguration;
 
 import java.io.File;
@@ -19,7 +20,8 @@ public final class ReportService {
     private final List<TransactionRecord> history = new ArrayList<>();
     private final Queue<TransactionRecord> pendingBuffer = new ConcurrentLinkedQueue<>();
     private final Object lock = new Object();
-    private boolean isDirty = false;
+    private volatile boolean isDirty = false;
+    private int saveTaskId = -1;
 
     public ReportService(ShopPlugin plugin) {
         this.plugin = plugin;
@@ -45,7 +47,9 @@ public final class ReportService {
                     history.add(new TransactionRecord(timestamp, type, playerUuid, playerName, catalogKey, amount, totalPrice));
                 } catch (Exception ignored) {}
             }
-            cleanOldRecords(90);
+            long cutoff = System.currentTimeMillis() - (90L * 86400000L);
+            history.removeIf(rec -> rec.getTimestamp() < cutoff);
+            isDirty = false;
         }
     }
 
@@ -68,12 +72,27 @@ public final class ReportService {
                     serializedList.add(map);
                 }
                 config.set("transactions", serializedList);
-                config.save(dataFile);
+                AtomicFileUtil.saveYaml(config, dataFile);
                 isDirty = false;
             } catch (Exception e) {
                 plugin.getLogger().warning("無法儲存交易紀錄檔 (transactions.yml): " + e.getMessage());
             }
         }
+    }
+
+    /**
+     * 強制立即將緩衝區寫入歷史紀錄並儲存至磁碟（關服或特定操作時呼叫）
+     */
+    public void flushSave() {
+        synchronized (this) {
+            if (saveTaskId != -1 && plugin.getServer() != null && plugin.getServer().getScheduler() != null) {
+                try {
+                    plugin.getServer().getScheduler().cancelTask(saveTaskId);
+                } catch (Exception ignored) {}
+                saveTaskId = -1;
+            }
+        }
+        save();
     }
 
     public void recordTransaction(String type, String playerUuid, String playerName,
@@ -82,7 +101,30 @@ public final class ReportService {
                 System.currentTimeMillis(), type, playerUuid, playerName, catalogKey, amount, totalPrice
         );
         pendingBuffer.add(record);
-        plugin.getServer().getScheduler().runTaskAsynchronously(plugin, this::flushBufferAndSaveLater);
+        markDirtyAndScheduleSave();
+    }
+
+    /**
+     * 標記資料為髒資料，並透過防抖節流機制（延遲 30 秒批次儲存）排程非同步寫入磁碟，大幅降低磁碟 I/O
+     */
+    public void markDirtyAndScheduleSave() {
+        isDirty = true;
+        synchronized (this) {
+            if (saveTaskId != -1) return;
+            if (plugin == null || plugin.getServer() == null || plugin.getServer().getScheduler() == null || !plugin.isEnabled()) {
+                return;
+            }
+            try {
+                saveTaskId = plugin.getServer().getScheduler().runTaskLaterAsynchronously(plugin, () -> {
+                    synchronized (ReportService.this) {
+                        saveTaskId = -1;
+                    }
+                    save();
+                }, 20L * 30).getTaskId();
+            } catch (Exception e) {
+                saveTaskId = -1;
+            }
+        }
     }
 
     private void flushBuffer() {
@@ -96,18 +138,13 @@ public final class ReportService {
         }
     }
 
-    private void flushBufferAndSaveLater() {
-        flushBuffer();
-        save();
-    }
-
     public void cleanOldRecords(int keepDays) {
         long cutoff = System.currentTimeMillis() - (keepDays * 86400000L);
         synchronized (lock) {
             int before = history.size();
             history.removeIf(rec -> rec.getTimestamp() < cutoff);
             if (history.size() != before) {
-                isDirty = true;
+                markDirtyAndScheduleSave();
             }
         }
     }

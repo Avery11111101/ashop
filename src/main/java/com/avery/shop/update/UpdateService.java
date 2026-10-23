@@ -201,7 +201,7 @@ public final class UpdateService {
                             if (a.isJsonObject()) {
                                 var assetObj = a.getAsJsonObject();
                                 String aname = assetObj.get("name").getAsString();
-                                if (aname.endsWith(".jar")) {
+                                if (aname.toLowerCase().endsWith(".jar")) {
                                     downloadUrl = assetObj.get("browser_download_url").getAsString();
                                     assetName = aname;
                                     assetSize = assetObj.get("size").getAsLong();
@@ -413,6 +413,17 @@ public final class UpdateService {
                     String currentJarName = currentJar.getName();
                     String targetJarName = target.assetName() != null ? target.assetName() : currentJarName;
 
+                    // 安全檢驗：強制檔名過濾與路徑穿越防護 (FINDING-02)
+                    String safeJarName = new File(targetJarName).getName();
+                    if (!safeJarName.toLowerCase().endsWith(".jar")) {
+                        throw new SecurityException("非法更新檔案格式，僅允許 .jar 結尾: " + targetJarName);
+                    }
+
+                    File targetFile = new File(pluginsFolder, safeJarName);
+                    if (!targetFile.getCanonicalPath().startsWith(pluginsFolder.getCanonicalPath() + File.separator)) {
+                        throw new SecurityException("檢測到非法更新檔案路徑穿越嘗試: " + targetJarName);
+                    }
+
                     File tempFile = new File(pluginsFolder, ".ashop_download.part");
                     if (tempFile.exists()) {
                         tempFile.delete();
@@ -451,7 +462,7 @@ public final class UpdateService {
                     boolean directReplaced = false;
                     boolean queuedForRestart = false;
 
-                    if (targetJarName.equalsIgnoreCase(currentJarName)) {
+                    if (safeJarName.equalsIgnoreCase(currentJarName)) {
                         // 情況 A：新舊檔名相同（例如同為 ashop.jar）
                         try {
                             // 嘗試原子覆蓋（在 Linux/macOS 上立即生效）
@@ -463,13 +474,15 @@ public final class UpdateService {
                             if (!updateFolder.exists()) {
                                 updateFolder.mkdirs();
                             }
-                            File updateTarget = new File(updateFolder, currentJarName);
+                            File updateTarget = new File(updateFolder, safeJarName);
+                            if (!updateTarget.getCanonicalPath().startsWith(updateFolder.getCanonicalPath() + File.separator)) {
+                                throw new SecurityException("檢測到非法更新檔案路徑穿越嘗試: " + safeJarName);
+                            }
                             Files.move(tempFile.toPath(), updateTarget.toPath(), StandardCopyOption.REPLACE_EXISTING);
                             queuedForRestart = true;
                         }
                     } else {
                         // 情況 B：新舊檔名不同（例如舊版 ashop-1.8.0-beta.4.jar，新版 ashop-1.8.0-beta.5.jar）
-                        File targetFile = new File(pluginsFolder, targetJarName);
                         // 新檔未被 JVM 開啟，在 Windows 下可直接成功寫入！
                         Files.move(tempFile.toPath(), targetFile.toPath(), StandardCopyOption.REPLACE_EXISTING);
                         directReplaced = true;
@@ -485,17 +498,17 @@ public final class UpdateService {
                     // 3. 發送成果通知
                     if (directReplaced && !queuedForRestart) {
                         String msg = "§a[ashop] ✔ 成功下載並取代外掛檔案！\n"
-                                + "§a[ashop] 已就緒檔案: §fplugins/" + targetJarName + "\n"
+                                + "§a[ashop] 已就緒檔案: §fplugins/" + safeJarName + "\n"
                                 + "§6[ashop] 請於離峰時段重啟伺服器 (/restart 或 /stop)，新版本將完整載入！";
                         if (feedbackSender != null) feedbackSender.sendMessage(msg);
-                        plugin.getLogger().info("新版本已直接替換外掛檔 plugins/" + targetJarName + "，請重啟伺服器生效。");
+                        plugin.getLogger().info("新版本已直接替換外掛檔 plugins/" + safeJarName + "，請重啟伺服器生效。");
                     } else {
                         String msg = "§a[ashop] ✔ 成功下載新版本 " + target.tagName() + "！\n"
-                                + "§a[ashop] 新檔案已寫入: §fplugins/" + targetJarName + "\n"
+                                + "§a[ashop] 新檔案已寫入: §fplugins/" + safeJarName + "\n"
                                 + "§e[ashop] 舊檔案已排定於伺服器關機時自動清除，避免多版本衝突。\n"
                                 + "§6[ashop] 請於離峰時段重啟伺服器 (/restart) 完成版本升級套用！";
                         if (feedbackSender != null) feedbackSender.sendMessage(msg);
-                        plugin.getLogger().info("新版本已就緒 (plugins/" + targetJarName + ")，舊檔已排定清除，請重啟伺服器以套用。");
+                        plugin.getLogger().info("新版本已就緒 (plugins/" + safeJarName + ")，舊檔已排定清除，請重啟伺服器以套用。");
                     }
 
                     if (onComplete != null) onComplete.accept(true);

@@ -1,6 +1,7 @@
 package com.avery.shop.locale;
 
 import com.avery.shop.ShopPlugin;
+import com.avery.shop.util.AtomicFileUtil;
 import org.bukkit.Material;
 import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.entity.Player;
@@ -8,6 +9,7 @@ import org.bukkit.entity.Player;
 import java.io.File;
 import java.io.IOException;
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * 多語系服務 - 支援 data/locales 自訂語系檔與 config 擴充語言
@@ -15,7 +17,7 @@ import java.util.*;
 public final class LocaleService {
 
     private final ShopPlugin plugin;
-    private final Map<String, Map<String, String>> localeData = new LinkedHashMap<>();
+    private final Map<String, Map<String, String>> localeData = new ConcurrentHashMap<>();
     private final Map<String, String> displayNames = new LinkedHashMap<>();
     private final Map<UUID, String> playerLocales = new HashMap<>();
     private String defaultLocale = "zh_tw";
@@ -46,7 +48,7 @@ public final class LocaleService {
             if ("en_us".equals(locale) && data.size() < 50) {
                 buildEnglishFallback(data);
             }
-            localeData.put(locale, data);
+            localeData.put(locale, new ConcurrentHashMap<>(data));
         }
 
         autoPopulateFromPaperApi();
@@ -61,8 +63,31 @@ public final class LocaleService {
         }
     }
 
+    /**
+     * 由背景非同步下載任務完成後呼叫，線程安全地合併 Mojang 官方翻譯
+     *
+     * @param localeCode   語系代碼（如 zh_tw）
+     * @param officialData 官方翻譯鍵值對
+     */
+    public void mergeOfficialTranslations(String localeCode, Map<String, String> officialData) {
+        if (officialData == null || officialData.isEmpty()) return;
+        Map<String, String> target = localeData.computeIfAbsent(localeCode, k -> new ConcurrentHashMap<>());
+        int merged = 0;
+        for (var entry : officialData.entrySet()) {
+            if (entry.getKey() != null && entry.getValue() != null) {
+                // putIfAbsent: 不覆蓋已有之使用者自訂 properties 或 Paper API 翻譯
+                if (target.putIfAbsent(entry.getKey(), entry.getValue()) == null) {
+                    merged++;
+                }
+            }
+        }
+        if (merged > 0 && plugin != null) {
+            plugin.getLogger().info("已於背景線程成功合併 " + merged + " 筆官方「" + localeCode + "」語系翻譯！");
+        }
+    }
+
     private void autoPopulateFromPaperApi() {
-        var twData = localeData.computeIfAbsent("zh_tw", k -> new HashMap<>());
+        var twData = localeData.computeIfAbsent("zh_tw", k -> new ConcurrentHashMap<>());
         int loadedCount = 0;
 
         for (Material mat : Material.values()) {
@@ -198,7 +223,7 @@ public final class LocaleService {
             yaml.set("players." + entry.getKey(), entry.getValue());
         }
         try {
-            yaml.save(file);
+            AtomicFileUtil.saveYaml(yaml, file);
         } catch (IOException e) {
             plugin.getLogger().severe("儲存玩家語系失敗：" + e.getMessage());
         }

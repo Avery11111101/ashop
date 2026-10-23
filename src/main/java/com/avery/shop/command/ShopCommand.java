@@ -272,7 +272,6 @@ public final class ShopCommand implements CommandExecutor, TabCompleter {
         sender.sendMessage("§f" + locale.msg(loc, "msg.cmd.help.search"));
         sender.sendMessage("§f" + locale.msg(loc, "msg.cmd.help.sell"));
         sender.sendMessage("§f" + locale.msg(loc, "msg.cmd.help.price"));
-        sender.sendMessage("§f" + locale.msg(loc, "msg.cmd.help.version"));
         sender.sendMessage("§f" + locale.msg(loc, "msg.cmd.help.lang"));
         sender.sendMessage("");
 
@@ -282,7 +281,7 @@ public final class ShopCommand implements CommandExecutor, TabCompleter {
         }
         sender.sendMessage("");
 
-        if (sender.hasPermission("shop.admin")) {
+        if (sender.hasPermission("shop.admin") || sender.hasPermission("ashop.admin")) {
             sender.sendMessage("§c§l" + locale.msg(loc, "msg.cmd.help.section.admin"));
             sender.sendMessage("§f" + locale.msg(loc, "msg.cmd.help.reload"));
             sender.sendMessage("§f" + locale.msg(loc, "msg.cmd.help.reset"));
@@ -290,6 +289,7 @@ public final class ShopCommand implements CommandExecutor, TabCompleter {
             sender.sendMessage("§7" + locale.msg(loc, "msg.cmd.help.reset.warn"));
             sender.sendMessage("§f" + locale.msg(loc, "msg.cmd.help.add"));
             sender.sendMessage("§f" + locale.msg(loc, "msg.cmd.help.admin-gui"));
+            sender.sendMessage("§f" + locale.msg(loc, "msg.cmd.help.version"));
             sender.sendMessage("§f" + locale.msg(loc, "msg.cmd.help.update"));
             sender.sendMessage("");
 
@@ -297,6 +297,10 @@ public final class ShopCommand implements CommandExecutor, TabCompleter {
             for (var line : locale.msg(loc, "msg.cmd.help.config").split("\n")) {
                 sender.sendMessage("§7" + line);
             }
+        } else if (sender.hasPermission("ashop.admin.version")) {
+            sender.sendMessage("§c§l" + locale.msg(loc, "msg.cmd.help.section.admin"));
+            sender.sendMessage("§f" + locale.msg(loc, "msg.cmd.help.version"));
+            sender.sendMessage("");
         }
 
         sender.sendMessage("§8" + locale.msg(loc, "msg.cmd.help.footer"));
@@ -399,6 +403,14 @@ public final class ShopCommand implements CommandExecutor, TabCompleter {
     }
 
     private boolean handleVersion(CommandSender sender) {
+        // 權限檢查：限制僅管理員或具備 version 權限者可查詢，防止惡意消耗 GitHub API 配額 (FINDING-06)
+        if (!sender.hasPermission("ashop.admin.version")
+                && !sender.hasPermission("ashop.admin")
+                && !sender.hasPermission("shop.admin")) {
+            sendError(sender, plugin.getLocaleService(), "msg.cmd.no-admin");
+            return true;
+        }
+
         var updateService = plugin.getUpdateService();
         if (updateService == null) {
             sender.sendMessage("§e[ashop] 目前外掛版本: §fv" + plugin.getDescription().getVersion());
@@ -489,8 +501,11 @@ public final class ShopCommand implements CommandExecutor, TabCompleter {
     @Override
     public List<String> onTabComplete(CommandSender sender, Command command, String alias, String[] args) {
         if (args.length == 1) {
-            var options = new ArrayList<>(List.of("help", "version", "ver", "search", "sell", "sellable", "price", "說明", "版本", "查看版本", "搜尋", "上架", "賣", "可收購", "價格"));
-            if (sender.hasPermission("shop.admin")) {
+            var options = new ArrayList<>(List.of("help", "search", "sell", "sellable", "price", "說明", "搜尋", "上架", "賣", "可收購", "價格"));
+            if (sender.hasPermission("ashop.admin.version") || sender.hasPermission("ashop.admin") || sender.hasPermission("shop.admin")) {
+                options.addAll(List.of("version", "ver", "about", "版本", "查看版本"));
+            }
+            if (sender.hasPermission("shop.admin") || sender.hasPermission("ashop.admin")) {
                 options.addAll(List.of("add", "additem", "reload", "reset", "resync-prices", "report", "報表", "重算價格", "還原", "restore", "重新載入", "update", "更新"));
             }
             return filter(options, args[0]);

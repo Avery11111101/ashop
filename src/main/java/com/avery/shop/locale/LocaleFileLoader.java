@@ -1,6 +1,7 @@
 package com.avery.shop.locale;
 
 import com.avery.shop.ShopPlugin;
+import com.avery.shop.util.AtomicFileUtil;
 
 import java.io.*;
 import java.nio.charset.StandardCharsets;
@@ -8,6 +9,7 @@ import java.nio.file.Files;
 import java.util.HashMap;
 import java.util.Locale;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * 語系檔載入器 — 支援 data 資料夾自訂語言與 JAR 內建合併
@@ -107,26 +109,79 @@ public final class LocaleFileLoader {
         return data;
     }
 
+    private static final AtomicBoolean DOWNLOADING = new AtomicBoolean(false);
+
     public static void fetchAndCacheOfficialLanguageJson(ShopPlugin plugin, Map<String, String> data) {
         File cacheDir = getLocalesFolder(plugin);
         File cacheFile = new File(cacheDir, "cache_zh_tw.json");
 
-        if (!cacheFile.exists() || cacheFile.length() < 1000) {
-            plugin.getLogger().info("正在從 Mojang 官方資產庫線上自動下載 1.21 繁體中文 (zh_tw.json) 語言包…");
-            boolean success = downloadOfficialJson(plugin, cacheFile);
-            if (success) {
-                plugin.getLogger().info("官方繁體中文語言包下載並快取成功！");
-            } else {
-                plugin.getLogger().warning("線上自動下載官方語言包失敗，將嘗試使用已存在快取。");
-            }
-        }
-
-        if (cacheFile.exists() && cacheFile.length() > 0) {
+        if (cacheFile.exists() && cacheFile.length() >= 1000) {
             try (var is = new FileInputStream(cacheFile)) {
                 parseJson(is, data);
             } catch (IOException e) {
                 plugin.getLogger().warning("無法讀取快取之官方語言包：" + e.getMessage());
             }
+            return;
+        }
+
+        // 快取不存在或不完整，排程背景非同步下載，保證主線程零阻塞
+        plugin.getLogger().info("未偵測到繁體中文官方語言包快取 (cache_zh_tw.json)，已排程背景非同步下載…");
+        downloadOfficialJsonAsync(plugin);
+    }
+
+    public static void downloadOfficialJsonAsync(ShopPlugin plugin) {
+        if (!DOWNLOADING.compareAndSet(false, true)) {
+            return;
+        }
+
+        Runnable task = () -> {
+            try {
+                File cacheDir = getLocalesFolder(plugin);
+                File cacheFile = new File(cacheDir, "cache_zh_tw.json");
+                File tempFile = new File(cacheDir, "cache_zh_tw.json.tmp");
+
+                plugin.getLogger().info("正在於背景非同步下載 1.21 繁體中文 (zh_tw.json) 官方語言包…");
+                boolean success = downloadOfficialJson(plugin, tempFile);
+                if (success) {
+                    try {
+                        AtomicFileUtil.moveSafely(tempFile, cacheFile);
+                    } catch (IOException e) {
+                        plugin.getLogger().warning("官方語言包暫存檔移動失敗：" + e.getMessage());
+                    }
+                    plugin.getLogger().info("官方繁體中文語言包背景下載並快取成功！");
+
+                    var officialData = new HashMap<String, String>();
+                    if (cacheFile.exists() && cacheFile.length() > 0) {
+                        try (var is = new FileInputStream(cacheFile)) {
+                            parseJson(is, officialData);
+                        } catch (IOException e) {
+                            plugin.getLogger().warning("無法讀取快取之官方語言包：" + e.getMessage());
+                        }
+                    }
+
+                    if (!officialData.isEmpty() && plugin.getLocaleService() != null) {
+                        plugin.getLocaleService().mergeOfficialTranslations("zh_tw", officialData);
+                    }
+                } else {
+                    if (tempFile.exists()) {
+                        //noinspection ResultOfMethodCallIgnored
+                        tempFile.delete();
+                    }
+                    plugin.getLogger().warning("線上背景下載官方繁體中文語言包失敗，將使用內建資源與 Paper API 翻譯。");
+                }
+            } catch (Exception e) {
+                plugin.getLogger().warning("背景下載官方語言包發生異常: " + e.getMessage());
+            } finally {
+                DOWNLOADING.set(false);
+            }
+        };
+
+        if (plugin.getServer() != null && plugin.getServer().getScheduler() != null && plugin.isEnabled()) {
+            plugin.getServer().getScheduler().runTaskAsynchronously(plugin, task);
+        } else {
+            Thread t = new Thread(task, "ashop-locale-download");
+            t.setDaemon(true);
+            t.start();
         }
     }
 

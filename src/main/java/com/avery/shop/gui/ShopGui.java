@@ -13,7 +13,9 @@ import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Optional;
 
 /**
  * 商店 GUI 建構器（多語系、效能優化）
@@ -176,6 +178,7 @@ public final class ShopGui {
 
         int unsellableStacks = 0;
         int unsellableItems = 0;
+        var previewSellCounts = new HashMap<String, Integer>();
 
         for (int slot = 0; slot < SELL_DEPOSIT_SIZE; slot++) {
             var stack = inv.getItem(slot);
@@ -212,15 +215,23 @@ public final class ShopGui {
                     .color(NamedTextColor.DARK_GRAY).decoration(TextDecoration.ITALIC, false));
 
             boolean canSell = manager.canSellToSystem(cleanItem);
+            var resolvedOpt = canSell ? manager.resolvePlayerItem(cleanItem) : java.util.Optional.<com.avery.shop.shop.ResolvedShopItem>empty();
+            String itemKey = resolvedOpt.map(r -> r.entry().getKey()).orElse(null);
+            int currentOffset = (itemKey != null) ? previewSellCounts.getOrDefault(itemKey, 0) : 0;
+
+            var batchSellQuote = (canSell && itemKey != null)
+                    ? manager.getIncrementalSellQuote(cleanItem, currentOffset, amount)
+                    : null;
             var sellQuote = canSell ? manager.getSellToSystemQuote(cleanItem) : PriceQuote.unavailable();
 
-            if (sellQuote.available()) {
+            if (batchSellQuote != null && batchSellQuote.totalPrice() > 0) {
                 sellableStacks++;
                 sellableItems += amount;
 
-                var unitSell = sellQuote.price();
-                var subtotalSell = unitSell * amount;
+                var subtotalSell = batchSellQuote.totalPrice();
+                var unitSell = batchSellQuote.averageUnitPrice();
                 totalSell += subtotalSell;
+                previewSellCounts.put(itemKey, currentOffset + amount);
 
                 if (hasBuyPrice) {
                     sellableBuyTotal += stackBuyTotal;
@@ -619,7 +630,8 @@ public final class ShopGui {
         var quote = manager.getCatalogPriceQuote(catalogKey);
         var unitStr = manager.getEconomy().format(quote.price());
         int maxStack = entry.getTemplate().getMaxStackSize();
-        var stackTotal = manager.getEconomy().format(quote.price() * maxStack);
+        var stackBatchQuote = manager.getCatalogBatchBuyQuote(catalogKey, maxStack);
+        var stackTotal = manager.getEconomy().format(stackBatchQuote.totalPrice());
 
         var display = entry.getTemplate().clone();
         display.setAmount(1);

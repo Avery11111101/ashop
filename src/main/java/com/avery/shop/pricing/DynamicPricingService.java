@@ -169,6 +169,11 @@ public final class DynamicPricingService {
     }
 
     /**
+     * 批次報價結果（邊際計價 / 離散積分）
+     */
+    public record BatchQuote(double totalPrice, double finalMultiplier, double averageUnitPrice) {}
+
+    /**
      * 計算當前動態價格
      */
     public PriceQuote quote(String catalogKey, double basePrice, int activeStock) {
@@ -231,26 +236,188 @@ public final class DynamicPricingService {
     }
 
     /**
-     * 記錄購買：全部交易寫入 total-buys；僅在未達漲停時增加有效 buys
+     * 計算批次購買報價（邊際定價 / 離散積分）
+     * 模擬 0 到 amount-1 次購買時，每次購買後有效 buys 的累加與 multiplier 演進，
+     * 累計 totalPrice = sum(unitPrice_k)。單價以 Math.max(0.01, basePrice * clampedMultiplier) 計。
+     */
+    public BatchQuote calculateBatchBuyQuote(String catalogKey, double basePrice, int activeStock, int amount) {
+        if (amount <= 0) {
+            return new BatchQuote(0.0, 1.0, Math.max(0.01, basePrice));
+        }
+        if (!isEnabled() || catalogKey == null) {
+            double unitPrice = Math.max(0.01, basePrice);
+            return new BatchQuote(unitPrice * amount, 1.0, unitPrice);
+        }
+
+        var data = market.getOrDefault(catalogKey, MarketData.EMPTY);
+        var cfg = readConfig();
+
+        double simBuys = data.getTotalBuys();
+        double simSells = data.getTotalSells();
+        double totalPrice = 0.0;
+
+        for (int i = 0; i < amount; i++) {
+            double rawMult = rawMultiplier(simBuys, simSells, activeStock, cfg);
+            double clampedMult = clamp(rawMult, cfg.minMult, cfg.maxMult);
+            double unitPrice = Math.max(0.01, basePrice * clampedMult);
+            totalPrice += unitPrice;
+
+            if (rawMult < cfg.maxMult - CAP_EPSILON) {
+                simBuys += 1.0;
+            }
+        }
+
+        double finalRawMult = rawMultiplier(simBuys, simSells, activeStock, cfg);
+        double finalMultiplier = clamp(finalRawMult, cfg.minMult, cfg.maxMult);
+        double averageUnitPrice = totalPrice / amount;
+
+        return new BatchQuote(totalPrice, finalMultiplier, averageUnitPrice);
+    }
+
+    /**
+     * 計算批次出售報價（邊際定價 / 離散積分）
+     * 模擬 0 到 amount-1 次出售時，每次出售後 effective sells 增加導致 multiplier 下滑，
+     * 累計 totalSellIncome = sum(unitSellPrice_k)。單價以 basePrice * clampedMultiplier * sellRatio 計。
+     * 內含批次交易套利防護判斷：對於同一批次物品，單位的總出售價格不得高於其重新買入成本。
+     */
+    public BatchQuote calculateBatchSellQuote(String catalogKey, double basePrice, int activeStock, int amount, double sellRatio) {
+        return calculateIncrementalSellQuote(catalogKey, basePrice, activeStock, 0, amount, sellRatio, 1.0);
+    }
+
+    public BatchQuote calculateIncrementalSellQuote(String catalogKey, double basePrice, int activeStock,
+                                                    int soldOffset, int amount, double sellRatio) {
+        return calculateIncrementalSellQuote(catalogKey, basePrice, activeStock, soldOffset, amount, sellRatio, 1.0);
+    }
+
+    /**
+     * 支援同批次 soldOffset 遞減計價與耐久度係數的出售報價計算
+     */
+    public BatchQuote calculateIncrementalSellQuote(String catalogKey, double basePrice, int activeStock,
+                                                    int soldOffset, int amount, double sellRatio, double durabilityFactor) {
+        if (amount <= 0) {
+            return new BatchQuote(0.0, 1.0, 0.0);
+        }
+        double factor = Math.max(0.0, durabilityFactor);
+        if (!isEnabled() || catalogKey == null) {
+            double unitPrice = Math.max(0.01, basePrice * 1.0 * sellRatio * factor);
+            return new BatchQuote(unitPrice * amount, 1.0, unitPrice);
+        }
+
+        var data = market.getOrDefault(catalogKey, MarketData.EMPTY);
+        var cfg = readConfig();
+
+        double simBuys = data.getTotalBuys();
+        double simSells = data.getTotalSells();
+
+        // 1. 先模擬同批次在此之前已賣出的 soldOffset 次對市場價格的推進（遞減效應）
+        for (int i = 0; i < soldOffset; i++) {
+            double rawMult = rawMultiplier(simBuys, simSells, activeStock, cfg);
+            if (rawMult > cfg.minMult + CAP_EPSILON) {
+                simSells += 1.0;
+            }
+        }
+
+        // 2. 模擬本次 amount 次出售的離散積分計算
+        double totalIncome = 0.0;
+        for (int i = 0; i < amount; i++) {
+            double rawMult = rawMultiplier(simBuys, simSells, activeStock, cfg);
+            double clampedMult = clamp(rawMult, cfg.minMult, cfg.maxMult);
+            double unitPrice = Math.max(0.01, basePrice * clampedMult * sellRatio * factor);
+            totalIncome += unitPrice;
+
+            if (rawMult > cfg.minMult + CAP_EPSILON) {
+                simSells += 1.0;
+            }
+        }
+
+        // 3. 套利防護判斷：對於同一批次物品，單位的總出售價格不得高於其重新買入成本（即總利潤不得大於或等於零）
+        double rebuyCost = simulateBatchBuyCost(simBuys, simSells, basePrice, activeStock, amount, cfg);
+        if (totalIncome >= rebuyCost) {
+            totalIncome = Math.max(0.01, rebuyCost * 0.99);
+        }
+
+        double finalRawMult = rawMultiplier(simBuys, simSells, activeStock, cfg);
+        double finalMultiplier = clamp(finalRawMult, cfg.minMult, cfg.maxMult);
+        double averageUnitPrice = totalIncome / amount;
+
+        return new BatchQuote(totalIncome, finalMultiplier, averageUnitPrice);
+    }
+
+    /**
+     * 模擬在指定的 buys/sells 狀態下買入 amount 個物品所需的總成本
+     */
+    private double simulateBatchBuyCost(double startBuys, double startSells, double basePrice,
+                                        int activeStock, int amount, PricingConfig cfg) {
+        double currentBuys = startBuys;
+        double cost = 0.0;
+        for (int i = 0; i < amount; i++) {
+            double rawMult = rawMultiplier(currentBuys, startSells, activeStock, cfg);
+            double clampedMult = clamp(rawMult, cfg.minMult, cfg.maxMult);
+            cost += Math.max(0.01, basePrice * clampedMult);
+            if (rawMult < cfg.maxMult - CAP_EPSILON) {
+                currentBuys += 1.0;
+            }
+        }
+        return cost;
+    }
+
+    /**
+     * 記錄單筆購買
      */
     public void recordBuy(String catalogKey, int activeStock) {
-        if (!isEnabled() || catalogKey == null) return;
+        recordBatchBuy(catalogKey, activeStock, 1);
+    }
+
+    /**
+     * 批次記錄購買：全部交易寫入 total-buys / allBuys；僅在未達漲停時增加有效 buys
+     */
+    public void recordBatchBuy(String catalogKey, int activeStock, int amount) {
+        if (!isEnabled() || catalogKey == null || amount <= 0) return;
         var data = market.computeIfAbsent(catalogKey, k -> new MarketData(0, 0));
-        data.recordAllBuy();
-        if (!isAtMaxCap(catalogKey, activeStock)) {
-            data.recordBuy();
+        var cfg = readConfig();
+        double currentBuys = data.getTotalBuys();
+        double currentSells = data.getTotalSells();
+        int effectiveBuys = 0;
+        for (int i = 0; i < amount; i++) {
+            double rawMult = rawMultiplier(currentBuys, currentSells, activeStock, cfg);
+            if (rawMult < cfg.maxMult - CAP_EPSILON) {
+                currentBuys += 1.0;
+                effectiveBuys++;
+            }
+            data.recordAllBuy();
+        }
+        if (effectiveBuys > 0) {
+            data.setTotalBuys(data.getTotalBuys() + effectiveBuys);
         }
     }
 
     /**
-     * 記錄出售：全部交易寫入 total-sells；僅在未達跌停時增加有效 sells
+     * 記錄單筆出售
      */
     public void recordSell(String catalogKey, int activeStock) {
-        if (!isEnabled() || catalogKey == null) return;
+        recordBatchSell(catalogKey, activeStock, 1);
+    }
+
+    /**
+     * 批次記錄出售：全部交易寫入 total-sells / allSells；僅在未達跌停時增加有效 sells
+     */
+    public void recordBatchSell(String catalogKey, int activeStock, int amount) {
+        if (!isEnabled() || catalogKey == null || amount <= 0) return;
         var data = market.computeIfAbsent(catalogKey, k -> new MarketData(0, 0));
-        data.recordAllSell();
-        if (!isAtMinCap(catalogKey, activeStock)) {
-            data.recordSell();
+        var cfg = readConfig();
+        double currentBuys = data.getTotalBuys();
+        double currentSells = data.getTotalSells();
+        int effectiveSells = 0;
+        for (int i = 0; i < amount; i++) {
+            double rawMult = rawMultiplier(currentBuys, currentSells, activeStock, cfg);
+            if (rawMult > cfg.minMult + CAP_EPSILON) {
+                currentSells += 1.0;
+                effectiveSells++;
+            }
+            data.recordAllSell();
+        }
+        if (effectiveSells > 0) {
+            data.setTotalSells(data.getTotalSells() + effectiveSells);
         }
     }
 
@@ -270,13 +437,17 @@ public final class DynamicPricingService {
         return rawMultiplier(data, activeStock, cfg) <= cfg.minMult + CAP_EPSILON;
     }
 
-    private static double rawMultiplier(MarketData data, int activeStock, PricingConfig cfg) {
+    private static double rawMultiplier(double totalBuys, double totalSells, int activeStock, PricingConfig cfg) {
         double multiplier = 1.0;
-        multiplier += data.getTotalBuys() * cfg.perBuy;
-        multiplier -= data.getTotalSells() * cfg.perSell;
+        multiplier += totalBuys * cfg.perBuy;
+        multiplier -= totalSells * cfg.perSell;
         int shortage = Math.max(0, cfg.referenceStock - activeStock);
         multiplier += shortage * cfg.perShortage;
         return multiplier;
+    }
+
+    private static double rawMultiplier(MarketData data, int activeStock, PricingConfig cfg) {
+        return rawMultiplier(data.getTotalBuys(), data.getTotalSells(), activeStock, cfg);
     }
 
     private static double clamp(double value, double min, double max) {

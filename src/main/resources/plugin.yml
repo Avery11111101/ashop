@@ -31,3 +31,12 @@ permissions:
   shop.lang:
     description: 切換語言
     default: true
+  ashop.admin:
+    description: ashop 管理員權限
+    default: op
+    children:
+      shop.admin: true
+      ashop.admin.version: true
+  ashop.admin.version:
+    description: 查詢外掛版本與更新資訊權限
+    default: op

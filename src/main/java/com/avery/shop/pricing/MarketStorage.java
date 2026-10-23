@@ -1,6 +1,7 @@
 package com.avery.shop.pricing;
 
 import com.avery.shop.ShopPlugin;
+import com.avery.shop.util.AtomicFileUtil;
 import org.bukkit.configuration.file.YamlConfiguration;
 
 import java.io.File;
@@ -50,7 +51,7 @@ public final class MarketStorage {
         }
 
         try {
-            yaml.save(file);
+            AtomicFileUtil.saveYaml(yaml, file);
         } catch (IOException e) {
             plugin.getLogger().severe("儲存市場資料失敗：" + e.getMessage());
         }

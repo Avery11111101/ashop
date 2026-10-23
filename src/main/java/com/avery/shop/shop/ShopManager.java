@@ -192,12 +192,21 @@ public final class ShopManager {
         return shopConfig.search(player, query, catalog);
     }
 
-    public PriceQuote getCatalogPriceQuote(String catalogKey) {
+    public double getCatalogBasePrice(String catalogKey) {
         var entry = catalog.getByKey(catalogKey);
-        var base = entry != null
+        return entry != null
                 ? shopConfig.applyServerPrice(shopConfig.getBasePriceForEntry(entry))
                 : shopConfig.applyServerPrice(plugin.getConfig().getDouble("dynamic-pricing.base-price",
                         plugin.getConfig().getDouble("default-prices.base-price", 10.0)));
+    }
+
+    public DynamicPricingService.BatchQuote getCatalogBatchBuyQuote(String catalogKey, int amount) {
+        double base = getCatalogBasePrice(catalogKey);
+        return pricing.calculateBatchBuyQuote(catalogKey, base, quoteStock(catalogKey), amount);
+    }
+
+    public PriceQuote getCatalogPriceQuote(String catalogKey) {
+        double base = getCatalogBasePrice(catalogKey);
         return pricing.quote(catalogKey, base, quoteStock(catalogKey));
     }
 
@@ -307,6 +316,36 @@ public final class ShopManager {
         return getSellRatio();
     }
 
+    /**
+     * 計算單個 ItemStack 批次出售報價（支援同批次 soldOffset 遞減計價與耐久度計算）
+     */
+    public DynamicPricingService.BatchQuote getIncrementalSellQuote(ItemStack item, int soldOffset, int amount) {
+        var tradeItem = tradeItem(item);
+        if (!shopConfig.canPlayerSell(tradeItem, catalog)) {
+            return new DynamicPricingService.BatchQuote(0, 1.0, 0);
+        }
+        var resolved = shopConfig.resolvePlayerItem(tradeItem, catalog);
+        if (resolved.isEmpty()) {
+            return new DynamicPricingService.BatchQuote(0, 1.0, 0);
+        }
+        var key = resolved.get().entry().getKey();
+        var base = shopConfig.applyServerPrice(resolved.get().setting().getPrice());
+        var ratio = resolveSellRatio(tradeItem);
+
+        double durabilityFactor = 1.0;
+        var meta = tradeItem.getItemMeta();
+        if (meta instanceof org.bukkit.inventory.meta.Damageable damageable) {
+            int maxDurability = tradeItem.getType().getMaxDurability();
+            if (maxDurability > 0 && damageable.getDamage() > 0) {
+                double remainingDurability = Math.max(0, maxDurability - damageable.getDamage());
+                double durabilityRatio = remainingDurability / maxDurability;
+                durabilityFactor = 0.5 + 0.5 * durabilityRatio;
+            }
+        }
+
+        return pricing.calculateIncrementalSellQuote(key, base, quoteStock(key), soldOffset, amount, ratio, durabilityFactor);
+    }
+
     public List<ShopListing> getAllListings() {
         synchronized (listingLock) {
             return Collections.unmodifiableList(new ArrayList<>(listings));
@@ -370,9 +409,8 @@ public final class ShopManager {
 
     public double calculateStackSellTotal(ItemStack stack) {
         if (!canSellToSystem(stack)) return 0;
-        var quote = getSellToSystemQuote(stack);
-        if (!quote.available()) return 0;
-        return quote.price() * stack.getAmount();
+        var batchQuote = getIncrementalSellQuote(stack, 0, stack.getAmount());
+        return batchQuote.totalPrice();
     }
 
     public SellBatchResult sellDepositToSystem(Player player, org.bukkit.inventory.Inventory depositInv,
@@ -392,6 +430,7 @@ public final class ShopManager {
         var rejected = new ArrayList<ItemStack>();
         var pendingSold = new ArrayList<ItemStack>();
         var sellCounts = new HashMap<String, Integer>();
+        var keyEarned = new HashMap<String, Double>();
 
         for (int slot = startSlot; slot <= endSlot; slot++) {
             var stack = depositInv.getItem(slot);
@@ -404,20 +443,31 @@ public final class ShopManager {
                 continue;
             }
 
-            var sellQuote = getSellToSystemQuote(stack);
-            if (!sellQuote.available()) {
+            var resolved = resolvePlayerItem(tradeStack);
+            if (resolved.isEmpty()) {
                 rejected.add(tradeStack);
                 depositInv.setItem(slot, null);
                 continue;
             }
 
-            var unitPrice = sellQuote.price();
-            total += unitPrice * stack.getAmount();
-            soldCount += stack.getAmount();
-            var key = shopConfig.resolvePlayerItem(tradeStack, catalog)
-                    .map(r -> r.entry().getKey())
-                    .orElseGet(() -> pricing.resolveKey(tradeStack));
-            sellCounts.merge(key, stack.getAmount(), Integer::sum);
+            var key = resolved.get().entry().getKey();
+            int amount = stack.getAmount();
+            int currentSoldOffset = sellCounts.getOrDefault(key, 0);
+
+            var batchQuote = getIncrementalSellQuote(stack, currentSoldOffset, amount);
+            if (batchQuote.totalPrice() <= 0) {
+                rejected.add(tradeStack);
+                depositInv.setItem(slot, null);
+                continue;
+            }
+
+            double subtotal = batchQuote.totalPrice();
+            total += subtotal;
+            soldCount += amount;
+
+            sellCounts.put(key, currentSoldOffset + amount);
+            keyEarned.merge(key, subtotal, Double::sum);
+
             pendingSold.add(tradeStack);
             depositInv.setItem(slot, null);
         }
@@ -428,14 +478,14 @@ public final class ShopManager {
         }
 
         for (var entry : sellCounts.entrySet()) {
-            var stock = quoteStock(entry.getKey());
-            for (int i = 0; i < entry.getValue(); i++) {
-                pricing.recordSell(entry.getKey(), stock);
-            }
+            String key = entry.getKey();
+            int count = entry.getValue();
+            var stock = quoteStock(key);
+            pricing.recordBatchSell(key, stock, count);
+
             if (plugin.getReportService() != null) {
-                var quote = getCatalogPriceQuote(entry.getKey());
-                double unitSellPrice = quote.price() * getSellRatio();
-                plugin.getReportService().recordTransaction("SELL_SYSTEM", player.getUniqueId().toString(), player.getName(), entry.getKey(), entry.getValue(), unitSellPrice * entry.getValue());
+                double earned = keyEarned.getOrDefault(key, 0.0);
+                plugin.getReportService().recordTransaction("SELL_SYSTEM", player.getUniqueId().toString(), player.getName(), key, count, earned);
             }
         }
         if (soldCount > 0) {
@@ -648,9 +698,8 @@ public final class ShopManager {
         int maxBuy = plugin.getConfig().getInt("gui.max-buy-amount", 2304);
         amount = Math.min(amount, maxBuy);
 
-        var quote = getCatalogPriceQuote(catalogKey);
-        double unitPrice = quote.price();
-        double totalPrice = unitPrice * amount;
+        var batchQuote = getCatalogBatchBuyQuote(catalogKey, amount);
+        double totalPrice = batchQuote.totalPrice();
 
         var deliveries = buildDeliveryStacks(entry.getTemplate(), amount);
         if (deliveries.isEmpty()) return BuyResult.NOT_FOUND;
@@ -666,9 +715,7 @@ public final class ShopManager {
         }
 
         var stock = quoteStock(catalogKey);
-        for (int i = 0; i < amount; i++) {
-            pricing.recordBuy(catalogKey, stock);
-        }
+        pricing.recordBatchBuy(catalogKey, stock, amount);
         if (plugin.getReportService() != null) {
             plugin.getReportService().recordTransaction("BUY_SYSTEM", buyer.getUniqueId().toString(), buyer.getName(), catalogKey, amount, totalPrice);
         }

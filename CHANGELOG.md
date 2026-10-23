@@ -3,6 +3,27 @@
 All notable changes to ashop are documented here.  
 ashop 的所有重要變更皆記錄於此。
 
+## [1.10.1] - 2026-10-23
+
+### Security / 安全性加固與修復
+- **Security Audit Remediation (全方位白箱安全審計加固)**:
+  - **FINDING-01 [Critical] Dynamic Marginal Pricing & Arbitrage Guard (動態定價邊際累進計價與套利防護鎖)**:
+    - Replaced flat rate pricing in bulk buying and selling with discrete marginal integral pricing ($\sum_{k=0}^{N-1} P_{\text{unit}}(k)$).
+    - Integrated mathematical Arbitrage Guard ensuring total bulk sell revenue can never exceed current rebuy cost ($R_{\text{income}} \le 0.99 \times C_{\text{rebuy}}$), eliminating infinite money arbitrage loops.
+    - Added progressive sell price decay across bulk deposits in the `/shop sell` chest.
+  - **FINDING-02 [High] UpdateService Path Traversal & JAR Extension Validation (更新服務路徑穿越與副檔名防護)**:
+    - Enforced path stripping (`new File(targetJarName).getName()`), case-insensitive `.jar` extension whitelist, and canonical boundary check against the `plugins/` directory.
+  - **FINDING-03 [Medium] Asynchronous Official Language Cache (語系檔背景異步下載)**:
+    - Eliminated main-thread synchronous HTTP requests during `onEnable()`, completely preventing Watchdog server watchdog kill timeouts in offline or high-latency environments.
+    - Upgraded locale dictionary to thread-safe `ConcurrentHashMap` with non-blocking merge.
+  - **FINDING-04 [Medium] ReportService Debounced Batch Flush (營運報表 30 秒防抖批次寫入)**:
+    - Mitigated high-frequency transaction disk I/O bottlenecks with a 30-second debounce flush queue, accompanied by immediate shutdown flushing in `onDisable()`.
+  - **FINDING-05 [Low] Atomic File Save Persistence (原子化檔案覆寫替換)**:
+    - Introduced `AtomicFileUtil` utilizing `.tmp` staging and `StandardCopyOption.ATOMIC_MOVE` to prevent file corruption and 0-byte truncations during crashes.
+  - **FINDING-06 [Low] `/shop version` Permission Check (版本指令權限保護)**:
+    - Restricted `/shop version` execution and tab completion to players with `ashop.admin.version` or `ashop.admin`, preventing GitHub API rate limit exhaustion.
+  - Added full test suites (`DynamicPricingBatchTest`, `StorageAndReportTest`) passing 100%.
+
 ## [1.10.0] - 2026-10-23
 
 ### Feature / 新功能

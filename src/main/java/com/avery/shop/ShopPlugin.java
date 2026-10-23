@@ -111,7 +111,7 @@ public final class ShopPlugin extends JavaPlugin {
             reportScheduler.stop();
         }
         if (reportService != null) {
-            reportService.save();
+            reportService.flushSave();
         }
         if (pricingService != null) {
             pricingService.stopReversionTask();

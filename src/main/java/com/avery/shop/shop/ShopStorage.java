@@ -2,6 +2,7 @@ package com.avery.shop.shop;
 
 import com.avery.shop.ShopPlugin;
 import com.avery.shop.catalog.ItemStackUtil;
+import com.avery.shop.util.AtomicFileUtil;
 import org.bukkit.configuration.file.YamlConfiguration;
 
 import java.io.File;
@@ -61,7 +62,7 @@ public final class ShopStorage {
         }
 
         try {
-            yaml.save(file);
+            AtomicFileUtil.saveYaml(yaml, file);
         } catch (IOException e) {
             plugin.getLogger().severe("儲存上架資料失敗：" + e.getMessage());
         }

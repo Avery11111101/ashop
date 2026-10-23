@@ -3,7 +3,7 @@ plugins {
 }
 
 group = "com.avery"
-version = "1.10.0"
+version = "1.10.1"
 
 layout.buildDirectory.set(file("${System.getProperty("user.home")}/.gradle_ashop_build"))
 
@@ -57,8 +57,18 @@ val testPriceModel = tasks.register<JavaExec>("testPriceModel") {
     mainClass.set("com.avery.shop.catalog.SurvivalPriceModelTest")
 }
 
+val testStorageAndReport = tasks.register<JavaExec>("testStorageAndReport") {
+    classpath = sourceSets["test"].runtimeClasspath
+    mainClass.set("com.avery.shop.storage.StorageAndReportTest")
+}
+
+val testDynamicPricing = tasks.register<JavaExec>("testDynamicPricing") {
+    classpath = sourceSets["test"].runtimeClasspath
+    mainClass.set("com.avery.shop.pricing.DynamicPricingBatchTest")
+}
+
 tasks.check {
-    dependsOn(verifyCategories, testMigration, testUpdate, testPriceModel)
+    dependsOn(verifyCategories, testMigration, testUpdate, testPriceModel, testStorageAndReport, testDynamicPricing)
 }
 
 java {
